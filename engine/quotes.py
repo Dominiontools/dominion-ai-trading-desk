@@ -5,21 +5,30 @@ from datetime import datetime, timezone
 
 
 def quote_age_seconds(quote, *, now: datetime | None = None) -> float:
-    """Return quote age; reject incomplete, naive, or materially future-dated quotes."""
+    """Return the older side's age; reject incomplete, naive, or future-dated quotes."""
     if quote.bid is None or quote.ask is None:
         raise ValueError("A complete bid/ask quote is required.")
     if quote.bid <= 0 or quote.ask <= 0 or quote.bid > quote.ask:
         raise ValueError("Quote prices are invalid or crossed.")
-    timestamp = quote.timestamp
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        raise ValueError("Quote timestamp must include a timezone.")
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None or current.utcoffset() is None:
         raise ValueError("Current time must include a timezone.")
-    age = (current - timestamp).total_seconds()
-    if age < -1:
-        raise ValueError("Quote timestamp is in the future.")
-    return max(0.0, age)
+
+    # cTrader may update bid and ask separately. Both sides must be recent.
+    fallback_timestamp = getattr(quote, "timestamp", None)
+    side_timestamps = (
+        getattr(quote, "bid_timestamp", fallback_timestamp),
+        getattr(quote, "ask_timestamp", fallback_timestamp),
+    )
+    ages = []
+    for timestamp in side_timestamps:
+        if timestamp is None or timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError("Both quote sides must have timezone-aware timestamps.")
+        age = (current - timestamp).total_seconds()
+        if age < -1:
+            raise ValueError("Quote timestamp is in the future.")
+        ages.append(max(0.0, age))
+    return max(ages)
 
 
 def is_quote_fresh(quote, *, max_age_seconds: float = 10.0,
