@@ -125,3 +125,52 @@ def test_incremental_spot_updates_preserve_each_side_timestamp():
     assert updated.bid == 1.15483
     assert updated.ask == 1.1549
     assert updated.bid_timestamp > updated.ask_timestamp
+
+
+class _FakeRequest:
+    def __init__(self):
+        self.symbolId = []
+
+class _FakeDeferred:
+    def addErrback(self, callback):
+        self.errback = callback
+
+class _FakeClient:
+    def __init__(self):
+        self.sent = []
+    def send(self, request, clientMsgId=None):
+        self.sent.append((request, clientMsgId))
+        return _FakeDeferred()
+
+
+def test_subscribe_spots_sends_timestamped_request_and_tracks_ack():
+    from engine.ctrader_demo import CTraderDemoConnector
+
+    connector = CTraderDemoConnector(CTraderDemoConfig("id", "secret", "token", 123))
+    connector.state = "READY_DEMO_READ_ONLY"
+    connector.account_id = 123
+    connector.symbol_ids = {"EURUSD": 10, "XAUUSD": 20}
+    connector._messages = {"spots_req": _FakeRequest}
+    connector.client = _FakeClient()
+
+    request_id = connector.subscribe_spots(["EURUSD", "XAUUSD", "EURUSD"])
+
+    request, sent_id = connector.client.sent[0]
+    assert sent_id == request_id
+    assert request.ctidTraderAccountId == 123
+    assert request.symbolId == [10, 20]
+    assert request.subscribeToSpotTimestamp is True
+    assert connector.pending_subscriptions[request_id] == {"EURUSD", "XAUUSD"}
+
+
+def test_subscribe_spots_rejects_unknown_symbol_and_empty_list():
+    from engine.ctrader_demo import CTraderDemoConnector
+
+    connector = CTraderDemoConnector(CTraderDemoConfig("id", "secret", "token", 123))
+    connector.state = "READY_DEMO_READ_ONLY"
+    connector.account_id = 123
+    connector.symbol_ids = {"EURUSD": 10}
+    with pytest.raises(ValueError, match="At least one symbol"):
+        connector.subscribe_spots([])
+    with pytest.raises(KeyError, match="not enabled"):
+        connector.subscribe_spots(["UNKNOWN"])
