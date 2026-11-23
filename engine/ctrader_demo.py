@@ -166,6 +166,7 @@ class CTraderDemoConnector:
         self._spot_state: dict[int, tuple[float | None, float | None, datetime | None, datetime | None]] = {}
         self.subscribed_symbols: set[str] = set()
         self.pending: dict[str, tuple[str, str]] = {}
+        self.pending_subscriptions: dict[str, set[str]] = {}
         self.state = "DISCONNECTED"
 
     def start(self) -> None:
@@ -262,6 +263,20 @@ class CTraderDemoConnector:
             self.symbol_names_by_id = {symbol_id: name for name, symbol_id in self.symbol_ids.items()}
             self.state = "READY_DEMO_READ_ONLY"
             return
+        if kind == self._messages["spots_res"]().payloadType:
+            request_id = getattr(message, "clientMsgId", "")
+            requested = self.pending_subscriptions.pop(request_id, None)
+            if requested is None:
+                self.state = "ERROR"
+                return
+            accepted_ids = {int(item) for item in payload.subscribedSymbolId}
+            accepted = {name for name, symbol_id in self.symbol_ids.items()
+                        if symbol_id in accepted_ids}
+            if accepted != requested:
+                self.state = "ERROR"
+                return
+            self.subscribed_symbols.update(accepted)
+            return
         if kind == self._messages["spot_event"]().payloadType:
             symbol = self.symbol_names_by_id.get(int(payload.symbolId))
             if symbol is not None:
@@ -290,6 +305,25 @@ class CTraderDemoConnector:
                 candles = [trendbar_to_candle(bar, symbol, timeframe) for bar in payload.trendbar]
                 candles.sort(key=lambda item: item.timestamp)
                 self.on_candles(candles)
+
+    def subscribe_spots(self, symbols: list[str]) -> str:
+        """Subscribe to timestamped bid/ask updates for enabled demo symbols."""
+        if self.state != "READY_DEMO_READ_ONLY" or self.account_id is None:
+            raise RuntimeError("cTrader demo session is not ready; no subscription was sent.")
+        requested = list(dict.fromkeys(symbols))
+        if not requested:
+            raise ValueError("At least one symbol is required for a spot subscription.")
+        missing = [symbol for symbol in requested if symbol not in self.symbol_ids]
+        if missing:
+            raise KeyError("Symbols not enabled on this demo account: " + ", ".join(missing))
+        request_id = str(uuid.uuid4())
+        request = self._messages["spots_req"]()
+        request.ctidTraderAccountId = self.account_id
+        request.symbolId.extend(self.symbol_ids[symbol] for symbol in requested)
+        request.subscribeToSpotTimestamp = True
+        self.pending_subscriptions[request_id] = set(requested)
+        self._send(request, request_id)
+        return request_id
 
     def request_candles(self, symbol: str, timeframe: str, limit: int = 200) -> str:
         if self.state != "READY_DEMO_READ_ONLY" or self.account_id is None:
