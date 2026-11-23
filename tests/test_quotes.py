@@ -15,6 +15,19 @@ def test_recent_quote_is_fresh_and_age_is_calculated():
     assert is_quote_fresh(quote, max_age_seconds=10, now=now)
 
 
+def test_each_side_must_be_fresh_when_bid_and_ask_update_separately():
+    now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
+    quote = SimpleNamespace(
+        timestamp=now,
+        bid=1.1,
+        ask=1.1001,
+        bid_timestamp=now - timedelta(seconds=1),
+        ask_timestamp=now - timedelta(seconds=11),
+    )
+    assert quote_age_seconds(quote, now=now) == 11
+    assert not is_quote_fresh(quote, max_age_seconds=10, now=now)
+
+
 def test_stale_quote_is_not_fresh():
     now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
     quote = make_quote(now - timedelta(seconds=11))
