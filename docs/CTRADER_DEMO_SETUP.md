@@ -41,7 +41,7 @@ The worker authenticates to the demo host, subscribes to the selected symbols, l
 - Authenticates the application, checks the selected account exists in the granted account list, and refuses accounts marked live.
 - Loads enabled symbol names and IDs for that account.
 - Requests historical trend bars for a selected symbol and timeframe using a bounded time window.
-- Subscribes to timestamped live bid/ask updates for selected enabled symbols and rejects missing-timestamp or crossed updates, retains bid and ask updates independently, and emits a complete quote only after both sides have been received.
+- Requests timestamped live bid/ask updates for selected enabled symbols, waits for cTrader's subscription acknowledgement, and stops if the acknowledgement is not received before the startup timeout. It rejects missing-timestamp or crossed updates, retains bid and ask updates independently, and emits a complete quote only after both sides have been received.
 - Maintains a reverse symbol-ID lookup so incoming spot events are associated with the correct instrument.
 - Provides a separate fail-closed quote freshness validator; stale, timezone-naive, incomplete, crossed, or materially future-dated quotes are not considered fresh; the older of the bid and ask timestamps determines quote age.
 - Converts cTrader's 1/100000 price representation and low-plus-delta OHLC format into the project's Candle model.
