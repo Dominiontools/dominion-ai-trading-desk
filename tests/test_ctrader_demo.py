@@ -83,9 +83,14 @@ def test_spot_event_rejects_missing_timestamp_or_crossed_market():
         bid=100000, ask=100001, timestamp=0,
         HasField=lambda name: name in {"bid", "ask"},
     )
+    partial = SimpleNamespace(
+        bid=100000, ask=0, timestamp=1_800_000_000_000,
+        HasField=lambda name: name in {"bid", "timestamp"},
+    )
     crossed = SimpleNamespace(
         bid=100002, ask=100001, timestamp=1_800_000_000_000,
         HasField=lambda name: name in {"bid", "ask", "timestamp"},
     )
     assert spot_event_to_quote(missing_time, "EURUSD") is None
+    assert spot_event_to_quote(partial, "EURUSD") is None
     assert spot_event_to_quote(crossed, "EURUSD") is None
