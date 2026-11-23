@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 
-from engine.ctrader_demo import CTraderDemoConfig, is_confirmed_demo_account, market_for_symbol, trendbar_to_candle
+from engine.ctrader_demo import CTraderDemoConfig, historical_window, is_confirmed_demo_account, market_for_symbol, trendbar_to_candle
 
 
 def test_market_mapping_identifies_gold_and_forex():
@@ -45,3 +45,18 @@ def test_account_must_explicitly_be_marked_demo():
     assert is_confirmed_demo_account(demo)
     assert not is_confirmed_demo_account(live)
     assert not is_confirmed_demo_account(unknown)
+
+
+
+def test_historical_window_is_bounded_to_requested_bar_count():
+    end = 1_800_000_000_000
+    start, returned_end = historical_window("M5", 200, end)
+    assert returned_end == end
+    assert end - start == 201 * 300_000
+
+
+def test_historical_window_rejects_invalid_timeframe_and_limit():
+    with pytest.raises(ValueError, match="Unsupported timeframe"):
+        historical_window("Q1", 100, 1_800_000_000_000)
+    with pytest.raises(ValueError, match="between 1 and 5000"):
+        historical_window("M1", 0, 1_800_000_000_000)
