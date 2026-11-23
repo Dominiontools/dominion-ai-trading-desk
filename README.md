@@ -25,6 +25,10 @@ Foundation scaffold plus a read-only cTrader demo market-data connector. The das
 - Require explicit human approval before any live-trading implementation or deployment.
 - Validate strategies with historical data, paper trading, fees, slippage, and drawdown tests before considering live use.
 
+## Android app
+
+The dashboard can be installed as an Android app. See [docs/ANDROID_APP.md](docs/ANDROID_APP.md) for local setup and the GitHub Actions APK build. The Android app is currently a demo-only dashboard shell; live broker data and order execution are not connected.
+
 ## Run the dashboard locally
 ```bash
 npm install
