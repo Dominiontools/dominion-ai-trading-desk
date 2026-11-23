@@ -73,7 +73,10 @@ def save_token_response(token_response: dict, token_file: str | Path, *, now: fl
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
     try:
-        os.fchmod(fd, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(payload, stream)
             stream.flush()
