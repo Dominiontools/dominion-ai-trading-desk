@@ -70,7 +70,7 @@ def run_worker() -> None:
                 reactor.stop()
 
     def monitor() -> None:
-        nonlocal subscribed
+        nonlocal subscription_requested, subscribed
         if connector.state == "READY_DEMO_READ_ONLY" and not subscription_requested:
             try:
                 request_id = connector.subscribe_spots(symbols)
@@ -79,19 +79,22 @@ def run_worker() -> None:
                 return
             subscription_requested = True
             LOGGER.info("Requested demo quote subscription (%s) for: %s", request_id, ", ".join(symbols))
-        if subscription_requested and not subscribed:
-            if set(symbols).issubset(connector.subscribed_symbols):
-                subscribed = True
-                LOGGER.info("Demo quote subscription acknowledged for: %s", ", ".join(symbols))
-        elif connector.state in {
+
+        if connector.state in {
             "ERROR", "DISCONNECTED", "ACCOUNT_NOT_GRANTED",
             "REFUSED_NON_DEMO_OR_UNVERIFIED_ACCOUNT",
         }:
             stop_worker(f"cTrader connection state is {connector.state}")
             return
-        elif not subscribed and time.monotonic() - started_at > 30:
+
+        if not subscribed and time.monotonic() - started_at > 30:
             stop_worker("Timed out waiting for cTrader demo authentication, symbols, or subscription acknowledgement")
             return
+
+        if subscription_requested and not subscribed:
+            if set(symbols).issubset(connector.subscribed_symbols):
+                subscribed = True
+                LOGGER.info("Demo quote subscription acknowledged for: %s", ", ".join(symbols))
 
         if subscribed:
             for symbol in symbols:
