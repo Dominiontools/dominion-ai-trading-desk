@@ -50,3 +50,12 @@ def test_quote_aware_risk_gate_blocks_stale_and_invalid_quotes():
     invalid = evaluate_trade_with_quote(proposal(), crossed, now=now)
     assert not invalid.approved
     assert "Market quote is invalid." in invalid.reasons
+
+
+def test_twenty_dollar_account_uses_conservative_defaults():
+    limits = RiskLimits()
+    assert limits.max_risk_per_trade_pct == 0.005
+    assert limits.max_daily_loss_pct == 0.02
+    assert limits.max_open_positions == 1
+    assert 20 * limits.max_risk_per_trade_pct == pytest.approx(0.10)
+    assert 20 * limits.max_daily_loss_pct == pytest.approx(0.40)
