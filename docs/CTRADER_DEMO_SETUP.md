@@ -9,21 +9,22 @@ The project uses Spotware's official Python Open API SDK. cTrader Open API suppo
 1. Register an Open API application in the cTrader Open API portal and wait for approval.
 2. Add the exact redirect URI that the application will use.
 3. Authorize with the **accounts / view-only** scope, not the trading scope.
-4. Exchange the authorization code for an access token using cTrader's OAuth flow.
-5. Identify the cTrader demo account ID from the authorized account list.
-6. Store the values as server-side environment variables. Never commit them or paste secrets into source files.
+4. Set `CTRADER_REDIRECT_URI` to the exact loopback URI registered in the cTrader app (default: `http://127.0.0.1:8765/callback`).
+5. Run `python -m engine.ctrader_oauth authorize` from the repository root. Approve **accounts / view-only** access in the browser; the helper exchanges the short-lived code and saves tokens to `.ctrader_tokens.json` with owner-only file permissions. Never commit or share this file.
+6. Identify the cTrader demo account ID from the authorized account list.
+7. Set `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, and `CTRADER_ACCOUNT_ID` in your local environment. The worker loads the access token from the private token file and automatically refreshes/rotates it shortly before expiry. Never commit credentials or token files.
 
 Required environment variables:
 - `CTRADER_CLIENT_ID`
 - `CTRADER_CLIENT_SECRET`
-- `CTRADER_ACCESS_TOKEN`
+- `CTRADER_ACCESS_TOKEN` (optional override; normally loaded from the private token file)
 - `CTRADER_ACCOUNT_ID` (must be a demo account)
 
 Install runtime dependencies with `pip install -r requirements.txt`.
 
 ## Run the local read-only worker
 
-After setting the four required cTrader values above, also set:
+After setting the three required cTrader environment values above and completing OAuth authorization, also set:
 
 - `CTRADER_SYMBOLS` — comma-separated exact symbol names from the enabled-symbol list, for example `XAUUSD,EURUSD` only if those exact names are enabled by your broker.
 - `CTRADER_MAX_QUOTE_AGE_SECONDS` — optional freshness threshold; defaults to 10 seconds.
