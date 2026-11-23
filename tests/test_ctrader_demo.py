@@ -92,7 +92,10 @@ def test_spot_event_rejects_missing_timestamp_or_crossed_market():
         HasField=lambda name: name in {"bid", "ask", "timestamp"},
     )
     assert spot_event_to_quote(missing_time, "EURUSD") is None
-    assert spot_event_to_quote(partial, "EURUSD") is None
+    partial_quote = spot_event_to_quote(partial, "EURUSD")
+    assert partial_quote is not None
+    assert partial_quote.bid == 1.0
+    assert partial_quote.ask is None
     assert spot_event_to_quote(crossed, "EURUSD") is None
 
 
