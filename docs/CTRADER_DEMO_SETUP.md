@@ -49,3 +49,15 @@ The worker authenticates to the demo host, subscribes to the selected symbols, l
 
 ## Important limitations
 The connector is callback-based because Spotware's Python SDK uses Twisted. It is a connection module, not yet a running background worker or dashboard connection. The app still needs a secure OAuth callback/token-refresh service, a supervised worker process, adding automatic reconnect supervision, secure OAuth callback/token refresh, and tests against an actual Pepperstone demo account before this can be called connected. The official SDK handles protocol heartbeats internally; this module does not yet supervise reconnects or worker health. The SDK and credentials are not exercised by CI against a broker.
+
+
+## $20 starting-capital risk policy
+
+The initial account target is **$20**. The default risk policy is deliberately conservative:
+
+- Maximum planned loss per trade: **0.5% of current equity** (about **$0.10** at $20).
+- Daily loss stop: **2% of current equity** (about **$0.40** at $20).
+- Maximum concurrent positions: **1**.
+- The risk gate rejects a proposed trade above the configured per-trade limit. The broker's minimum volume, margin, spread, commissions, and estimated slippage must also permit the trade; otherwise the correct action is to skip it.
+- These are risk limits, not a promise that losses will be limited exactly to those amounts. Gaps, execution slippage, and fees can cause larger losses.
+- Keep the system in demo/paper mode until the data connection and all safety tests have been verified. No live trading is enabled by this setup guide.
