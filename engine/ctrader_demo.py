@@ -44,6 +44,14 @@ def historical_window(timeframe: str, limit: int, to_timestamp_ms: int) -> tuple
     return from_timestamp_ms, to_timestamp_ms
 
 @dataclass(frozen=True)
+class SpotQuote:
+    symbol: str
+    bid: float | None
+    ask: float | None
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
 class CTraderDemoConfig:
     client_id: str
     client_secret: str
@@ -80,6 +88,26 @@ def is_confirmed_demo_account(account) -> bool:
     return has_environment_flag and not bool(account.isLive)
 
 
+def spot_event_to_quote(event, symbol: str) -> SpotQuote | None:
+    """Convert a cTrader spot event; reject events without a source timestamp."""
+    try:
+        has_timestamp = event.HasField("timestamp")
+        has_bid = event.HasField("bid")
+        has_ask = event.HasField("ask")
+    except (AttributeError, ValueError):
+        return None
+    if not has_timestamp:
+        return None
+    bid = int(event.bid) / 100_000 if has_bid else None
+    ask = int(event.ask) / 100_000 if has_ask else None
+    if (bid is not None and bid <= 0) or (ask is not None and ask <= 0):
+        return None
+    if bid is not None and ask is not None and bid > ask:
+        return None
+    timestamp = datetime.fromtimestamp(int(event.timestamp) / 1000, tz=timezone.utc)
+    return SpotQuote(symbol=symbol, bid=bid, ask=ask, timestamp=timestamp)
+
+
 def trendbar_to_candle(bar, symbol: str, timeframe: str) -> Candle:
     """Convert a cTrader ProtoOATrendbar using its documented 1e-5 price unit."""
     low_raw = int(bar.low)
@@ -103,12 +131,20 @@ def trendbar_to_candle(bar, symbol: str, timeframe: str) -> Candle:
 
 class CTraderDemoConnector:
     """Twisted callback-based, demo-only, view-scope market-data connector."""
-    def __init__(self, config: CTraderDemoConfig, on_candles: Callable[[list[Candle]], None] | None = None):
+    def __init__(
+        self,
+        config: CTraderDemoConfig,
+        on_candles: Callable[[list[Candle]], None] | None = None,
+        on_quote: Callable[[SpotQuote], None] | None = None,
+    ):
         self.config = config
         self.on_candles = on_candles or (lambda candles: None)
+        self.on_quote = on_quote or (lambda quote: None)
         self.client = None
         self.account_id: int | None = None
         self.symbol_ids: dict[str, int] = {}
+        self.symbol_names_by_id: dict[int, str] = {}
+        self.subscribed_symbols: set[str] = set()
         self.pending: dict[str, tuple[str, str]] = {}
         self.state = "DISCONNECTED"
 
@@ -120,6 +156,7 @@ class CTraderDemoConnector:
                 ProtoOAGetAccountListByAccessTokenReq, ProtoOAGetAccountListByAccessTokenRes,
                 ProtoOAAccountAuthReq, ProtoOAAccountAuthRes,
                 ProtoOASymbolsListReq, ProtoOASymbolsListRes,
+                ProtoOASubscribeSpotsReq, ProtoOASubscribeSpotsRes, ProtoOASpotEvent,
                 ProtoOAGetTrendbarsReq, ProtoOAGetTrendbarsRes, ProtoOAErrorRes,
             )
             from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATrendbarPeriod
@@ -132,6 +169,8 @@ class CTraderDemoConnector:
             "accounts_req": ProtoOAGetAccountListByAccessTokenReq, "accounts_res": ProtoOAGetAccountListByAccessTokenRes,
             "account_auth_req": ProtoOAAccountAuthReq, "account_auth_res": ProtoOAAccountAuthRes,
             "symbols_req": ProtoOASymbolsListReq, "symbols_res": ProtoOASymbolsListRes,
+            "spots_req": ProtoOASubscribeSpotsReq, "spots_res": ProtoOASubscribeSpotsRes,
+            "spot_event": ProtoOASpotEvent,
             "bars_req": ProtoOAGetTrendbarsReq, "bars_res": ProtoOAGetTrendbarsRes,
             "error_res": ProtoOAErrorRes,
         }
@@ -201,6 +240,13 @@ class CTraderDemoConnector:
         if kind == self._messages["symbols_res"]().payloadType:
             self.symbol_ids = {item.symbolName: int(item.symbolId) for item in payload.symbol if item.enabled}
             self.state = "READY_DEMO_READ_ONLY"
+            return
+        if kind == self._messages["spot_event"]().payloadType:
+            symbol = self.symbol_names_by_id.get(int(payload.symbolId))
+            if symbol is not None:
+                quote = spot_event_to_quote(payload, symbol)
+                if quote is not None:
+                    self.on_quote(quote)
             return
         if kind == self._messages["bars_res"]().payloadType:
             request_id = getattr(message, "clientMsgId", "")
