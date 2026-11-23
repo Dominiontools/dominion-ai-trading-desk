@@ -62,18 +62,27 @@ class CTraderDemoConfig:
 
     @classmethod
     def from_env(cls) -> "CTraderDemoConfig":
-        names = ("CTRADER_CLIENT_ID", "CTRADER_CLIENT_SECRET", "CTRADER_ACCESS_TOKEN", "CTRADER_ACCOUNT_ID")
-        values = {name: os.getenv(name, "").strip() for name in names}
-        missing = [name for name, value in values.items() if not value]
+        client_id = os.getenv("CTRADER_CLIENT_ID", "").strip()
+        client_secret = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
+        account_value = os.getenv("CTRADER_ACCOUNT_ID", "").strip()
+        missing = [name for name, value in (
+            ("CTRADER_CLIENT_ID", client_id),
+            ("CTRADER_CLIENT_SECRET", client_secret),
+            ("CTRADER_ACCOUNT_ID", account_value),
+        ) if not value]
         if missing:
             raise RuntimeError("Missing required environment settings: " + ", ".join(missing))
         try:
-            account_id = int(values["CTRADER_ACCOUNT_ID"])
+            account_id = int(account_value)
         except ValueError as exc:
             raise RuntimeError("CTRADER_ACCOUNT_ID must be an integer.") from exc
         if account_id <= 0:
             raise RuntimeError("CTRADER_ACCOUNT_ID must be positive.")
-        return cls(values["CTRADER_CLIENT_ID"], values["CTRADER_CLIENT_SECRET"], values["CTRADER_ACCESS_TOKEN"], account_id)
+        explicit_token = os.getenv("CTRADER_ACCESS_TOKEN", "").strip() or None
+        token_file = os.getenv("CTRADER_TOKEN_FILE", ".ctrader_tokens.json")
+        from engine.ctrader_oauth import load_access_token
+        access_token = load_access_token(client_id, client_secret, explicit_token, token_file)
+        return cls(client_id, client_secret, access_token, account_id)
 
 
 def market_for_symbol(symbol: str) -> str:
