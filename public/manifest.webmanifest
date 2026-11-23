@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Dominion AI Trading Desk",
+  "short_name": "Dominion Desk",
+  "description": "Demo-first Forex, Gold and Crypto trading control center.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080d18",
+  "theme_color": "#080d18",
+  "icons": [
+    {
+      "src": "/icons/dominion-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
