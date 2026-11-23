@@ -3,7 +3,7 @@
 A demo-first automated trading platform for Forex, Gold, and Crypto. One central Desk Manager coordinates eight specialist agents while separate market adapters handle each market's data and execution rules.
 
 ## Current stage
-Foundation scaffold. The dashboard is an interface prototype with illustrative values. The Python domain layer contains the initial agent roster and risk policy. No broker or exchange order endpoint is enabled.
+Foundation scaffold plus a read-only cTrader demo market-data connector. The dashboard is an interface prototype with illustrative values. The connector requires an approved cTrader Open API application and demo view-only credentials; it has not yet been authenticated against a broker. No broker or exchange order endpoint is enabled.
 
 ## Eight agents
 1. **SCANNER** — detects configured market conditions and candidate setups.
@@ -17,6 +17,8 @@ Foundation scaffold. The dashboard is an interface prototype with illustrative v
 
 ## Safety defaults
 - Demo/paper mode only.
+- cTrader connector hard-codes the demo host and rejects live accounts.
+- Use cTrader OAuth **accounts/view-only** scope; do not grant trading scope to this data connector.
 - Live trading is disabled in the application configuration.
 - No API keys or secrets belong in source control.
 - Never enable withdrawals on exchange API keys.
@@ -37,7 +39,7 @@ python -m pytest
 
 ## Project layout
 - `src/` — dashboard UI.
-- `engine/` — Python domain logic and agent interfaces.
+- `engine/` — Python domain logic and market adapters.
 - `tests/` — automated safety and risk tests.
 - `docs/` — architecture and operating notes.
 
