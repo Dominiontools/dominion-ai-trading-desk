@@ -1,5 +1,7 @@
 import pytest
-from engine.risk import RiskLimits, TradeProposal, evaluate_trade
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from engine.risk import RiskLimits, TradeProposal, evaluate_trade, evaluate_trade_with_quote
 
 def proposal(**changes):
     values = dict(market="GOLD", risk_amount=5, equity=1000, daily_loss_pct=0.01,
@@ -30,3 +32,21 @@ def test_max_daily_loss_is_blocked():
 def test_policy_rejects_more_than_two_percent_per_trade():
     with pytest.raises(ValueError):
         RiskLimits(max_risk_per_trade_pct=0.05)
+
+
+
+def test_quote_aware_risk_gate_derives_age_from_timestamp():
+    now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
+    quote = SimpleNamespace(timestamp=now - timedelta(seconds=2), bid=1.1, ask=1.1001)
+    decision = evaluate_trade_with_quote(proposal(quote_age_seconds=999), quote, now=now)
+    assert decision.approved
+
+
+def test_quote_aware_risk_gate_blocks_stale_and_invalid_quotes():
+    now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
+    stale = SimpleNamespace(timestamp=now - timedelta(seconds=11), bid=1.1, ask=1.1001)
+    crossed = SimpleNamespace(timestamp=now, bid=1.2, ask=1.1)
+    assert not evaluate_trade_with_quote(proposal(), stale, now=now).approved
+    invalid = evaluate_trade_with_quote(proposal(), crossed, now=now)
+    assert not invalid.approved
+    assert "Market quote is invalid." in invalid.reasons
