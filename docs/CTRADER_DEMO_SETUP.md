@@ -19,7 +19,22 @@ Required environment variables:
 - `CTRADER_ACCESS_TOKEN`
 - `CTRADER_ACCOUNT_ID` (must be a demo account)
 
-Install runtime dependency with `pip install -r requirements.txt`.
+Install runtime dependencies with `pip install -r requirements.txt`.
+
+## Run the local read-only worker
+
+After setting the four required cTrader values above, also set:
+
+- `CTRADER_SYMBOLS` — comma-separated exact symbol names from the enabled-symbol list, for example `XAUUSD,EURUSD` only if those exact names are enabled by your broker.
+- `CTRADER_MAX_QUOTE_AGE_SECONDS` — optional freshness threshold; defaults to 10 seconds.
+
+Run from the repository root:
+
+```bash
+python -m engine.ctrader_worker
+```
+
+The worker authenticates to the demo host, subscribes to the selected symbols, logs timestamped bid/ask updates, and warns when a quote is missing or stale. It stops on authentication errors, disconnection, or a 30-second startup timeout. It does not automatically reconnect and it has no order-placement path. Keep the terminal open while it runs; Ctrl+C stops it.
 
 ## Connector behavior
 - Connects only to cTrader's demo Open API host.
@@ -33,4 +48,4 @@ Install runtime dependency with `pip install -r requirements.txt`.
 - Emits candle lists through a callback. It does not send any trade, close, amend, or cancel requests.
 
 ## Important limitations
-The connector is callback-based because Spotware's Python SDK uses Twisted. It is a connection module, not yet a running background worker or dashboard connection. The app still needs a secure OAuth callback/token-refresh service, a supervised worker process, wiring the quote freshness validator into the running worker/risk boundary, reconnect supervision, and tests against an actual Pepperstone demo account before this can be called connected. The official SDK handles protocol heartbeats internally; this module does not yet supervise reconnects or worker health. The SDK and credentials are not exercised by CI against a broker.
+The connector is callback-based because Spotware's Python SDK uses Twisted. It is a connection module, not yet a running background worker or dashboard connection. The app still needs a secure OAuth callback/token-refresh service, a supervised worker process, adding automatic reconnect supervision, secure OAuth callback/token refresh, and tests against an actual Pepperstone demo account before this can be called connected. The official SDK handles protocol heartbeats internally; this module does not yet supervise reconnects or worker health. The SDK and credentials are not exercised by CI against a broker.
