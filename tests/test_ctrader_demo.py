@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 
-from engine.ctrader_demo import CTraderDemoConfig, historical_window, is_confirmed_demo_account, market_for_symbol, trendbar_to_candle
+from engine.ctrader_demo import CTraderDemoConfig, historical_window, is_confirmed_demo_account, market_for_symbol, spot_event_to_quote, trendbar_to_candle
 
 
 def test_market_mapping_identifies_gold_and_forex():
@@ -60,3 +60,32 @@ def test_historical_window_rejects_invalid_timeframe_and_limit():
         historical_window("Q1", 100, 1_800_000_000_000)
     with pytest.raises(ValueError, match="between 1 and 5000"):
         historical_window("M1", 0, 1_800_000_000_000)
+
+
+
+def test_spot_event_converts_timestamped_bid_and_ask():
+    event = SimpleNamespace(
+        bid=115482,
+        ask=115490,
+        timestamp=1_800_000_000_000,
+        HasField=lambda name: name in {"bid", "ask", "timestamp"},
+    )
+    quote = spot_event_to_quote(event, "EURUSD")
+    assert quote is not None
+    assert quote.symbol == "EURUSD"
+    assert quote.bid == 1.15482
+    assert quote.ask == 1.1549
+    assert quote.timestamp.tzinfo == timezone.utc
+
+
+def test_spot_event_rejects_missing_timestamp_or_crossed_market():
+    missing_time = SimpleNamespace(
+        bid=100000, ask=100001, timestamp=0,
+        HasField=lambda name: name in {"bid", "ask"},
+    )
+    crossed = SimpleNamespace(
+        bid=100002, ask=100001, timestamp=1_800_000_000_000,
+        HasField=lambda name: name in {"bid", "ask", "timestamp"},
+    )
+    assert spot_event_to_quote(missing_time, "EURUSD") is None
+    assert spot_event_to_quote(crossed, "EURUSD") is None
