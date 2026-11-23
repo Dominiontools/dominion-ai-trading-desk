@@ -20,13 +20,21 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/.netlify/") || url.pathname.startsWith("/api/")) return;
+
+  const isAppAsset = ["script", "style", "image", "font"].includes(request.destination);
   event.respondWith(
     fetch(request).then((response) => {
-      if (response.ok && request.mode === "navigate") {
+      if (response.ok && (request.mode === "navigate" || isAppAsset)) {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request.mode === "navigate" ? "/" : request, copy);
+        });
       }
       return response;
-    }).catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
+    }).catch(() =>
+      caches.match(request).then((cached) =>
+        cached || (request.mode === "navigate" ? caches.match("/") : Promise.reject(new Error("Offline asset unavailable")))
+      )
+    )
   );
 });
