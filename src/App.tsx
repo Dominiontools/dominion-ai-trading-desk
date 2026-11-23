@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, ShieldCheck, Wallet, Waves } from "lucide-react";
 
 type Market = "All markets" | "Forex & Gold" | "Crypto";
@@ -67,6 +67,6 @@ export default function App() {
   </main>;
 }
 
-function Metric({ icon, label, value, note, positive = false }: { icon: React.ReactNode; label: string; value: string; note: string; positive?: boolean }) {
+function Metric({ icon, label, value, note, positive = false }: { icon: ReactNode; label: string; value: string; note: string; positive?: boolean }) {
   return <div className="metric"><div className="metric-icon">{icon}</div><span>{label}</span><strong className={positive ? "positive" : ""}>{value}</strong><small>{note}</small></div>;
 }
