@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
+from .quotes import quote_age_seconds
 
 @dataclass(frozen=True)
 class RiskLimits:
@@ -65,3 +67,19 @@ def evaluate_trade(proposal: TradeProposal, limits: RiskLimits = RiskLimits()) -
     if proposal.quote_age_seconds > limits.max_quote_age_seconds:
         reasons.append("Market quote is stale.")
     return RiskDecision(not reasons, tuple(reasons))
+
+
+
+def evaluate_trade_with_quote(
+    proposal: TradeProposal,
+    quote,
+    limits: RiskLimits = RiskLimits(),
+    *,
+    now: datetime | None = None,
+) -> RiskDecision:
+    """Derive quote age from the quote itself before running the risk gate."""
+    try:
+        age = quote_age_seconds(quote, now=now)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return RiskDecision(False, ("Market quote is invalid.",))
+    return evaluate_trade(replace(proposal, quote_age_seconds=age), limits)
