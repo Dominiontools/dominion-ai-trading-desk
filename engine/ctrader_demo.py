@@ -49,6 +49,8 @@ class SpotQuote:
     bid: float | None
     ask: float | None
     timestamp: datetime
+    bid_timestamp: datetime | None = None
+    ask_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -88,23 +90,41 @@ def is_confirmed_demo_account(account) -> bool:
     return has_environment_flag and not bool(account.isLive)
 
 
-def spot_event_to_quote(event, symbol: str) -> SpotQuote | None:
-    """Convert a cTrader spot event; reject events without a source timestamp."""
+def spot_event_to_quote(
+    event,
+    symbol: str,
+    *,
+    previous_bid: float | None = None,
+    previous_ask: float | None = None,
+    previous_bid_timestamp: datetime | None = None,
+    previous_ask_timestamp: datetime | None = None,
+) -> SpotQuote | None:
+    """Apply an optional-side spot update while preserving each side's timestamp."""
     try:
         has_timestamp = event.HasField("timestamp")
         has_bid = event.HasField("bid")
         has_ask = event.HasField("ask")
     except (AttributeError, ValueError):
         return None
-    # A complete two-sided quote is required; partial spot updates are not tradable quotes.
-    if not (has_timestamp and has_bid and has_ask):
-        return None
-    bid = int(event.bid) / 100_000
-    ask = int(event.ask) / 100_000
-    if bid <= 0 or ask <= 0 or bid > ask:
+    if not has_timestamp:
         return None
     timestamp = datetime.fromtimestamp(int(event.timestamp) / 1000, tz=timezone.utc)
-    return SpotQuote(symbol=symbol, bid=bid, ask=ask, timestamp=timestamp)
+    bid = int(event.bid) / 100_000 if has_bid else previous_bid
+    ask = int(event.ask) / 100_000 if has_ask else previous_ask
+    bid_timestamp = timestamp if has_bid else previous_bid_timestamp
+    ask_timestamp = timestamp if has_ask else previous_ask_timestamp
+    if bid is None or ask is None or bid_timestamp is None or ask_timestamp is None:
+        return None
+    if bid <= 0 or ask <= 0 or bid > ask:
+        return None
+    return SpotQuote(
+        symbol=symbol,
+        bid=bid,
+        ask=ask,
+        timestamp=timestamp,
+        bid_timestamp=bid_timestamp,
+        ask_timestamp=ask_timestamp,
+    )
 
 
 def trendbar_to_candle(bar, symbol: str, timeframe: str) -> Candle:
@@ -143,6 +163,7 @@ class CTraderDemoConnector:
         self.account_id: int | None = None
         self.symbol_ids: dict[str, int] = {}
         self.symbol_names_by_id: dict[int, str] = {}
+        self._spot_state: dict[int, tuple[float | None, float | None, datetime | None, datetime | None]] = {}
         self.subscribed_symbols: set[str] = set()
         self.pending: dict[str, tuple[str, str]] = {}
         self.state = "DISCONNECTED"
@@ -244,8 +265,19 @@ class CTraderDemoConnector:
         if kind == self._messages["spot_event"]().payloadType:
             symbol = self.symbol_names_by_id.get(int(payload.symbolId))
             if symbol is not None:
-                quote = spot_event_to_quote(payload, symbol)
+                previous = self._spot_state.get(int(payload.symbolId), (None, None, None, None))
+                quote = spot_event_to_quote(
+                    payload,
+                    symbol,
+                    previous_bid=previous[0],
+                    previous_ask=previous[1],
+                    previous_bid_timestamp=previous[2],
+                    previous_ask_timestamp=previous[3],
+                )
                 if quote is not None:
+                    self._spot_state[int(payload.symbolId)] = (
+                        quote.bid, quote.ask, quote.bid_timestamp, quote.ask_timestamp
+                    )
                     self.on_quote(quote)
             return
         if kind == self._messages["bars_res"]().payloadType:
