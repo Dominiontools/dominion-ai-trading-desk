@@ -4,19 +4,19 @@ from .quotes import quote_age_seconds
 
 @dataclass(frozen=True)
 class RiskLimits:
-    max_risk_per_trade_pct: float = 0.01
-    max_daily_loss_pct: float = 0.03
-    max_open_positions: int = 3
+    max_risk_per_trade_pct: float = 0.005
+    max_daily_loss_pct: float = 0.02
+    max_open_positions: int = 1
     max_spread_bps: float = 20.0
     max_slippage_bps: float = 15.0
     max_quote_age_seconds: int = 10
     allowed_markets: tuple[str, ...] = ("FOREX", "GOLD", "CRYPTO")
 
     def __post_init__(self):
-        if not 0 < self.max_risk_per_trade_pct <= 0.02:
-            raise ValueError("Per-trade risk must be greater than 0 and no more than 2%.")
-        if not 0 < self.max_daily_loss_pct <= 0.10:
-            raise ValueError("Daily loss limit must be greater than 0 and no more than 10%.")
+        if not 0 < self.max_risk_per_trade_pct <= 0.01:
+            raise ValueError("Per-trade risk must be greater than 0 and no more than 1%.")
+        if not 0 < self.max_daily_loss_pct <= 0.05:
+            raise ValueError("Daily loss limit must be greater than 0 and no more than 5%.")
         if self.max_open_positions < 1 or self.max_spread_bps <= 0 or self.max_slippage_bps <= 0 or self.max_quote_age_seconds < 1:
             raise ValueError("Position, spread, slippage, and quote-age limits must be positive.")
         if not self.allowed_markets or any(m not in {"FOREX", "GOLD", "CRYPTO"} for m in self.allowed_markets):
