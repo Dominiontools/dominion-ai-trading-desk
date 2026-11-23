@@ -18,10 +18,14 @@ class SimulatedPosition:
             raise ValueError("Side must be BUY or SELL.")
         if min(self.entry_price, self.stop_loss, self.take_profit, self.quantity) <= 0:
             raise ValueError("Prices and quantity must be positive.")
-        if self.side == "BUY" and not self.stop_loss < self.entry_price < self.take_profit:
-            raise ValueError("BUY requires stop < entry < target.")
-        if self.side == "SELL" and not self.take_profit < self.entry_price < self.stop_loss:
-            raise ValueError("SELL requires target < entry < stop.")
+        if self.side == "BUY":
+            valid = self.stop_loss < self.take_profit and (self.trailing_distance is not None or self.stop_loss < self.entry_price)
+            if not valid or self.entry_price >= self.take_profit:
+                raise ValueError("BUY requires stop < target and entry < target; trailing stops may protect profit above entry.")
+        if self.side == "SELL":
+            valid = self.take_profit < self.stop_loss and (self.trailing_distance is not None or self.entry_price < self.stop_loss)
+            if not valid or self.take_profit >= self.entry_price:
+                raise ValueError("SELL requires target < stop and target < entry; trailing stops may protect profit below entry.")
 
 @dataclass(frozen=True)
 class ExitDecision:
