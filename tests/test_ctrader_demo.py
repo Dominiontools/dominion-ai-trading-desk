@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import pytest
 
@@ -94,3 +94,31 @@ def test_spot_event_rejects_missing_timestamp_or_crossed_market():
     assert spot_event_to_quote(missing_time, "EURUSD") is None
     assert spot_event_to_quote(partial, "EURUSD") is None
     assert spot_event_to_quote(crossed, "EURUSD") is None
+
+
+
+def test_incremental_spot_updates_preserve_each_side_timestamp():
+    first_time = 1_800_000_000_000
+    first_event = SimpleNamespace(
+        bid=115482, ask=115490, timestamp=first_time,
+        HasField=lambda name: name in {"bid", "ask", "timestamp"},
+    )
+    initial = spot_event_to_quote(first_event, "EURUSD")
+    assert initial is not None
+
+    bid_update = SimpleNamespace(
+        bid=115483, ask=0, timestamp=first_time + 1000,
+        HasField=lambda name: name in {"bid", "timestamp"},
+    )
+    updated = spot_event_to_quote(
+        bid_update,
+        "EURUSD",
+        previous_bid=initial.bid,
+        previous_ask=initial.ask,
+        previous_bid_timestamp=initial.bid_timestamp,
+        previous_ask_timestamp=initial.ask_timestamp,
+    )
+    assert updated is not None
+    assert updated.bid == 1.15483
+    assert updated.ask == 1.1549
+    assert updated.bid_timestamp > updated.ask_timestamp
