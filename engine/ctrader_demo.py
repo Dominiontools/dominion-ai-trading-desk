@@ -20,6 +20,29 @@ TIMEFRAME_ENUMS = {
     "H4": 10, "H12": 11, "D1": 12, "W1": 13, "MN1": 14,
 }
 
+# Approximate duration used only to bound a historical request window.
+# Monthly bars vary in length; 31 days is a conservative calendar-month bound.
+TIMEFRAME_MILLISECONDS = {
+    "M1": 60_000, "M2": 120_000, "M3": 180_000, "M4": 240_000,
+    "M5": 300_000, "M10": 600_000, "M15": 900_000,
+    "M30": 1_800_000, "H1": 3_600_000, "H4": 14_400_000,
+    "H12": 43_200_000, "D1": 86_400_000, "W1": 604_800_000,
+    "MN1": 2_678_400_000,
+}
+
+
+def historical_window(timeframe: str, limit: int, to_timestamp_ms: int) -> tuple[int, int]:
+    """Return a bounded cTrader history window covering the requested bar count."""
+    if timeframe not in TIMEFRAME_MILLISECONDS:
+        raise ValueError("Unsupported timeframe.")
+    if not 1 <= limit <= 5000:
+        raise ValueError("Candle limit must be between 1 and 5000.")
+    if to_timestamp_ms <= 0:
+        raise ValueError("The end timestamp must be positive.")
+    # Add one full period so the first requested bar is not clipped by rounding.
+    from_timestamp_ms = max(0, to_timestamp_ms - ((limit + 1) * TIMEFRAME_MILLISECONDS[timeframe]))
+    return from_timestamp_ms, to_timestamp_ms
+
 @dataclass(frozen=True)
 class CTraderDemoConfig:
     client_id: str
@@ -123,7 +146,7 @@ class CTraderDemoConnector:
 
     def _send(self, request, request_id: str | None = None) -> None:
         deferred = self.client.send(request, clientMsgId=request_id) if request_id else self.client.send(request)
-        deferred.addErrback(self._failed)
+        deferred.addErrback(lambda failure: self._failed(failure, request_id))
 
     def _connected(self, client) -> None:
         request = self._messages["app_auth_req"]()
@@ -134,7 +157,9 @@ class CTraderDemoConnector:
     def _disconnected(self, client, reason) -> None:
         self.state = "DISCONNECTED"
 
-    def _failed(self, failure):
+    def _failed(self, failure, request_id: str | None = None):
+        if request_id:
+            self.pending.pop(request_id, None)
         self.state = "ERROR"
         return failure
 
@@ -142,6 +167,9 @@ class CTraderDemoConnector:
         payload = self._protobuf.extract(message)
         kind = message.payloadType
         if kind == self._messages["error_res"]().payloadType:
+            request_id = getattr(message, "clientMsgId", "")
+            if request_id:
+                self.pending.pop(request_id, None)
             self.state = "ERROR"
             return
         if kind == self._messages["app_auth_res"]().payloadType:
@@ -195,12 +223,13 @@ class CTraderDemoConnector:
             raise KeyError(f"Symbol {symbol!r} was not found in this demo account's enabled symbol list.")
         request_id = str(uuid.uuid4())
         now_ms = int(time.time() * 1000)
+        from_ms, to_ms = historical_window(timeframe, limit, now_ms)
         request = self._messages["bars_req"]()
         request.ctidTraderAccountId = self.account_id
         request.symbolId = symbol_id
         request.period = TIMEFRAME_ENUMS[timeframe]
-        request.toTimestamp = now_ms
-        request.fromTimestamp = 0
+        request.toTimestamp = to_ms
+        request.fromTimestamp = from_ms
         request.count = limit
         self.pending[request_id] = (symbol, timeframe)
         self._send(request, request_id)
