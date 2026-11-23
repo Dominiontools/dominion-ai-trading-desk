@@ -113,9 +113,9 @@ def spot_event_to_quote(
     ask = int(event.ask) / 100_000 if has_ask else previous_ask
     bid_timestamp = timestamp if has_bid else previous_bid_timestamp
     ask_timestamp = timestamp if has_ask else previous_ask_timestamp
-    if bid is None or ask is None or bid_timestamp is None or ask_timestamp is None:
+    if (bid is not None and bid <= 0) or (ask is not None and ask <= 0):
         return None
-    if bid <= 0 or ask <= 0 or bid > ask:
+    if bid is not None and ask is not None and bid > ask:
         return None
     return SpotQuote(
         symbol=symbol,
@@ -278,7 +278,9 @@ class CTraderDemoConnector:
                     self._spot_state[int(payload.symbolId)] = (
                         quote.bid, quote.ask, quote.bid_timestamp, quote.ask_timestamp
                     )
-                    self.on_quote(quote)
+                    if (quote.bid is not None and quote.ask is not None
+                            and quote.bid_timestamp is not None and quote.ask_timestamp is not None):
+                        self.on_quote(quote)
             return
         if kind == self._messages["bars_res"]().payloadType:
             request_id = getattr(message, "clientMsgId", "")
