@@ -22,9 +22,10 @@ def test_trendbar_prices_are_scaled_and_reconstructed():
     assert candle.timestamp.tzinfo == timezone.utc
 
 
-def test_connector_config_requires_all_secrets_and_account(monkeypatch):
+def test_connector_config_requires_client_credentials_and_account(monkeypatch, tmp_path):
     for name in ("CTRADER_CLIENT_ID", "CTRADER_CLIENT_SECRET", "CTRADER_ACCESS_TOKEN", "CTRADER_ACCOUNT_ID"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CTRADER_TOKEN_FILE", str(tmp_path / "missing.json"))
     with pytest.raises(RuntimeError, match="Missing required"):
         CTraderDemoConfig.from_env()
 
@@ -231,3 +232,79 @@ def test_spot_subscription_acknowledgement_rejects_partial_acceptance():
 
     assert connector.state == "ERROR"
     assert connector.subscribed_symbols == set()
+
+
+def test_oauth_authorization_url_uses_view_only_scope():
+    from urllib.parse import parse_qs, urlsplit
+    from engine.ctrader_oauth import build_authorization_url
+
+    url = build_authorization_url("client-1", "http://127.0.0.1:8765/callback", "state-1")
+    query = parse_qs(urlsplit(url).query)
+    assert query["scope"] == ["accounts"]
+    assert query["client_id"] == ["client-1"]
+    assert query["state"] == ["state-1"]
+
+
+def test_token_file_is_private_and_access_token_is_loaded(tmp_path):
+    import json
+    import stat
+    from engine.ctrader_oauth import load_access_token, save_token_response
+
+    token_file = tmp_path / "tokens.json"
+    save_token_response({
+        "accessToken": "access-old", "refreshToken": "refresh-old",
+        "tokenType": "bearer", "expiresIn": 3600,
+    }, token_file, now=1000)
+    assert load_access_token("id", "secret", None, token_file, now=1100) == "access-old"
+    assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
+    assert json.loads(token_file.read_text())["refresh_token"] == "refresh-old"
+
+
+def test_expired_token_is_refreshed_and_rotated(tmp_path):
+    import json
+    from engine.ctrader_oauth import load_access_token, save_token_response
+
+    token_file = tmp_path / "tokens.json"
+    save_token_response({
+        "accessToken": "access-old", "refreshToken": "refresh-old",
+        "tokenType": "bearer", "expiresIn": 1,
+    }, token_file, now=1000)
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self):
+            return json.dumps({
+                "accessToken": "access-new", "refreshToken": "refresh-new",
+                "tokenType": "bearer", "expiresIn": 3600, "errorCode": None,
+            }).encode()
+
+    def fake_opener(request, timeout):
+        assert request.get_method() == "POST"
+        assert "refresh_token=refresh-old" in request.data.decode()
+        return FakeResponse()
+
+    token = load_access_token("id", "secret", None, token_file, now=1002, opener=fake_opener)
+    assert token == "access-new"
+    saved = json.loads(token_file.read_text())
+    assert saved["refresh_token"] == "refresh-new"
+    assert saved["expires_at"] == 4602
+
+
+def test_config_loads_access_token_from_private_store_when_env_token_absent(monkeypatch, tmp_path):
+    from engine.ctrader_oauth import save_token_response
+
+    token_file = tmp_path / "tokens.json"
+    save_token_response({
+        "accessToken": "stored-access", "refreshToken": "stored-refresh",
+        "tokenType": "bearer", "expiresIn": 3600,
+    }, token_file)
+    monkeypatch.setenv("CTRADER_CLIENT_ID", "demo-client")
+    monkeypatch.setenv("CTRADER_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("CTRADER_ACCOUNT_ID", "123")
+    monkeypatch.delenv("CTRADER_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("CTRADER_TOKEN_FILE", str(token_file))
+    config = CTraderDemoConfig.from_env()
+    assert config.access_token == "stored-access"
