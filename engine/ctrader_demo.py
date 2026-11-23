@@ -48,6 +48,15 @@ def market_for_symbol(symbol: str) -> str:
     return "GOLD" if normalized.startswith(("XAU", "GOLD")) else "FOREX"
 
 
+def is_confirmed_demo_account(account) -> bool:
+    """Return True only when cTrader explicitly marks the account as demo."""
+    try:
+        has_environment_flag = account.HasField("isLive")
+    except (AttributeError, ValueError):
+        has_environment_flag = False
+    return has_environment_flag and not bool(account.isLive)
+
+
 def trendbar_to_candle(bar, symbol: str, timeframe: str) -> Candle:
     """Convert a cTrader ProtoOATrendbar using its documented 1e-5 price unit."""
     low_raw = int(bar.low)
@@ -145,8 +154,8 @@ class CTraderDemoConnector:
             if account is None:
                 self.state = "ACCOUNT_NOT_GRANTED"
                 return
-            if bool(account.isLive):
-                self.state = "REFUSED_LIVE_ACCOUNT"
+            if not is_confirmed_demo_account(account):
+                self.state = "REFUSED_NON_DEMO_OR_UNVERIFIED_ACCOUNT"
                 return
             self.account_id = self.config.account_id
             request = self._messages["account_auth_req"]()
