@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 
-from engine.ctrader_demo import CTraderDemoConfig, market_for_symbol, trendbar_to_candle
+from engine.ctrader_demo import CTraderDemoConfig, is_confirmed_demo_account, market_for_symbol, trendbar_to_candle
 
 
 def test_market_mapping_identifies_gold_and_forex():
@@ -36,3 +36,12 @@ def test_connector_config_rejects_non_numeric_account(monkeypatch):
     monkeypatch.setenv("CTRADER_ACCOUNT_ID", "not-a-number")
     with pytest.raises(RuntimeError, match="must be an integer"):
         CTraderDemoConfig.from_env()
+
+
+def test_account_must_explicitly_be_marked_demo():
+    demo = SimpleNamespace(isLive=False, HasField=lambda name: name == "isLive")
+    live = SimpleNamespace(isLive=True, HasField=lambda name: name == "isLive")
+    unknown = SimpleNamespace(isLive=False, HasField=lambda name: False)
+    assert is_confirmed_demo_account(demo)
+    assert not is_confirmed_demo_account(live)
+    assert not is_confirmed_demo_account(unknown)
