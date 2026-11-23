@@ -96,13 +96,12 @@ def spot_event_to_quote(event, symbol: str) -> SpotQuote | None:
         has_ask = event.HasField("ask")
     except (AttributeError, ValueError):
         return None
-    if not has_timestamp:
+    # A complete two-sided quote is required; partial spot updates are not tradable quotes.
+    if not (has_timestamp and has_bid and has_ask):
         return None
-    bid = int(event.bid) / 100_000 if has_bid else None
-    ask = int(event.ask) / 100_000 if has_ask else None
-    if (bid is not None and bid <= 0) or (ask is not None and ask <= 0):
-        return None
-    if bid is not None and ask is not None and bid > ask:
+    bid = int(event.bid) / 100_000
+    ask = int(event.ask) / 100_000
+    if bid <= 0 or ask <= 0 or bid > ask:
         return None
     timestamp = datetime.fromtimestamp(int(event.timestamp) / 1000, tz=timezone.utc)
     return SpotQuote(symbol=symbol, bid=bid, ask=ask, timestamp=timestamp)
@@ -239,6 +238,7 @@ class CTraderDemoConnector:
             return
         if kind == self._messages["symbols_res"]().payloadType:
             self.symbol_ids = {item.symbolName: int(item.symbolId) for item in payload.symbol if item.enabled}
+            self.symbol_names_by_id = {symbol_id: name for name, symbol_id in self.symbol_ids.items()}
             self.state = "READY_DEMO_READ_ONLY"
             return
         if kind == self._messages["spot_event"]().payloadType:
