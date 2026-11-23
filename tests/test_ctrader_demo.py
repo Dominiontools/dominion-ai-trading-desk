@@ -189,6 +189,10 @@ def test_spot_subscription_acknowledgement_updates_subscribed_symbols():
     )
     connector._messages = {
         "error_res": lambda: SimpleNamespace(payloadType=900),
+        "app_auth_res": lambda: SimpleNamespace(payloadType=910),
+        "accounts_res": lambda: SimpleNamespace(payloadType=911),
+        "account_auth_res": lambda: SimpleNamespace(payloadType=912),
+        "symbols_res": lambda: SimpleNamespace(payloadType=913),
         "spots_res": lambda: SimpleNamespace(payloadType=901),
         "spot_event": lambda: SimpleNamespace(payloadType=902),
         "bars_res": lambda: SimpleNamespace(payloadType=903),
@@ -213,6 +217,10 @@ def test_spot_subscription_acknowledgement_rejects_partial_acceptance():
     )
     connector._messages = {
         "error_res": lambda: SimpleNamespace(payloadType=900),
+        "app_auth_res": lambda: SimpleNamespace(payloadType=910),
+        "accounts_res": lambda: SimpleNamespace(payloadType=911),
+        "account_auth_res": lambda: SimpleNamespace(payloadType=912),
+        "symbols_res": lambda: SimpleNamespace(payloadType=913),
         "spots_res": lambda: SimpleNamespace(payloadType=901),
         "spot_event": lambda: SimpleNamespace(payloadType=902),
         "bars_res": lambda: SimpleNamespace(payloadType=903),
