@@ -26,9 +26,11 @@ Install runtime dependency with `pip install -r requirements.txt`.
 - Authenticates the application, checks the selected account exists in the granted account list, and refuses accounts marked live.
 - Loads enabled symbol names and IDs for that account.
 - Requests historical trend bars for a selected symbol and timeframe using a bounded time window.
-- Subscribes to timestamped live bid/ask updates for selected enabled symbols and rejects missing-timestamp or crossed quotes.
+- Subscribes to timestamped live bid/ask updates for selected enabled symbols and rejects missing-timestamp, partial, or crossed quotes.
+- Maintains a reverse symbol-ID lookup so incoming spot events are associated with the correct instrument.
+- Provides a separate fail-closed quote freshness validator; stale, timezone-naive, incomplete, crossed, or materially future-dated quotes are not considered fresh.
 - Converts cTrader's 1/100000 price representation and low-plus-delta OHLC format into the project's Candle model.
 - Emits candle lists through a callback. It does not send any trade, close, amend, or cancel requests.
 
 ## Important limitations
-The connector is callback-based because Spotware's Python SDK uses Twisted. It is a connection module, not yet a running background worker or dashboard connection. The app still needs a secure OAuth callback/token-refresh service, a supervised worker process, explicit quote freshness enforcement at the worker/risk boundary, reconnect supervision, and tests against an actual Pepperstone demo account before this can be called connected. The official SDK handles protocol heartbeats internally; this module does not yet supervise reconnects or worker health. The SDK and credentials are not exercised by CI against a broker.
+The connector is callback-based because Spotware's Python SDK uses Twisted. It is a connection module, not yet a running background worker or dashboard connection. The app still needs a secure OAuth callback/token-refresh service, a supervised worker process, wiring the quote freshness validator into the running worker/risk boundary, reconnect supervision, and tests against an actual Pepperstone demo account before this can be called connected. The official SDK handles protocol heartbeats internally; this module does not yet supervise reconnects or worker health. The SDK and credentials are not exercised by CI against a broker.
