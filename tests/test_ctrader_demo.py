@@ -174,3 +174,52 @@ def test_subscribe_spots_rejects_unknown_symbol_and_empty_list():
         connector.subscribe_spots([])
     with pytest.raises(KeyError, match="not enabled"):
         connector.subscribe_spots(["UNKNOWN"])
+
+
+
+def test_spot_subscription_acknowledgement_updates_subscribed_symbols():
+    from types import SimpleNamespace
+    from engine.ctrader_demo import CTraderDemoConnector
+
+    connector = CTraderDemoConnector(CTraderDemoConfig("id", "secret", "token", 123))
+    connector.symbol_ids = {"EURUSD": 10, "XAUUSD": 20}
+    connector.pending_subscriptions["request-1"] = {"EURUSD", "XAUUSD"}
+    connector._protobuf = SimpleNamespace(
+        extract=lambda message: SimpleNamespace(subscribedSymbolId=[10, 20])
+    )
+    connector._messages = {
+        "error_res": lambda: SimpleNamespace(payloadType=900),
+        "spots_res": lambda: SimpleNamespace(payloadType=901),
+        "spot_event": lambda: SimpleNamespace(payloadType=902),
+        "bars_res": lambda: SimpleNamespace(payloadType=903),
+    }
+    message = SimpleNamespace(payloadType=901, clientMsgId="request-1")
+
+    connector._received(None, message)
+
+    assert connector.subscribed_symbols == {"EURUSD", "XAUUSD"}
+    assert "request-1" not in connector.pending_subscriptions
+
+
+def test_spot_subscription_acknowledgement_rejects_partial_acceptance():
+    from types import SimpleNamespace
+    from engine.ctrader_demo import CTraderDemoConnector
+
+    connector = CTraderDemoConnector(CTraderDemoConfig("id", "secret", "token", 123))
+    connector.symbol_ids = {"EURUSD": 10, "XAUUSD": 20}
+    connector.pending_subscriptions["request-2"] = {"EURUSD", "XAUUSD"}
+    connector._protobuf = SimpleNamespace(
+        extract=lambda message: SimpleNamespace(subscribedSymbolId=[10])
+    )
+    connector._messages = {
+        "error_res": lambda: SimpleNamespace(payloadType=900),
+        "spots_res": lambda: SimpleNamespace(payloadType=901),
+        "spot_event": lambda: SimpleNamespace(payloadType=902),
+        "bars_res": lambda: SimpleNamespace(payloadType=903),
+    }
+    message = SimpleNamespace(payloadType=901, clientMsgId="request-2")
+
+    connector._received(None, message)
+
+    assert connector.state == "ERROR"
+    assert connector.subscribed_symbols == set()
