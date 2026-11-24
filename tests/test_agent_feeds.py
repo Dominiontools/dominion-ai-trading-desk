@@ -17,14 +17,22 @@ def test_geckoterminal_normalizes_whale_trade():
     rows=GeckoTerminalWhaleFeed(fetch_json=fake).trades("eth","0xpool","ABC")
     assert rows[0]["side"]=="BUY" and rows[0]["notional_usd"]==150000
 
-def test_goplus_fails_closed_without_token():
-    result=GoPlusSecurityFeed().assess("ethereum","0xabc")
-    assert result["status"]=="WAITING_FOR_API_TOKEN"
+def test_goplus_uses_free_tier_without_token():
+    calls = []
+    def fake(url, timeout, **kwargs):
+        calls.append(kwargs.get("headers", {}))
+        return {"code":1,"result":{"0xabc":{"is_honeypot":"0","is_open_source":"1"}}}
+    result=GoPlusSecurityFeed(fetch_json=fake).assess("ethereum","0xabc")
+    assert result["status"]=="DATA_RETURNED_REQUIRES_REVIEW"
+    assert calls == [{}]
 
 def test_goplus_flags_honeypot_and_missing_fields_not_safe():
+    calls = []
     def fake(url, timeout, **kwargs):
+        calls.append(kwargs.get("headers", {}))
         return {"code":1,"result":{"0xabc":{"is_honeypot":"1","is_open_source":"0"}}}
     result=GoPlusSecurityFeed(fetch_json=fake,token="test-token").assess("ethereum","0xabc")
+    assert calls == [{"Authorization":"Bearer test-token"}]
     assert "HONEYPOT" in result["risks"]
     assert "UNVERIFIED_CONTRACT" in result["risks"]
 
