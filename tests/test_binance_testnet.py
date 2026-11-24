@@ -107,7 +107,7 @@ def test_protected_otoco_rejects_bad_bracket_and_long_list_id(monkeypatch):
             stop_loss="30100", take_profit="31000",
             list_client_order_id="dominion123",
         )
-    with pytest.raises(ValueError, match="20 characters"):
+    with pytest.raises(ValueError, match="1-20 ASCII characters"):
         client.place_protected_buy_otoco(
             symbol="BTCUSDT", quantity="0.001", entry_price="30000",
             stop_loss="29500", take_profit="31000",
