@@ -83,7 +83,7 @@ class PaperTradingDesk:
         if self.journal:
             self.journal.parent.mkdir(parents=True, exist_ok=True)
             with self.journal.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps(record, sort_keys=True) + "\\n")
+                stream.write(json.dumps(record, sort_keys=True) + "\n")
                 stream.flush()
         return record
 
@@ -144,9 +144,12 @@ class PaperTradingDesk:
         if position is None or position.symbol != symbol.upper():
             return self._record("EXIT_WAITING", symbol=symbol.upper(),
                                 reason="NO_MATCHING_OPEN_POSITION")
-        updated = update_trailing_stop(position, price)
-        decision = evaluate_exit(updated, price)
+        # Check the existing protective levels before moving a trailing stop.
+        # This prevents a short's newly tightened stop from crossing its target
+        # on a price tick that has already reached take-profit.
+        decision = evaluate_exit(position, price)
         if not decision.should_close:
+            updated = update_trailing_stop(position, price)
             self.position = updated
             return self._record("POSITION_HOLD", position_id=position.position_id,
                                 symbol=position.symbol, mark_price=price,
