@@ -14,13 +14,14 @@ if attribute not in text:
 xml_dir = Path("android/app/src/main/res/xml")
 xml_dir.mkdir(parents=True, exist_ok=True)
 (xml_dir / "network_security_config.xml").write_text(
-    """<?xml version="1.0" encoding="utf-8"?>\n"
-    "<network-security-config>\n"
-    "  <base-config cleartextTrafficPermitted=\"false\" />\n"
-    "  <domain-config cleartextTrafficPermitted=\"true\">\n"
-    "    <domain includeSubdomains=\"false\">localhost</domain>\n"
-    "  </domain-config>\n"
-    "</network-security-config>\n""",
+    """<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="false">localhost</domain>
+  </domain-config>
+</network-security-config>
+""",
     encoding="utf-8",
 )
 print("Android local API networking restricted to localhost.")
