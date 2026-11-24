@@ -104,6 +104,7 @@ def configure_manifest() -> None:
     for permission in (
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.INTERNET",
     ):
@@ -120,7 +121,7 @@ def configure_manifest() -> None:
         <service
             android:name="{PACKAGE}.TradingEngineService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="dataSync|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-started local paper market monitoring; no live order execution" />
@@ -197,6 +198,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
@@ -224,12 +226,20 @@ public class TradingEngineService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, notification("Starting paper market monitor…"));
+        startForegroundForApi(notification("Starting paper market monitor…"));
         if (startupThread == null || !startupThread.isAlive()) {
             startupThread = new Thread(this::startPythonEngine, "dominion-python-start");
             startupThread.start();
         }
         return START_STICKY;
+    }
+
+    private void startForegroundForApi(Notification notification) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        }
     }
 
     private void startPythonEngine() {
