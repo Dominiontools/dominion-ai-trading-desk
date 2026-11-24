@@ -176,6 +176,9 @@ function CryptoMonitorPanel() {
   const strategyEngine = status?.strategy_engine && typeof status.strategy_engine === "object"
     ? status.strategy_engine as Record<string, unknown>
     : null;
+  const paperTrades = Array.isArray(paperTrading?.recent_trades)
+    ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
+    : [];
   const agentStates = status?.agents && typeof status.agents === "object"
     ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
     : {};
@@ -207,6 +210,15 @@ function CryptoMonitorPanel() {
         <div><small>STRATEGY</small><b>{String(strategyEngine?.status || "Waiting")}</b></div>
       </div>
       <div className="panel-foot">Directional strategy: 10/30 SMA crossover on public Binance 1-minute candles. Paper ledger only; cross-exchange price gaps are not treated as directional entry signals.</div>
+      <div className="decision-list-head"><b>RECENT PAPER EVENTS</b><span>{paperTrades.length} records</span></div>
+      {paperTrades.length === 0 ? <div className="decision-empty"><div><b>No paper trades yet</b><span>Entries and exits will be recorded here after a validated SMA signal.</span></div></div> :
+        paperTrades.map((trade, index) => <div className="decision-row" key={String(trade.timestamp || index)}>
+          <div><b>{String(trade.event || "PAPER EVENT")} · {String(trade.symbol || trade.position && (trade.position as Record<string, unknown>).symbol || "—")}</b>
+            <small>{String(trade.exit_reason || trade.reason || trade.signal_reason || "Paper decision")}</small></div>
+          <span>{trade.realized_pnl === undefined ? "—" : "P/L " + String(trade.realized_pnl)}</span>
+          <small>{String(trade.timestamp || "")}</small>
+        </div>)
+      }
     </div>
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>AGENT RUNTIME STATUS</b><span>{Object.keys(agentStates).length}/8 reported</span></div>
