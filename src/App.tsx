@@ -167,6 +167,9 @@ function CryptoMonitorPanel() {
   }, [refresh]);
 
   const engine = typeof status?.engine === "string" ? status.engine : typeof status?.status === "string" ? status.status : "Status unavailable";
+  const agentStates = status?.agents && typeof status.agents === "object"
+    ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
+    : {};
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -183,6 +186,14 @@ function CryptoMonitorPanel() {
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
+    </div>
+    <div className="agent-runtime-list">
+      <div className="decision-list-head"><b>AGENT RUNTIME STATUS</b><span>{Object.keys(agentStates).length}/8 reported</span></div>
+      {Object.entries(agentStates).map(([name, agent]) => <div className="agent-runtime-row" key={name}>
+        <b>{name}</b><span className={"agent-runtime-state " + String(agent.status || "UNKNOWN").toLowerCase()}>{String(agent.status || "UNKNOWN").replaceAll("_", " ")}</span>
+        <small>{String(agent.detail || "")}</small>
+      </div>)}
+      {Object.keys(agentStates).length === 0 && <div className="decision-empty"><div><b>Agent runtime not connected</b><span>Start the phone engine to retrieve actual agent states.</span></div></div>}
     </div>
     <div className="decision-list">
       <div className="decision-list-head"><b>LIVE TOP-OF-BOOK QUOTES</b><span>{latestQuotes.length} venues</span></div>
