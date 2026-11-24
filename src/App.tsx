@@ -167,6 +167,12 @@ function CryptoMonitorPanel() {
   }, [refresh]);
 
   const engine = typeof status?.engine === "string" ? status.engine : typeof status?.status === "string" ? status.status : "Status unavailable";
+  const paperTrading = status?.paper_trading && typeof status.paper_trading === "object"
+    ? status.paper_trading as Record<string, unknown>
+    : null;
+  const paperPosition = paperTrading?.open_position && typeof paperTrading.open_position === "object"
+    ? paperTrading.open_position as Record<string, unknown>
+    : null;
   const agentStates = status?.agents && typeof status.agents === "object"
     ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
     : {};
@@ -186,6 +192,17 @@ function CryptoMonitorPanel() {
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
+    </div>
+    <div className="agent-runtime-list paper-book-panel">
+      <div className="decision-list-head"><b>PAPER TRADING ACCOUNT</b><span>{paperTrading ? "CONNECTED TO LOCAL ENGINE" : "WAITING FOR ENGINE"}</span></div>
+      <div className="crypto-summary">
+        <div><small>STARTING EQUITY</small><b>${String(paperTrading?.starting_equity ?? "20.00")}</b></div>
+        <div><small>PAPER EQUITY</small><b>${String(paperTrading?.equity ?? "—")}</b></div>
+        <div><small>REALIZED P/L</small><b>${String(paperTrading?.realized_pnl ?? "—")}</b></div>
+        <div><small>DAILY LOSS</small><b>{paperTrading ? (Number(paperTrading.daily_loss_pct ?? 0) * 100).toFixed(2) + "%" : "—"}</b></div>
+        <div><small>OPEN POSITION</small><b>{paperPosition ? String(paperPosition.symbol) + " " + String(paperPosition.side) : "None"}</b></div>
+      </div>
+      <div className="panel-foot">Paper ledger only. Waiting for a validated strategy signal; cross-exchange price gaps are not treated as directional entry signals.</div>
     </div>
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>AGENT RUNTIME STATUS</b><span>{Object.keys(agentStates).length}/8 reported</span></div>
