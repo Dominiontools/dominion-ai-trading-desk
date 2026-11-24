@@ -52,3 +52,24 @@ cost and is not sufficient for live execution.
 - The local API binds only to `127.0.0.1`, exposes read-only GET routes, and
   must never be exposed to the public internet.
 - cTrader/Pepperstone is not connected to this Android service yet.
+
+## Directional crypto paper strategy and persistent paper book
+
+The embedded Android service also runs a 10/30 SMA crossover strategy using
+completed Binance Spot 1-minute candles. It requests 80 klines and discards the
+currently forming candle; signals are blocked if the latest completed candle
+is older than two minutes or if the quote is stale. A candidate is sized from
+the configured $20 paper equity and 0.5% maximum risk, with a 1% initial stop,
+2:1 target, $20 notional cap, spread/slippage gates, and one open position.
+
+The paper book writes entry, hold, blocked-entry and exit events to
+`paper_trades.jsonl`. On engine restart it restores realized P/L and any
+unclosed paper position from that journal, so the EXIT agent can continue
+monitoring it. The dashboard exposes paper equity, realized P/L, daily loss,
+open-position status and SMA strategy status.
+
+This is still PAPER_ONLY. The directional strategy is a baseline example, not
+a claim of profitability or a full implementation of every strategy in the
+user's strategy guide. It uses public REST candles and a single Binance quote,
+not a WebSocket stream. The separate arbitrage monitor remains analysis-only;
+an arbitrage price gap is never converted into a one-sided directional trade.
