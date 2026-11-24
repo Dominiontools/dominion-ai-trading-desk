@@ -10,12 +10,10 @@ from engine.paper_workflow import PaperTradingDesk
 
 def sample_candles():
     now = datetime.now(timezone.utc)
-    # Flat/declining closes followed by a strong rise creates a bullish crossover.
-    closes = [100.0] * 30 + [99.0, 98.0, 97.0, 96.0, 95.0, 94.0, 93.0, 92.0, 91.0, 90.0]
-    closes += [91.0, 92.0, 93.0, 94.0, 95.0, 96.0, 97.0, 98.0, 99.0, 110.0]
+    # A controlled 30-bar baseline followed by a final upward jump crosses the averages.
+    closes = [100.0] * 20 + [99.0] * 10 + [110.0]
     return [Candle("BTCUSDT", "CRYPTO", "1m", now, p, p + 1, p - 1, p, 10)
             for p in closes]
-
 
 def test_binance_candle_feed_parses_klines():
     rows = [[1730000000000, "100", "102", "99", "101", "12"] for _ in range(31)]
