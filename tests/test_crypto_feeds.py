@@ -46,3 +46,21 @@ def test_htx_rejects_unexpected_payload():
 def test_rejects_invalid_symbol():
     with pytest.raises(ValueError):
         PublicCryptoFeeds(fetch_json=fake_fetch).binance("BTC/USDT!")
+
+
+def test_snapshot_reports_each_failed_venue_without_returning_partial_quotes():
+    def partly_broken(url, timeout):
+        if "binance" in url:
+            return {"symbol": "BTCUSDT", "bidPrice": "100", "bidQty": "1",
+                    "askPrice": "101", "askQty": "1"}
+        if "bitget" in url:
+            raise TimeoutError("connection timed out")
+        raise OSError("TLS handshake failed")
+
+    with pytest.raises(RuntimeError) as caught:
+        PublicCryptoFeeds(fetch_json=partly_broken).snapshot("BTCUSDT")
+    message = str(caught.value)
+    assert "bitget: TimeoutError" in message
+    assert "connection timed out" in message
+    assert "htx: OSError" in message
+    assert "TLS handshake failed" in message
