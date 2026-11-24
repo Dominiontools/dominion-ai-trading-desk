@@ -47,3 +47,14 @@
 @media(min-width:900px){.agent-runtime-list{display:grid;grid-template-columns:1fr 1fr;column-gap:24px}.agent-runtime-list>.decision-list-head{grid-column:1/-1}}
 
 .feed-error{color:#f0a0a0!important;white-space:normal;overflow-wrap:anywhere}
+
+.readiness-panel{margin:14px 0}
+.readiness-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line,#253247)}
+.readiness-row:last-of-type{border-bottom:0}
+.readiness-row>div{display:flex;flex-direction:column;gap:5px}
+.readiness-row b{font-size:11px;color:#e2eaf5}
+.readiness-row small{font-size:10px;line-height:1.45;color:#91a0b7}
+.readiness-state{font-size:9px;font-weight:700;letter-spacing:.04em;text-align:right;color:#e8bd76;max-width:160px}
+.readiness-state.verified,.readiness-state.approved,.readiness-state.authorized,.readiness-state.orders_verified,.readiness-state.locked{color:#8bd8ac}
+.readiness-state.blocked_external_approval,.readiness-state.not_connected,.readiness-state.not_tested,.readiness-state.incomplete,.readiness-state.awaiting_user_test,.readiness-state.blocked_approval_and_user_auth,.readiness-state.blocked_until_demo_execution{color:#e8bd76}
+@media(max-width:700px){.readiness-row{grid-template-columns:1fr}.readiness-state{text-align:left;max-width:none}}
