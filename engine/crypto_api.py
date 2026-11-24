@@ -113,8 +113,8 @@ def create_server(
 ) -> ThreadingHTTPServer:
     if host != "127.0.0.1":
         raise ValueError("The paper API must bind to loopback (127.0.0.1) only.")
-    if not 1 <= port <= 65535:
-        raise ValueError("Port must be between 1 and 65535.")
+    if not 0 <= port <= 65535:
+        raise ValueError("Port must be between 0 and 65535.")
     return ThreadingHTTPServer(
         (host, port), make_handler(decision_log, status_provider)
     )
