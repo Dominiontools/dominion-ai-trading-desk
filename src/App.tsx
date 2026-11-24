@@ -5,6 +5,9 @@ interface TradingEngineBridge {
   start(): Promise<{ accepted: boolean }>;
   stop(): Promise<{ stopped: boolean }>;
   status(): Promise<{ running: boolean; error?: string }>;
+  saveBinanceTestnetCredentials(options: { apiKey: string; apiSecret: string }): Promise<{ saved: boolean; storage: string }>;
+  binanceTestnetCredentialStatus(): Promise<{ saved: boolean; storage: string }>;
+  clearBinanceTestnetCredentials(): Promise<{ cleared: boolean }>;
 }
 const TradingEngine = registerPlugin<TradingEngineBridge>("TradingEngine");
 
@@ -87,10 +90,61 @@ function CryptoMonitorPanel() {
   const [latestQuotes, setLatestQuotes] = useState<Record<string, unknown>[]>([]);
   const [connection, setConnection] = useState<"checking" | "connected" | "offline">("checking");
   const [lastUpdated, setLastUpdated] = useState("");
+  const [testnetApiKey, setTestnetApiKey] = useState("");
+  const [testnetApiSecret, setTestnetApiSecret] = useState("");
+  const [credentialSaved, setCredentialSaved] = useState(false);
+  const [credentialMessage, setCredentialMessage] = useState("Credentials not saved");
+  const [credentialBusy, setCredentialBusy] = useState(false);
   const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
     Capacitor.isNativePlatform() ? "stopped" : "web"
   );
   const isNativeApp = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    if (!isNativeApp) return;
+    void TradingEngine.binanceTestnetCredentialStatus()
+      .then(result => {
+        setCredentialSaved(result.saved);
+        setCredentialMessage(result.saved ? "Encrypted credentials are stored on this phone." : "Credentials not saved");
+      })
+      .catch(() => setCredentialMessage("Secure storage status unavailable"));
+  }, [isNativeApp]);
+
+  const saveTestnetCredentials = useCallback(async () => {
+    if (!isNativeApp || !testnetApiKey.trim() || !testnetApiSecret.trim()) return;
+    setCredentialBusy(true);
+    setCredentialMessage("Encrypting credentials on this phone…");
+    try {
+      const result = await TradingEngine.saveBinanceTestnetCredentials({
+        apiKey: testnetApiKey.trim(),
+        apiSecret: testnetApiSecret.trim()
+      });
+      setCredentialSaved(result.saved);
+      setTestnetApiKey("");
+      setTestnetApiSecret("");
+      setCredentialMessage("Saved in Android Keystore encrypted storage. Secret cleared from the form.");
+    } catch {
+      setCredentialMessage("Could not save credentials. Check the Testnet key and try again.");
+    } finally {
+      setCredentialBusy(false);
+    }
+  }, [isNativeApp, testnetApiKey, testnetApiSecret]);
+
+  const clearTestnetCredentials = useCallback(async () => {
+    if (!isNativeApp) return;
+    setCredentialBusy(true);
+    try {
+      await TradingEngine.clearBinanceTestnetCredentials();
+      setCredentialSaved(false);
+      setTestnetApiKey("");
+      setTestnetApiSecret("");
+      setCredentialMessage("Stored credentials and their encryption key were cleared.");
+    } catch {
+      setCredentialMessage("Could not clear the stored credentials.");
+    } finally {
+      setCredentialBusy(false);
+    }
+  }, [isNativeApp]);
 
   const startPhoneEngine = useCallback(async () => {
     if (!isNativeApp) return;
@@ -197,6 +251,17 @@ function CryptoMonitorPanel() {
         <button className="engine-stop" onClick={() => void stopPhoneEngine()} disabled={!isNativeApp || engineControl === "stopped" || engineControl === "web"}>Stop</button>
       </div>
       <small className={"engine-control-state " + engineControl}>Phone service: {engineControl === "web" ? "Android app required" : engineControl}</small>
+    </div>
+    <div className="agent-runtime-list credential-panel">
+      <div className="decision-list-head"><b>BINANCE SPOT TESTNET CREDENTIALS</b><span>{credentialSaved ? "ENCRYPTED ON DEVICE" : "NOT CONNECTED"}</span></div>
+      <div className="panel-foot">Enter Testnet-only API credentials. They are encrypted by Android Keystore and are not sent to a server. Do not use production keys; disable withdrawals on the Testnet key.</div>
+      <input aria-label="Binance Testnet API key" type="password" autoComplete="off" placeholder={isNativeApp ? "Binance Spot Testnet API key" : "Available in the Android app"} value={testnetApiKey} onChange={event => setTestnetApiKey(event.target.value)} disabled={!isNativeApp || credentialBusy} />
+      <input aria-label="Binance Testnet API secret" type="password" autoComplete="off" placeholder="Binance Spot Testnet API secret" value={testnetApiSecret} onChange={event => setTestnetApiSecret(event.target.value)} disabled={!isNativeApp || credentialBusy} />
+      <div className="engine-control-actions">
+        <button className="engine-start" onClick={() => void saveTestnetCredentials()} disabled={!isNativeApp || credentialBusy || !testnetApiKey.trim() || !testnetApiSecret.trim()}>Save encrypted credentials</button>
+        <button className="engine-stop" onClick={() => void clearTestnetCredentials()} disabled={!isNativeApp || credentialBusy || !credentialSaved}>Clear credentials</button>
+      </div>
+      <small className="engine-control-state">{isNativeApp ? credentialMessage : "Install the Android app to use device-secure credential storage."}</small>
     </div>
     <div className="crypto-summary">
       <div><small>ENGINE</small><b>{engine}</b></div>
