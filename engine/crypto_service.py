@@ -105,7 +105,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     whale_feed = GeckoTerminalWhaleFeed(timeout=8.0, min_notional_usd=100_000.0)
     security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
     news_feed = PublicNewsRSS(timeout=8.0)
-    network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "fantom":"fantom", "cronos":"cronos"}
+    network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
     def agent_feed_loop() -> None:
         while not stop_event.is_set():
@@ -125,25 +125,43 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                 whale_result = WhaleAgent(min_notional_usd=100_000.0).analyze(whale_trades)
                 state["agents"]["WHALE"] = {"status":"CONNECTED" if not whale_errors else "PARTIAL", "detail":f"GeckoTerminal checked {min(len(discovered), 5)} pools; {len(whale_result.findings)} trades met the USD 100,000 alert threshold.", "alerts":list(whale_result.findings[:5])}
                 security_results = []
-                for token in discovered[:5]:
-                    if token["chain_id"].lower() not in GoPlusSecurityFeed.CHAIN_IDS:
-                        continue
+                supported_candidates = [
+                    token for token in discovered
+                    if GoPlusSecurityFeed.supports_contract(token.get("chain_id", ""), token.get("token_address", ""))
+                ]
+                unsupported_count = len(discovered) - len(supported_candidates)
+                # Do not let unsupported networks at the top hide supported EVM tokens later in the feed.
+                for token in supported_candidates[:5]:
                     try:
-                        security_results.append(security_feed.assess(token["chain_id"], token["token_address"]))
+                        result = security_feed.assess(token["chain_id"], token["token_address"])
+                        result.update({"symbol": token.get("symbol"), "chain": token.get("chain_id"),
+                                       "token_address": token.get("token_address")})
+                        security_results.append(result)
                     except Exception as exc:
-                        security_results.append({"status":"FEED_ERROR", "error":type(exc).__name__})
+                        security_results.append({"status":"FEED_ERROR", "error":type(exc).__name__,
+                                                 "symbol":token.get("symbol"), "chain":token.get("chain_id")})
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
-                if not security_results:
-                    rug_status = "NO_SUPPORTED_TOKENS"
-                elif error_count:
+                checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
+                if not discovered:
+                    rug_status = "WAITING_FOR_TOKENS"
+                elif not supported_candidates:
+                    rug_status = "UNSUPPORTED_TOKENS"
+                elif error_count and checked_count:
                     rug_status = "PARTIAL"
+                elif error_count:
+                    rug_status = "FEED_ERROR"
                 else:
                     rug_status = "CONNECTED"
                 state["agents"]["RUG"] = {
                     "status": rug_status,
-                    "detail": f"GoPlus free-tier lookup attempted for {len(security_results)} supported EVM contracts; {risk_count} returned explicit risk flags and {error_count} requests failed. Missing fields remain unknown.",
+                    "detail": (f"Discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
+                               f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
+                               f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
+                               "No result is a safety guarantee; missing fields remain unknown."),
+                    "checked_tokens": security_results[:5],
                     "risk_flags": [item for item in security_results if item.get("risks")][:5],
+                    "unsupported_tokens": unsupported_count,
                     "errors": error_count,
                 }
                 headlines = news_feed.headlines(limit=20)
