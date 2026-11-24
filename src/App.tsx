@@ -69,8 +69,8 @@ export default function App() {
 
       <CryptoMonitorPanel />
 
-      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">System staged — agents not yet fully connected</span></div>
-      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state">STAGED</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
+      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent components</h2></div><span className="muted">Actual readiness is reported in the runtime panel above</span></div>
+      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state">COMPONENT</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
     </section>
   </main>;
