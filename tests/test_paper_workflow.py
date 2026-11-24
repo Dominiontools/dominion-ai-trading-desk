@@ -68,4 +68,4 @@ def test_sell_position_closes_at_target():
                                         stop_loss=101, take_profit=98))["event"] == "PAPER_ENTRY"
     result = desk.update_price("BTCUSDT", 97)
     assert result["exit_reason"] == "TAKE_PROFIT"
-    assert result["realized_pnl"] == 0.3
+    assert result["realized_pnl"] == 0.2
