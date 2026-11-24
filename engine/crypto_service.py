@@ -87,6 +87,16 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
         "last_cycle_at": None,
         "last_error": None,
+        "agents": {
+            "SCANNER": {"status": "RUNNING", "detail": "Public crypto price-gap scanner runs with the phone monitor."},
+            "RISK": {"status": "PAPER_READY", "detail": "0.5% trade-risk and 2% daily-loss checks are implemented; not yet wired to broker orders."},
+            "SNIPER": {"status": "PAPER_READY", "detail": "Risk-gated paper order proposals only; no exchange or broker order is sent."},
+            "WHALE": {"status": "WAITING_FOR_FEED", "detail": "Large-trade analysis is implemented; a trade-flow feed is not connected."},
+            "RUG": {"status": "WAITING_FOR_EVIDENCE", "detail": "Token safety checklist is implemented; on-chain contract/liquidity evidence is not connected."},
+            "EXIT": {"status": "WAITING_FOR_POSITIONS", "detail": "Paper stop/target/trailing evaluation is implemented; no broker positions are connected."},
+            "HYPE": {"status": "WAITING_FOR_FEED", "detail": "Text sentiment analysis is implemented; social/news collection is not connected."},
+            "DESK MANAGER": {"status": "COORDINATOR_READY", "detail": "Specialist coordination component is implemented; full live workflow is not enabled."},
+        },
     }
     stop_event = threading.Event()
 
