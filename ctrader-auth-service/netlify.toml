@@ -1,0 +1,9 @@
+[build]
+  command = "echo 'Building isolated cTrader authorization callback'"
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+
+[functions."ctrader-callback"]
+  node_bundler = "esbuild"
