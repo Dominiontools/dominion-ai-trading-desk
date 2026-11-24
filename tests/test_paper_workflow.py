@@ -69,3 +69,23 @@ def test_sell_position_closes_at_target():
     result = desk.update_price("BTCUSDT", 97)
     assert result["exit_reason"] == "TAKE_PROFIT"
     assert result["realized_pnl"] == 0.2
+
+
+def test_open_position_and_realized_pnl_restore_after_engine_restart(tmp_path):
+    journal = tmp_path / "persistent-paper.jsonl"
+    first = PaperTradingDesk(starting_equity=20, journal=journal)
+    first.open_from_signal(signal())
+    restored_open = PaperTradingDesk(starting_equity=20, journal=journal)
+    assert restored_open.snapshot()["open_position"]["symbol"] == "BTCUSDT"
+    restored_open.update_price("BTCUSDT", 98)
+    restored_closed = PaperTradingDesk(starting_equity=20, journal=journal)
+    assert restored_closed.snapshot()["open_position"] is None
+    assert restored_closed.snapshot()["equity"] == 19.9
+    assert restored_closed.snapshot()["daily_loss_pct"] == 0.005
+
+
+def test_manual_paper_close_rejects_nonpositive_price():
+    desk = PaperTradingDesk()
+    desk.open_from_signal(signal())
+    with pytest.raises(ValueError):
+        desk.close_position(0)
