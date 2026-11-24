@@ -64,7 +64,7 @@ def test_records_paper_opportunity_without_submitting_orders(tmp_path):
 
 
 
-def test_incomplete_exchange_snapshot_fails_closed(tmp_path):
+def test_two_independent_venues_can_be_scanned_when_third_is_unavailable(tmp_path):
     now = datetime.now(timezone.utc)
     log = tmp_path / "decisions.jsonl"
     monitor = CryptoPaperMonitor(
@@ -72,9 +72,22 @@ def test_incomplete_exchange_snapshot_fails_closed(tmp_path):
         costs_by_exchange=FEES, clock=lambda: now,
     )
     result = monitor.poll_once("BTC/USDT")
+    assert result["status"] in {"NO_QUALIFYING_OPPORTUNITY", "PAPER_OPPORTUNITY"}
+    assert result["available_exchanges"] == ["Binance", "Bitget"]
+    assert result["orders_enabled"] is False
+
+
+def test_one_exchange_is_not_enough_for_comparison(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "decisions.jsonl"
+    monitor = CryptoPaperMonitor(
+        FakeFeeds(make_quotes(now)[:1]), decision_log=log,
+        costs_by_exchange=FEES, clock=lambda: now,
+    )
+    result = monitor.poll_once("BTC/USDT")
     assert result["status"] == "BLOCKED"
-    assert result["reason"] == "INCOMPLETE_OR_DUPLICATE_EXCHANGE_SNAPSHOT"
-    assert result["missing_exchanges"] == ["HTX"]
+    assert result["reason"] == "INSUFFICIENT_INDEPENDENT_EXCHANGES"
+    assert result["orders_enabled"] is False
 
 
 def test_records_feed_failure(tmp_path):
