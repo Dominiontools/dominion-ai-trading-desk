@@ -124,19 +124,28 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                         whale_errors += 1
                 whale_result = WhaleAgent(min_notional_usd=100_000.0).analyze(whale_trades)
                 state["agents"]["WHALE"] = {"status":"CONNECTED" if not whale_errors else "PARTIAL", "detail":f"GeckoTerminal checked {min(len(discovered), 5)} pools; {len(whale_result.findings)} trades met the USD 100,000 alert threshold.", "alerts":list(whale_result.findings[:5])}
-                if security_feed.token:
-                    security_results = []
-                    for token in discovered[:5]:
-                        if token["chain_id"].lower() not in GoPlusSecurityFeed.CHAIN_IDS:
-                            continue
-                        try:
-                            security_results.append(security_feed.assess(token["chain_id"], token["token_address"]))
-                        except Exception:
-                            security_results.append({"status":"FEED_ERROR"})
-                    risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
-                    state["agents"]["RUG"] = {"status":"CONNECTED" if security_results else "NO_SUPPORTED_TOKENS", "detail":f"GoPlus checked {len(security_results)} EVM contracts; {risk_count} returned explicit risk flags. Missing fields remain unknown.", "risk_flags":[item for item in security_results if item.get("risks")][:5]}
+                security_results = []
+                for token in discovered[:5]:
+                    if token["chain_id"].lower() not in GoPlusSecurityFeed.CHAIN_IDS:
+                        continue
+                    try:
+                        security_results.append(security_feed.assess(token["chain_id"], token["token_address"]))
+                    except Exception as exc:
+                        security_results.append({"status":"FEED_ERROR", "error":type(exc).__name__})
+                risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
+                error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
+                if not security_results:
+                    rug_status = "NO_SUPPORTED_TOKENS"
+                elif error_count:
+                    rug_status = "PARTIAL"
                 else:
-                    state["agents"]["RUG"] = {"status":"WAITING_FOR_API_TOKEN", "detail":"DEX Screener token/liquidity discovery is connected. GoPlus contract-security checks require a GoPlus API access token; none is configured."}
+                    rug_status = "CONNECTED"
+                state["agents"]["RUG"] = {
+                    "status": rug_status,
+                    "detail": f"GoPlus free-tier lookup attempted for {len(security_results)} supported EVM contracts; {risk_count} returned explicit risk flags and {error_count} requests failed. Missing fields remain unknown.",
+                    "risk_flags": [item for item in security_results if item.get("risks")][:5],
+                    "errors": error_count,
+                }
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
                 state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
