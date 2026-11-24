@@ -88,25 +88,26 @@ class PublicCryptoFeeds:
         return ExchangeQuote("HTX", symbol, float(tick["bid"][0]), float(tick["ask"][0]),
                              stamp, float(tick["bid"][1]), float(tick["ask"][1]))
 
-    def snapshot(self, symbol: str) -> list[ExchangeQuote]:
-        """Fetch exchanges concurrently to reduce inter-venue collection skew.
+    def snapshot_with_diagnostics(self, symbol: str) -> tuple[list[ExchangeQuote], dict[str, str]]:
+        """Fetch venues concurrently and retain successful quotes independently.
 
-        Any venue failure aborts the snapshot; partial sets are not presented as
-        a complete three-exchange comparison.
+        A single slow venue must not hide healthy venues. The caller decides
+        whether enough independent, fresh venues remain for a comparison.
         """
         methods = (self.binance, self.bitget, self.htx)
-        failures = []
-        quotes = []
+        failures: dict[str, str] = {}
+        quotes: list[ExchangeQuote] = []
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = [(method.__name__, pool.submit(method, symbol)) for method in methods]
             for venue, future in futures:
                 try:
                     quotes.append(future.result(timeout=self.timeout + 1.0))
                 except Exception as exc:
-                    # Keep the monitor fail-closed, but retain the exact venue
-                    # and bounded exception detail for diagnosis in the app.
                     detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
-                    failures.append(f"{venue}: {type(exc).__name__}: {detail}")
-        if failures:
-            raise RuntimeError("Market-data venue failures: " + " | ".join(failures)[:700])
+                    failures[venue.title()] = f"{type(exc).__name__}: {detail}"
+        return quotes, failures
+
+    def snapshot(self, symbol: str) -> list[ExchangeQuote]:
+        """Compatibility wrapper returning only successful venue quotes."""
+        quotes, _failures = self.snapshot_with_diagnostics(symbol)
         return quotes
