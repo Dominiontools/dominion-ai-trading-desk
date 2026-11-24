@@ -65,3 +65,9 @@ def parse_symbol_rules(payload: dict, symbol: str) -> BinanceSymbolRules:
     if rules.max_quantity < rules.min_quantity:
         raise ValueError("Binance quantity range is invalid.")
     return rules
+
+
+def fetch_symbol_rules(client, symbol: str) -> BinanceSymbolRules:
+    """Fetch and parse filters from the client's pinned public Testnet endpoint."""
+    response = client.exchange_info(symbol)
+    return parse_symbol_rules(response, symbol)
