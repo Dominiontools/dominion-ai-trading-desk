@@ -14,11 +14,11 @@ const agents = [
 ] as const;
 
 const watch = [
-  { symbol: "XAUUSD", name: "Gold / US Dollar", price: "2,684.32", change: "+0.42%", group: "Forex & Gold", tone: "up" },
-  { symbol: "EURUSD", name: "Euro / US Dollar", price: "1.15482", change: "+0.11%", group: "Forex & Gold", tone: "up" },
-  { symbol: "GBPUSD", name: "Pound / US Dollar", price: "1.31206", change: "-0.08%", group: "Forex & Gold", tone: "down" },
-  { symbol: "BTCUSDT", name: "Bitcoin / Tether", price: "87,420.50", change: "+1.26%", group: "Crypto", tone: "up" },
-  { symbol: "ETHUSDT", name: "Ethereum / Tether", price: "2,914.80", change: "-0.34%", group: "Crypto", tone: "down" }
+  { symbol: "XAUUSD", name: "Gold / US Dollar", price: "Not connected", change: "—", group: "Forex & Gold", tone: "up" },
+  { symbol: "EURUSD", name: "Euro / US Dollar", price: "Not connected", change: "—", group: "Forex & Gold", tone: "up" },
+  { symbol: "GBPUSD", name: "Pound / US Dollar", price: "Not connected", change: "—", group: "Forex & Gold", tone: "down" },
+  { symbol: "BTCUSDT", name: "Bitcoin / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "up" },
+  { symbol: "ETHUSDT", name: "Ethereum / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "down" }
 ];
 
 export default function App() {
@@ -77,6 +77,7 @@ function Metric({ icon, label, value, note, positive = false }: { icon: ReactNod
 function CryptoMonitorPanel() {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [decisions, setDecisions] = useState<Record<string, unknown>[]>([]);
+  const [latestQuotes, setLatestQuotes] = useState<Record<string, unknown>[]>([]);
   const [connection, setConnection] = useState<"checking" | "connected" | "offline">("checking");
   const [lastUpdated, setLastUpdated] = useState("");
 
@@ -85,20 +86,23 @@ function CryptoMonitorPanel() {
     const timeout = window.setTimeout(() => controller.abort(), 2500);
     try {
       const [statusResponse, decisionsResponse] = await Promise.all([
-        fetch("http://127.0.0.1:8766/api/crypto/status", { cache: "no-store", signal: controller.signal, credentials: "omit" }),
-        fetch("http://127.0.0.1:8766/api/crypto/decisions?limit=20", { cache: "no-store", signal: controller.signal, credentials: "omit" })
+        fetch("http://localhost:8766/api/crypto/status", { cache: "no-store", signal: controller.signal, credentials: "omit" }),
+        fetch("http://localhost:8766/api/crypto/decisions?limit=20", { cache: "no-store", signal: controller.signal, credentials: "omit" })
       ]);
       if (!statusResponse.ok || !decisionsResponse.ok) throw new Error("Local API unavailable");
       const statusData = await statusResponse.json() as Record<string, unknown>;
       const decisionData = await decisionsResponse.json() as { items?: unknown };
       setStatus(statusData);
-      setDecisions(Array.isArray(decisionData.items) ? decisionData.items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : []);
+      const items = Array.isArray(decisionData.items) ? decisionData.items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : [];
+      setDecisions(items);
+      const quoteRows = Array.isArray(items[0]?.quotes) ? items[0].quotes.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : [];
+      setLatestQuotes(quoteRows);
       setConnection("connected");
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
       setConnection("offline");
       setStatus(null);
-      setDecisions([]);
+      setDecisions([]);\n      setLatestQuotes([]);
     } finally {
       window.clearTimeout(timeout);
     }
@@ -120,6 +124,9 @@ function CryptoMonitorPanel() {
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
     </div>
     <div className="decision-list">
+      <div className="decision-list-head"><b>LIVE TOP-OF-BOOK QUOTES</b><span>{latestQuotes.length} venues</span></div>
+      {latestQuotes.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No live quote snapshot yet</b><span>Start the local paper service to fetch current Binance, Bitget and HTX prices.</span></div></div> :
+        latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
       <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
       {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
         decisions.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>The API is connected, but the monitor has not written any decisions.</span></div></div> :
