@@ -17,6 +17,7 @@ from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
+from engine.crypto_strategy import BinancePublicCandleFeed, SmaPaperStrategy
 
 _runtime_lock = threading.RLock()
 _runtime_stop: threading.Event | None = None
@@ -84,6 +85,8 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         starting_equity=20.0,
         journal=Path(data_dir) / "paper_trades.jsonl",
     )
+    candle_feed = BinancePublicCandleFeed(timeout=8.0)
+    sma_strategy = SmaPaperStrategy()
     state = {
         "engine": "starting",
         "mode": "PAPER_ONLY",
@@ -94,6 +97,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
         "last_cycle_at": None,
         "last_error": None,
+        "strategy_engine": {"status": "STARTING", "strategy": "SMA_CROSS_10_30", "detail": "Waiting for public Binance candle and quote data."},
         "agents": {
             "SCANNER": {"status": "RUNNING", "detail": "Public crypto price-gap scanner runs with the phone monitor."},
             "RISK": {"status": "PAPER_READY", "detail": "Paper execution gate enforces 0.5% maximum risk per trade, 2% daily loss stop, one open position, quote age, spread and slippage limits."},
@@ -202,10 +206,41 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
             stop_event.wait(interval)
         state["engine"] = "stopped"
 
+    def strategy_loop() -> None:
+        while not stop_event.is_set():
+            for symbol in symbols:
+                if stop_event.is_set():
+                    break
+                try:
+                    candles = candle_feed.candles(symbol, timeframe="1m", limit=80)
+                    quote = feeds.binance(symbol)
+                    result = sma_strategy.run_once(candles, quote, paper_desk)
+                    event = result.get("event", result.get("status", "UNKNOWN"))
+                    state["strategy_engine"] = {"status": str(event), "strategy": "SMA_CROSS_10_30",
+                        "symbol": symbol, "detail": str(result.get("reason") or result.get("signal_reason") or event),
+                        "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+                    if event == "PAPER_ENTRY":
+                        side = result.get("position", {}).get("side", "")
+                        state["agents"]["RISK"] = {"status": "APPROVED_PAPER", "detail": "Signal passed the 0.5% risk cap, daily stop, spread, slippage and quote-age checks."}
+                        state["agents"]["SNIPER"] = {"status": "PAPER_ENTRY", "detail": f"Opened a paper-only {side} position in {symbol}; no broker order was sent."}
+                        state["agents"]["EXIT"] = {"status": "MANAGING_PAPER_POSITION", "detail": "Monitoring the paper position for stop-loss, take-profit and trailing-stop conditions."}
+                    elif event == "PAPER_EXIT":
+                        state["agents"]["EXIT"] = {"status": "PAPER_POSITION_CLOSED", "detail": f"Paper position closed: {result.get('exit_reason')}; realized P/L {result.get('realized_pnl')}."}
+                    elif event == "ENTRY_BLOCKED":
+                        reasons = result.get("reasons", [str(result.get("reason", "risk gate"))])
+                        state["agents"]["RISK"] = {"status": "BLOCKED", "detail": "Paper entry rejected: " + ", ".join(reasons)}
+                        state["agents"]["SNIPER"] = {"status": "ENTRY_BLOCKED", "detail": "No paper position was opened because a validation gate rejected the candidate."}
+                    elif event == "NO_SIGNAL":
+                        state["agents"]["SCANNER"] = {"status": "MONITORING", "detail": f"{symbol}: SMA crossover not detected on the latest candle sample."}
+                        if paper_desk.position is None:
+                            state["agents"]["EXIT"] = {"status": "PAPER_BOOK_EMPTY", "detail": "No open paper position; waiting for a validated strategy entry."}
+                except Exception as exc:
+                    state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "SMA_CROSS_10_30", "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+            stop_event.wait(60.0)
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
                            host="127.0.0.1", port=api_port)
-    return stop_event, server, monitor_loop, agent_feed_loop, state, symbols, interval
+    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, interval
 
 
 def start_embedded(data_dir: str, port: int = 8766) -> dict:
@@ -215,15 +250,17 @@ def start_embedded(data_dir: str, port: int = 8766) -> dict:
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, agent_feed_loop, state, symbols, interval = _runtime_config(data_dir, port)
+        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, interval = _runtime_config(data_dir, port)
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
         agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
+        strategy_worker = threading.Thread(target=strategy_loop, name="dominion-paper-strategy", daemon=True)
         api_thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.5}, daemon=True)
         _runtime_stop, _runtime_server = stop_event, server
-        _runtime_threads = [worker, agent_worker, api_thread]
+        _runtime_threads = [worker, agent_worker, strategy_worker, api_thread]
         _runtime_state = state
         worker.start()
         agent_worker.start()
+        strategy_worker.start()
         api_thread.start()
         return {"started": True, "already_running": False,
                 "port": server.server_address[1], "symbols": list(symbols),
