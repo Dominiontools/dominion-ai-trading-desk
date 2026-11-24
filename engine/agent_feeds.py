@@ -168,7 +168,7 @@ class GoPlusSecurityFeed:
         query = urlencode({"contract_addresses": address})
         payload = self.fetch_json(
             f"{self.BASE}/{chain_id}?{query}", self.timeout,
-            headers={"Authorization": self.token},
+            headers={"Authorization": self.token if self.token.lower().startswith("bearer ") else "Bearer " + self.token},
         )
         if not isinstance(payload, dict) or str(payload.get("code")) != "1":
             raise RuntimeError("GoPlus security request failed")
