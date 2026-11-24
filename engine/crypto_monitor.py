@@ -68,6 +68,18 @@ class CryptoPaperMonitor:
             return self._write(record)
 
         finished = self.clock()
+        exchanges_seen = {q.exchange for q in quotes}
+        missing_exchanges = sorted(required.difference(exchanges_seen))
+        if missing_exchanges or len(exchanges_seen) != len(quotes):
+            record.update(
+                status="BLOCKED",
+                reason="INCOMPLETE_OR_DUPLICATE_EXCHANGE_SNAPSHOT",
+                missing_exchanges=missing_exchanges,
+                exchanges_seen=sorted(exchanges_seen),
+                quote_count=len(quotes),
+            )
+            return self._write(record)
+
         duration_ms = max(0.0, (finished - started).total_seconds() * 1000)
         record["collection_duration_ms"] = round(duration_ms, 3)
         record["quote_count"] = len(quotes)
