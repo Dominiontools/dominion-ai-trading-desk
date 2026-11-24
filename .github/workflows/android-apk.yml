@@ -44,6 +44,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Configure localhost-only API access
+        run: python3 scripts/configure-android-local-api.py
+
       - name: Build debug APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug
