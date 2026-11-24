@@ -20,6 +20,14 @@ class FakeMonitor:
         return {"symbol": symbol, "status": "BLOCKED", "reason": "FEE_CONFIG_MISSING"}
 
 
+class FakeCandleFeed:
+    def __init__(self, timeout=8.0):
+        self.timeout = timeout
+
+    def candles(self, symbol, timeframe="1m", limit=80):
+        raise RuntimeError("offline test fixture")
+
+
 def test_fee_config_is_empty_without_user_verified_values(monkeypatch):
     for name in ("DOMINION_FEE_BINANCE_TAKER_BPS", "DOMINION_FEE_BITGET_TAKER_BPS",
                  "DOMINION_FEE_HTX_TAKER_BPS"):
@@ -50,6 +58,7 @@ def test_positive_float_rejects_zero(monkeypatch):
 def test_embedded_service_starts_read_only_api_and_stops(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
     monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
     monkeypatch.delenv("DOMINION_FEE_BINANCE_TAKER_BPS", raising=False)
     monkeypatch.delenv("DOMINION_FEE_BITGET_TAKER_BPS", raising=False)
     monkeypatch.delenv("DOMINION_FEE_HTX_TAKER_BPS", raising=False)
