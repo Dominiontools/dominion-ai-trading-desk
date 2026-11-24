@@ -57,10 +57,9 @@ def test_snapshot_reports_each_failed_venue_without_returning_partial_quotes():
             raise TimeoutError("connection timed out")
         raise OSError("TLS handshake failed")
 
-    with pytest.raises(RuntimeError) as caught:
-        PublicCryptoFeeds(fetch_json=partly_broken).snapshot("BTCUSDT")
-    message = str(caught.value)
-    assert "bitget: TimeoutError" in message
-    assert "connection timed out" in message
-    assert "htx: OSError" in message
-    assert "TLS handshake failed" in message
+    quotes, failures = PublicCryptoFeeds(fetch_json=partly_broken).snapshot_with_diagnostics("BTCUSDT")
+    assert [quote.exchange for quote in quotes] == ["Binance"]
+    assert "TimeoutError" in failures["Bitget"]
+    assert "connection timed out" in failures["Bitget"]
+    assert "OSError" in failures["Htx"]
+    assert "TLS handshake failed" in failures["Htx"]
