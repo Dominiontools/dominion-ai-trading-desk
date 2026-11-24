@@ -67,6 +67,12 @@ def configure_gradle() -> None:
     app_text, min_count = re.subn(r"(minSdkVersion\s+)(\d+)", r"\g<1>24", app_text, count=1)
     if min_count == 0:
         app_text, min_count = re.subn(r"(minSdk\s*=\s*)(\d+)", r"\g<1>24", app_text, count=1)
+    if min_count == 0 and "rootProject.ext.minSdkVersion" in app_text:
+        variables = ANDROID / "variables.gradle"
+        variables_text = require(variables)
+        variables_text, min_count = re.subn(r"(minSdkVersion\s*=\s*)(\d+)", r"\g<1>24", variables_text, count=1)
+        if min_count:
+            write(variables, variables_text)
     if min_count == 0:
         raise SystemExit("Could not find minSdkVersion; Chaquopy requires Android API 24 or newer.")
 
