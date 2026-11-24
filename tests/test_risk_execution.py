@@ -10,7 +10,7 @@ def gate():
 
 @pytest.fixture
 def context():
-    return SpotRiskContext(D("20"), D("0"), 0)
+    return SpotRiskContext(D("20"), D("20"), D("0"), 0)
 
 @pytest.fixture
 def rules():
@@ -46,12 +46,12 @@ def test_blocks_unverified_fees(gate, context, rules):
         prepare(gate, context, rules, VerifiedFees(D("10"), False))
 
 def test_blocks_daily_loss_limit(gate, rules, fees):
-    ctx = SpotRiskContext(D("20"), D("0.40"), 0)
+    ctx = SpotRiskContext(D("20"), D("20"), D("0.40"), 0)
     with pytest.raises(PermissionError, match="Daily loss"):
         prepare(gate, ctx, rules, fees)
 
 def test_blocks_second_open_position(gate, rules, fees):
-    ctx = SpotRiskContext(D("20"), D("0"), 1)
+    ctx = SpotRiskContext(D("20"), D("20"), D("0"), 1)
     with pytest.raises(PermissionError, match="open-position"):
         prepare(gate, ctx, rules, fees)
 
@@ -77,6 +77,11 @@ def test_execution_never_sends_unprotected_entry(gate):
         gate.execute(FakeClient(), object())
 
 def test_blocks_emergency_stop(gate, rules, fees):
-    ctx = SpotRiskContext(D("20"), D("0"), 0, emergency_stop=True)
+    ctx = SpotRiskContext(D("20"), D("20"), D("0"), 0, emergency_stop=True)
     with pytest.raises(PermissionError, match="Emergency"):
         prepare(gate, ctx, rules, fees)
+
+def test_blocks_insufficient_quote_balance(gate, context, rules, fees):
+    poor_balance = SpotRiskContext(D("20"), D("1"), D("0"), 0)
+    with pytest.raises(PermissionError, match="Available quote balance"):
+        prepare(gate, poor_balance, rules, fees)
