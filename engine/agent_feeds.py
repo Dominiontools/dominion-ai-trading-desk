@@ -153,16 +153,32 @@ class GoPlusSecurityFeed:
     CHAIN_IDS = {
         "ethereum": "1", "bsc": "56", "polygon": "137",
         "arbitrum": "42161", "optimism": "10", "base": "8453",
-        "avalanche": "43114", "fantom": "250", "cronos": "25",
+        "avalanche": "43114", "avax": "43114", "fantom": "250", "cronos": "25",
     }
 
     def __init__(self, fetch_json=http_json, token: str | None = None, timeout: float = 8.0):
         self.fetch_json, self.token, self.timeout = fetch_json, token, timeout
 
+    @classmethod
+    def normalize_chain(cls, chain: str) -> str | None:
+        """Map DEX Screener network slugs to GoPlus EVM chain identifiers."""
+        aliases = {"avax": "avalanche", "polygon_pos": "polygon"}
+        normalized = aliases.get(str(chain).strip().lower(), str(chain).strip().lower())
+        return normalized if normalized in cls.CHAIN_IDS else None
+
+    @classmethod
+    def supports_contract(cls, chain: str, address: str) -> bool:
+        return bool(cls.normalize_chain(chain) and
+                    re.fullmatch(r"0x[a-fA-F0-9]{40}", str(address).strip()))
+
     def assess(self, chain: str, address: str) -> dict:
-        chain_id = self.CHAIN_IDS.get(chain.lower())
-        if not chain_id:
-            return {"status": "UNSUPPORTED_CHAIN", "source": "GOPLUS"}
+        normalized_chain = self.normalize_chain(chain)
+        if not normalized_chain:
+            return {"status": "UNSUPPORTED_CHAIN", "source": "GOPLUS", "chain": chain}
+        address = str(address).strip()
+        if not re.fullmatch(r"0x[a-fA-F0-9]{40}", address):
+            return {"status": "INVALID_CONTRACT_ADDRESS", "source": "GOPLUS", "chain": normalized_chain}
+        chain_id = self.CHAIN_IDS[normalized_chain]
         query = urlencode({"contract_addresses": address})
         headers = {}
         # GoPlus documents a free anonymous tier (30 calls/minute); an access
