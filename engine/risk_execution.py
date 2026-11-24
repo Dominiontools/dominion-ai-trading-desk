@@ -42,6 +42,7 @@ class VerifiedFees:
 @dataclass(frozen=True)
 class SpotRiskContext:
     equity_quote: Decimal
+    available_quote: Decimal
     daily_loss_quote: Decimal
     open_positions: int
     emergency_stop: bool = False
@@ -87,14 +88,15 @@ class BinanceTestnetRiskGate:
                                _dec(stop_loss, "stop loss"),
                                _dec(take_profit, "take profit"))
         equity = _dec(context.equity_quote, "equity")
+        available_quote = _dec(context.available_quote, "available quote balance")
         daily_loss = _dec(context.daily_loss_quote, "daily loss")
         age, spread, slippage = (_dec(quote_age_seconds, "quote age"),
                                  _dec(spread_bps, "spread"),
                                  _dec(estimated_slippage_bps, "estimated slippage"))
         if context.emergency_stop:
             raise PermissionError("Emergency stop is active.")
-        if equity <= 0 or daily_loss < 0:
-            raise ValueError("Equity must be positive and daily loss non-negative.")
+        if equity <= 0 or available_quote < 0 or daily_loss < 0:
+            raise ValueError("Equity must be positive; available balance and daily loss must be non-negative.")
         if context.open_positions < 0:
             raise ValueError("Open position count cannot be negative.")
         if context.open_positions >= self.max_open_positions:
@@ -138,6 +140,8 @@ class BinanceTestnetRiskGate:
         total_risk = planned_loss + estimated_fees
         if total_risk > risk_budget:
             raise PermissionError("Rounded order exceeds the per-trade risk budget.")
+        if notional + (notional * taker_bps / D("10000")) > available_quote:
+            raise PermissionError("Available quote balance cannot fund the order and estimated entry fee.")
         return BinanceOrderPlan(
             symbol=pair, side="BUY", quantity=format(quantity, "f"),
             limit_price=format(entry, "f"), stop_loss=format(stop, "f"),
