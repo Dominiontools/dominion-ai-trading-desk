@@ -173,6 +173,9 @@ function CryptoMonitorPanel() {
   const paperPosition = paperTrading?.open_position && typeof paperTrading.open_position === "object"
     ? paperTrading.open_position as Record<string, unknown>
     : null;
+  const strategyEngine = status?.strategy_engine && typeof status.strategy_engine === "object"
+    ? status.strategy_engine as Record<string, unknown>
+    : null;
   const agentStates = status?.agents && typeof status.agents === "object"
     ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
     : {};
@@ -201,8 +204,9 @@ function CryptoMonitorPanel() {
         <div><small>REALIZED P/L</small><b>${String(paperTrading?.realized_pnl ?? "—")}</b></div>
         <div><small>DAILY LOSS</small><b>{paperTrading ? (Number(paperTrading.daily_loss_pct ?? 0) * 100).toFixed(2) + "%" : "—"}</b></div>
         <div><small>OPEN POSITION</small><b>{paperPosition ? String(paperPosition.symbol) + " " + String(paperPosition.side) : "None"}</b></div>
+        <div><small>STRATEGY</small><b>{String(strategyEngine?.status || "Waiting")}</b></div>
       </div>
-      <div className="panel-foot">Paper ledger only. Waiting for a validated strategy signal; cross-exchange price gaps are not treated as directional entry signals.</div>
+      <div className="panel-foot">Directional strategy: 10/30 SMA crossover on public Binance 1-minute candles. Paper ledger only; cross-exchange price gaps are not treated as directional entry signals.</div>
     </div>
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>AGENT RUNTIME STATUS</b><span>{Object.keys(agentStates).length}/8 reported</span></div>
