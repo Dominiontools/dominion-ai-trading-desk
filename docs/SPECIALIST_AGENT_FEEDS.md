@@ -11,7 +11,7 @@ The Android foreground engine runs two independent loops:
 | SCANNER | DEX Screener | Latest token profiles, pool price, liquidity, 24h volume and buys/sells | Public endpoints; latest profiles and pair enrichment |
 | WHALE | GeckoTerminal | Recent pool swaps, USD trade value, side, timestamp and source wallet | Public pool-trades endpoint; alerts only above USD 100,000 notional |
 | HYPE | Cointelegraph RSS | Public news headlines and descriptions | Basic keyword sentiment only; not social-media monitoring or market consensus |
-| RUG | GoPlus Security | EVM token contract-security flags | Requires a GoPlus API access token; no token is bundled or hardcoded |
+| RUG | GoPlus Security | EVM token contract-security flags | Uses the documented free anonymous tier; optional Bearer token can raise limits |
 
 Official references:
 - DEX Screener API: https://docs.dexscreener.com/api/reference
@@ -21,7 +21,7 @@ Official references:
 
 ## Configuration
 
-To enable GoPlus, provide a GoPlus access token to the Android engine as the DOMINION_GOPLUS_TOKEN environment setting. The header is sent as a Bearer token. Never paste API tokens into source code, GitHub commits, or this chat. The current Android app does not yet include a secure token-entry screen, so GoPlus will correctly report WAITING_FOR_API_TOKEN until secure configuration is added.
+GoPlus documents free API access with a limit of 30 calls per minute. The Token Security API reference includes an optional Authorization Bearer header; the Support page says an access token is needed when a higher limit is required. The phone engine therefore makes anonymous free-tier requests by default and can optionally attach DOMINION_GOPLUS_TOKEN if a higher-limit token is configured later. No credentials are needed for initial testing.
 
 ## Safety and limitations
 
