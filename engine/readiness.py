@@ -54,8 +54,8 @@ def build_readiness(
             "title": "Connect exchange testnet accounts and verify test orders",
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
-                      else "NOT_CONNECTED",
-            "detail": "Separate exchange testnet credentials and exchange-specific order adapters are required. Public market feeds do not authorize trading.",
+                      else "BINANCE_ADAPTER_READY_AWAITING_CONNECTION",
+            "detail": "A Binance Spot Testnet limit-order adapter is built and gated, but is not wired into the phone service or dashboard. Testnet credentials, symbol filters, fee validation and test-order verification remain outstanding. Bitget and HTX order adapters are not built.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
         },
         {
