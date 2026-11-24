@@ -94,7 +94,11 @@ def configure_python_sources() -> None:
     source = APP / "src" / "main" / "python" / "engine"
     source.mkdir(parents=True, exist_ok=True)
     (source / "__init__.py").write_text('"""Dominion embedded paper engine."""\n', encoding="utf-8")
-    for name in ("crypto_arbitrage.py", "crypto_feeds.py", "crypto_monitor.py", "crypto_api.py", "crypto_service.py", "specialist_agents.py", "agent_feeds.py", "positions.py", "risk.py", "quotes.py"):
+    for name in ("crypto_arbitrage.py", "crypto_feeds.py", "crypto_monitor.py",
+                 "crypto_api.py", "crypto_service.py", "crypto_strategy.py",
+                 "paper_workflow.py", "strategies.py", "market_data.py",
+                 "specialist_agents.py", "agent_feeds.py", "positions.py",
+                 "risk.py", "quotes.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
 
