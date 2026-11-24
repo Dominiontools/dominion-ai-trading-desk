@@ -1,47 +1,54 @@
-# Running the local crypto paper service on Android
+# On-device crypto paper monitor
 
-This is the first real market-data service for Dominion AI Trading Desk. It
-fetches public top-of-book snapshots from Binance, Bitget and HTX and writes
-paper-only scanner decisions. It cannot access exchange accounts, wallets,
-deposits, withdrawals or order endpoints.
+The Android build bundles a Python runtime and the paper market-data engine.
+The user starts and stops it from the Crypto / Cross-Exchange panel; Termux is
+not required for this embedded build.
 
-## Temporary phone setup (Termux)
+## Start the engine
 
-The Android APK is currently the dashboard. The Python service must run
-separately on the same phone during development.
+1. Install the current debug APK on the Android phone.
+2. Open Dominion AI Trading Desk.
+3. In **Crypto / Cross-Exchange**, tap **Start phone engine**.
+4. Allow notifications if Android asks. A persistent notification indicates
+   that the foreground service is active.
+5. Keep mobile data or Wi-Fi connected. The panel connects to the local
+   read-only API at `http://localhost:8766` and displays the latest public
+   exchange quote snapshots and scanner decisions.
+6. Tap **Stop** when you want the monitor to stop.
 
-1. Install Python in Termux and open the repository folder.
-2. The crypto paper service uses Python's standard library, so no third-party package is required for this module.
-3. Start the service with `python -m engine.crypto_service`.
-4. Keep Termux running while testing the app. Android battery restrictions,
-   force-stop, reboot, or loss of internet can stop the process.
-5. Open Dominion AI Trading Desk. The Crypto / Cross-Exchange panel should
-   connect to `http://localhost:8766` and show the most recent quote snapshot.
+The default pairs are BTCUSDT and ETHUSDT. The monitor polls public REST
+endpoints from Binance, Bitget and HTX approximately every five seconds. This
+is not WebSocket streaming or high-frequency trading.
 
-Default pairs are BTCUSDT and ETHUSDT, refreshed every five seconds. Configure
-pairs with `DOMINION_CRYPTO_SYMBOLS=BTCUSDT,ETHUSDT` and interval with
-`DOMINION_CRYPTO_INTERVAL_SECONDS=5`.
+## Samsung background settings
+
+For longer paper-monitor sessions, set the app's battery usage to **Unrestricted**
+in Android Settings > Apps > Dominion AI Trading Desk > Battery, if that
+setting is available. Keep notifications enabled. Android can still stop
+background work under severe resource pressure; force-stopping the app, turning
+off the phone, or losing internet will stop useful monitoring. After a reboot
+or force-stop, open the app and start the engine again.
 
 ## Fee configuration
 
 The scanner intentionally does not guess exchange fees. Until you verify your
-own account's current taker fees, the service still records live quotes but
-marks every scan `BLOCKED / FEE_CONFIG_MISSING`. Only after verification may
-you set these environment variables in the local shell:
+own account's current taker fees, the engine still records public quotes but
+marks scans `BLOCKED / FEE_CONFIG_MISSING`. The current in-app build does not
+yet expose fee editing; do not add unverified fee values merely to make the
+scanner report opportunities.
 
-- `DOMINION_FEE_BINANCE_TAKER_BPS`
-- `DOMINION_FEE_BITGET_TAKER_BPS`
-- `DOMINION_FEE_HTX_TAKER_BPS`
+The scanner's provisional 5 bps slippage assumption is not a guaranteed fill
+cost and is not sufficient for live execution.
 
-Values are basis points (1 bp = 0.01%). Do not copy a fee rate from an
-advertisement or another account tier. The present scanner's 5 bp slippage
-assumption is provisional and is not a guaranteed fill-cost model.
+## Safety and current limitations
 
-## Important limitations
-
-- REST snapshots, not WebSocket streaming or high-frequency execution.
-- Top-of-book depth only; it does not yet model full order-book fills.
-- Paper opportunities only. There are no exchange order adapters.
-- No live or demo orders are sent by this service.
-- The local API binds only to 127.0.0.1 and accepts read-only GET requests.
-- Do not expose this API to the public internet.
+- Public market data only. No exchange account keys, wallet access, deposits,
+  withdrawals, or order endpoints are included.
+- No live or demo orders are sent. Order routing is disabled in code.
+- REST top-of-book snapshots only; full depth and executable fill simulation
+  are not implemented.
+- The scanner records paper decisions only and blocks when fee configuration
+  is missing, the snapshot is incomplete, or the data is invalid/stale.
+- The local API binds only to `127.0.0.1`, exposes read-only GET routes, and
+  must never be exposed to the public internet.
+- cTrader/Pepperstone is not connected to this Android service yet.
