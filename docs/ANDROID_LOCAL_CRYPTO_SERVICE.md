@@ -73,3 +73,17 @@ a claim of profitability or a full implementation of every strategy in the
 user's strategy guide. It uses public REST candles and a single Binance quote,
 not a WebSocket stream. The separate arbitrage monitor remains analysis-only;
 an arbitrage price gap is never converted into a one-sided directional trade.
+
+## Remaining integration checklist
+
+The phone API now exposes a structured readiness checklist. It distinguishes:
+- Phone installation and real-device validation (user must confirm on the handset).
+- Spotware approval of the existing cTrader application (external approval).
+- Pepperstone demo authorization (requires approval and the user's account authorization).
+- Actual cTrader demo order, stop-loss, take-profit and close-position verification.
+- Exchange testnet authorization and test-order verification.
+- Verified exchange fee configuration.
+- Connecting all specialist agents to validated execution and exit workflows.
+- Live-money trading, which remains locked pending separate explicit approval.
+
+The checklist does not infer approvals, credentials, test results or successful orders. It reports these as outstanding until the corresponding integration is explicitly verified. The Android APK still has no exchange-account order capability and no cTrader broker-order route.
