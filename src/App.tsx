@@ -146,7 +146,7 @@ function CryptoMonitorPanel() {
     } finally {
       window.clearTimeout(timeout);
     }
-  }, []);
+  }, [isNativeApp]);
 
   useEffect(() => {
     void refresh();
