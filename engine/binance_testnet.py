@@ -163,12 +163,32 @@ class BinanceSpotTestnetClient:
             raise ValueError("A valid symbol and client order ID are required.")
         return self._signed("GET", "/api/v3/order", {"symbol": pair, "origClientOrderId": client_order_id})
 
+    def reconcile_protected_buy_otoco(self, *, symbol: str, list_client_order_id: str) -> dict:
+        """Query all three OTOCO legs and classify protection from exchange state."""
+        if not list_client_order_id or len(list_client_order_id) > 20:
+            raise ValueError("A valid order-list client ID is required.")
+        working = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "E")
+        take_profit = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "T")
+        stop_loss = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "S")
+        from .binance_protection import classify_otoco
+        state = classify_otoco(working.get("status", "UNKNOWN"),
+                               take_profit.get("status"), stop_loss.get("status"))
+        return {
+            **state,
+            "working_status": working.get("status", "UNKNOWN"),
+            "take_profit_status": take_profit.get("status", "UNKNOWN"),
+            "stop_loss_status": stop_loss.get("status", "UNKNOWN"),
+            "list_client_order_id": list_client_order_id,
+        }
     def cancel_order_list(self, *, symbol: str, list_client_order_id: str) -> dict:
         if not self.allow_orders:
             raise PermissionError("Binance Testnet order actions are disabled.")
         pair = symbol.strip().upper()
         if not pair.isalnum() or not list_client_order_id or len(list_client_order_id) > 20:
             raise ValueError("A valid symbol and order-list client ID are required.")
+        working = self.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "E")
+        if working.get("status") == "FILLED":
+            raise PermissionError("Refusing to cancel an OTOCO protecting a filled position.")
         return self._signed("DELETE", "/api/v3/orderList", {"symbol": pair, "listClientOrderId": list_client_order_id})
     def query_order(self, *, symbol: str, order_id: int) -> dict:
         pair = symbol.strip().upper()
