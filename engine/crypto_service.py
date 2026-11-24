@@ -226,14 +226,17 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                         state["agents"]["EXIT"] = {"status": "MANAGING_PAPER_POSITION", "detail": "Monitoring the paper position for stop-loss, take-profit and trailing-stop conditions."}
                     elif event == "PAPER_EXIT":
                         state["agents"]["EXIT"] = {"status": "PAPER_POSITION_CLOSED", "detail": f"Paper position closed: {result.get('exit_reason')}; realized P/L {result.get('realized_pnl')}."}
+                        state["agents"]["SNIPER"] = {"status": "PAPER_CLOSED", "detail": "Paper position has been closed; no real order was sent."}
+                        state["agents"]["RISK"] = {"status": "PAPER_READY", "detail": "Risk gate is ready for the next validated signal; daily loss and position limits remain active."}
                     elif event == "ENTRY_BLOCKED":
                         reasons = result.get("reasons", [str(result.get("reason", "risk gate"))])
                         state["agents"]["RISK"] = {"status": "BLOCKED", "detail": "Paper entry rejected: " + ", ".join(reasons)}
                         state["agents"]["SNIPER"] = {"status": "ENTRY_BLOCKED", "detail": "No paper position was opened because a validation gate rejected the candidate."}
                     elif event == "NO_SIGNAL":
-                        state["agents"]["SCANNER"] = {"status": "MONITORING", "detail": f"{symbol}: SMA crossover not detected on the latest candle sample."}
                         if paper_desk.position is None:
                             state["agents"]["EXIT"] = {"status": "PAPER_BOOK_EMPTY", "detail": "No open paper position; waiting for a validated strategy entry."}
+                            state["agents"]["RISK"] = {"status": "PAPER_READY", "detail": "0.5% trade-risk and 2% daily-loss checks are active; waiting for a strategy candidate."}
+                            state["agents"]["SNIPER"] = {"status": "WAITING_FOR_SIGNAL", "detail": "No entry signal passed to the paper execution desk in this cycle."}
                 except Exception as exc:
                     state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "SMA_CROSS_10_30", "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
             stop_event.wait(60.0)
