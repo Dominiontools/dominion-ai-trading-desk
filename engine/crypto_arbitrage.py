@@ -31,21 +31,6 @@ class ExchangeQuote:
 
 
 @dataclass(frozen=True)
-class ArbitrageCosts:
-    buy_fee_bps: float
-    sell_fee_bps: float
-    buy_slippage_bps: float = 0.0
-    sell_slippage_bps: float = 0.0
-    transfer_cost_bps: float = 0.0
-
-    def __post_init__(self):
-        values = (self.buy_fee_bps, self.sell_fee_bps, self.buy_slippage_bps,
-                  self.sell_slippage_bps, self.transfer_cost_bps)
-        if any(value < 0 for value in values):
-            raise ValueError("Costs cannot be negative.")
-
-
-@dataclass(frozen=True)
 class ArbitrageOpportunity:
     symbol: str
     buy_exchange: str
@@ -63,7 +48,10 @@ def quote_age_seconds(quote: ExchangeQuote, *, now: datetime | None = None) -> f
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None:
         raise ValueError("Current time must be timezone-aware.")
-    return max(0.0, (current - quote.timestamp).total_seconds())
+    age = (current - quote.timestamp).total_seconds()
+    if age < 0:
+        raise ValueError("Quote timestamp cannot be in the future.")
+    return age
 
 
 def scan_arbitrage(
@@ -83,7 +71,13 @@ def scan_arbitrage(
     if max_quote_age_seconds <= 0 or min_net_edge_bps < 0 or max_notional <= 0:
         raise ValueError("Scanner limits are invalid.")
     current = now or datetime.now(timezone.utc)
-    fresh = [q for q in quotes if quote_age_seconds(q, now=current) <= max_quote_age_seconds]
+    fresh = []
+    for quote in quotes:
+        try:
+            if quote_age_seconds(quote, now=current) <= max_quote_age_seconds:
+                fresh.append(quote)
+        except ValueError:
+            continue
     opportunities: list[ArbitrageOpportunity] = []
     for buy, sell in permutations(fresh, 2):
         if buy.symbol != sell.symbol or buy.exchange == sell.exchange:
@@ -94,8 +88,14 @@ def scan_arbitrage(
             continue
         if buy.exchange not in costs_by_exchange or sell.exchange not in costs_by_exchange:
             continue
-        buy_fee = costs_by_exchange[buy.exchange][1]
-        sell_fee = costs_by_exchange[sell.exchange][1]
+        buy_costs = costs_by_exchange[buy.exchange]
+        sell_costs = costs_by_exchange[sell.exchange]
+        if len(buy_costs) < 2 or len(sell_costs) < 2:
+            continue
+        buy_fee = buy_costs[1]
+        sell_fee = sell_costs[1]
+        if buy_fee < 0 or sell_fee < 0:
+            continue
         gross = (sell.bid - buy.ask) / buy.ask * 10_000
         # Conservative placeholder until order-book depth/slippage models are connected.
         estimated_slippage = 5.0
