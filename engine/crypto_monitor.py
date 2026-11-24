@@ -70,6 +70,8 @@ class CryptoPaperMonitor:
         duplicates = len(exchanges_seen) != len(quotes)
         record["venue_errors"] = venue_errors
         record["available_exchanges"] = sorted(exchanges_seen)
+        if venue_errors:
+            record["error"] = " | ".join(f"{venue}: {detail}" for venue, detail in venue_errors.items())[:700]
         if duplicates or len(exchanges_seen) < 2:
             record.update(
                 status="BLOCKED",
