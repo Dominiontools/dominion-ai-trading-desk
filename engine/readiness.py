@@ -55,7 +55,7 @@ def build_readiness(
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
                       else "BINANCE_RISK_GATE_READY_PROTECTION_PENDING",
-            "detail": "A Binance Spot Testnet limit-order adapter and default-deny 0.5%/2% risk planner are built. The planner requires verified filters, account-tier fees, fresh quotes and one-position checks. Entry submission remains blocked until protective stop-loss/take-profit order handling, credential storage, phone-service wiring and an authorized testnet lifecycle test are complete. Bitget and HTX order adapters are not built.",
+            "detail": "A Binance Spot Testnet adapter, default-deny 0.5%/2% risk planner and protected OTOCO request path are built. The router submits only a FOK BUY entry with server-held take-profit and stop-loss legs, behind both explicit testnet gates. A separate lifecycle classifier refuses to mark protection active until the entry is FILLED and both exit orders are confirmed NEW. The classifier is not yet wired into the phone service; verified filters/fees, secure credential storage, automatic reconciliation, emergency handling and an authorized end-to-end testnet lifecycle test remain outstanding. Bitget and HTX order adapters are not built.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
         },
         {
