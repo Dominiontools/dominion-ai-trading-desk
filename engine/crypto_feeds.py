@@ -95,6 +95,18 @@ class PublicCryptoFeeds:
         a complete three-exchange comparison.
         """
         methods = (self.binance, self.bitget, self.htx)
+        failures = []
+        quotes = []
         with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = [pool.submit(method, symbol) for method in methods]
-            return [future.result(timeout=self.timeout + 1.0) for future in futures]
+            futures = [(method.__name__, pool.submit(method, symbol)) for method in methods]
+            for venue, future in futures:
+                try:
+                    quotes.append(future.result(timeout=self.timeout + 1.0))
+                except Exception as exc:
+                    # Keep the monitor fail-closed, but retain the exact venue
+                    # and bounded exception detail for diagnosis in the app.
+                    detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
+                    failures.append(f"{venue}: {type(exc).__name__}: {detail}")
+        if failures:
+            raise RuntimeError("Market-data venue failures: " + " | ".join(failures)[:700])
+        return quotes
