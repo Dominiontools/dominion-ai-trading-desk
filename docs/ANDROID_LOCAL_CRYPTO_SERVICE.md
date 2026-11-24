@@ -11,7 +11,7 @@ The Android APK is currently the dashboard. The Python service must run
 separately on the same phone during development.
 
 1. Install Python in Termux and open the repository folder.
-2. Install project dependencies with `pip install -r requirements.txt`.
+2. The crypto paper service uses Python's standard library, so no third-party package is required for this module.
 3. Start the service with `python -m engine.crypto_service`.
 4. Keep Termux running while testing the app. Android battery restrictions,
    force-stop, reboot, or loss of internet can stop the process.
