@@ -8,6 +8,10 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "saveBinanceTestnetCredentials" in script
     assert "binanceTestnetCredentialStatus" in script
     assert "clearBinanceTestnetCredentials" in script
+    assert "getBinanceTestnetAccount" in script
+    assert "loadForNativeUse" in script
+    assert "engine.binance_android" in script
+    assert "call.resolve(apiSecret)" not in script
     assert "apiSecret" in script
     assert "call.resolve" in script
     assert "call.resolve(apiSecret)" not in script
