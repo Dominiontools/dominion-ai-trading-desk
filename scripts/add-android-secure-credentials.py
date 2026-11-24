@@ -58,6 +58,25 @@ final class CredentialVault {
         return prefs.contains(IV) && prefs.contains(CIPHERTEXT);
     }
 
+    /** Decrypt only for native in-process exchange use; never bridge this result to JS. */
+    synchronized String[] loadForNativeUse() throws Exception {
+        String encodedIv = prefs.getString(IV, null);
+        String encodedCiphertext = prefs.getString(CIPHERTEXT, null);
+        if (encodedIv == null || encodedCiphertext == null) {
+            throw new IllegalStateException("No saved Testnet credentials.");
+        }
+        byte[] iv = Base64.decode(encodedIv, Base64.NO_WRAP);
+        byte[] ciphertext = Base64.decode(encodedCiphertext, Base64.NO_WRAP);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
+        String payload = new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
+        int separator = payload.indexOf('\\n');
+        if (separator <= 0 || separator == payload.length() - 1) {
+            throw new IllegalStateException("Stored credential data is invalid.");
+        }
+        return new String[] { payload.substring(0, separator), payload.substring(separator + 1) };
+    }
+
     synchronized void clear() throws Exception {
         if (!prefs.edit().clear().commit()) {
             throw new IllegalStateException("Could not clear stored credentials.");
@@ -118,6 +137,30 @@ def main():
         result.put("saved", new CredentialVault(getContext()).hasCredentials());
         result.put("storage", "ANDROID_KEYSTORE_AES_GCM");
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void getBinanceTestnetAccount(PluginCall call) {
+        String[] credentials = null;
+        try {
+            credentials = new CredentialVault(getContext()).loadForNativeUse();
+            if (!com.chaquo.python.Python.isStarted()) {
+                com.chaquo.python.Python.start(
+                    new com.chaquo.python.android.AndroidPlatform(getContext()));
+            }
+            com.chaquo.python.PyObject module = com.chaquo.python.Python.getInstance()
+                .getModule("engine.binance_android");
+            String json = module.callAttr("account_summary", credentials[0], credentials[1]).toString();
+            JSObject result = new JSObject(json);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Could not read the Binance Spot Testnet account. Check the saved Testnet credentials and network.");
+        } finally {
+            if (credentials != null) {
+                credentials[0] = null;
+                credentials[1] = null;
+            }
+        }
     }
 
     @PluginMethod
