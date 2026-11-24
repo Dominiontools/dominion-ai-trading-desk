@@ -113,3 +113,41 @@ def test_protected_otoco_rejects_bad_bracket_and_long_list_id(monkeypatch):
             stop_loss="29500", take_profit="31000",
             list_client_order_id="dominion123456789012345",
         )
+
+def test_reconcile_requires_filled_entry_and_both_exit_legs_new(monkeypatch):
+    def transport(method, url, headers, timeout):
+        params = parse_qs(urlsplit(url).query)
+        client_id = params.get("origClientOrderId", [""])[0]
+        statuses = {"dominion123E": "FILLED", "dominion123T": "NEW", "dominion123S": "NEW"}
+        return {"status": statuses[client_id]}
+    client = make_client(monkeypatch, transport)
+    result = client.reconcile_protected_buy_otoco(
+        symbol="BTCUSDT", list_client_order_id="dominion123")
+    assert result["state"] == "PROTECTED"
+    assert result["protected"] is True
+    assert result["working_status"] == "FILLED"
+
+
+def test_reconcile_never_claims_protection_for_pending_new_children(monkeypatch):
+    def transport(method, url, headers, timeout):
+        params = parse_qs(urlsplit(url).query)
+        client_id = params.get("origClientOrderId", [""])[0]
+        statuses = {"dominion123E": "FILLED", "dominion123T": "PENDING_NEW",
+                    "dominion123S": "PENDING_NEW"}
+        return {"status": statuses[client_id]}
+    client = make_client(monkeypatch, transport)
+    result = client.reconcile_protected_buy_otoco(
+        symbol="BTCUSDT", list_client_order_id="dominion123")
+    assert result["state"] == "PROTECTION_UNCONFIRMED"
+    assert result["protected"] is False
+
+
+def test_cancel_refuses_to_remove_bracket_from_filled_position(monkeypatch):
+    calls = []
+    def transport(method, url, headers, timeout):
+        calls.append(method)
+        return {"status": "FILLED"}
+    client = make_client(monkeypatch, transport, enabled=True)
+    with pytest.raises(PermissionError, match="filled position"):
+        client.cancel_order_list(symbol="BTCUSDT", list_client_order_id="dominion123")
+    assert calls == ["GET"]
