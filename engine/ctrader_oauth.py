@@ -1,6 +1,8 @@
 """Local cTrader OAuth helper with private token-file storage.
 
-Use the accounts scope only. This module never prints or logs token values.
+The default scope is view-only accounts. Trading scope is opt-in and requires
+Spotware approval plus trading permission on the registered application.
+This module never prints or logs token values.
 """
 from __future__ import annotations
 
@@ -20,11 +22,14 @@ TOKEN_ENDPOINT = "https://openapi.ctrader.com/apps/token"
 AUTHORIZE_ENDPOINT = "https://id.ctrader.com/my/settings/openapi/grantingaccess/"
 
 
-def build_authorization_url(client_id: str, redirect_uri: str, state: str) -> str:
+def build_authorization_url(client_id: str, redirect_uri: str, state: str,
+                             scope: str = "accounts") -> str:
+    if scope not in {"accounts", "trading"}:
+        raise ValueError("Scope must be accounts or trading.")
     query = urlencode({
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        "scope": "accounts",
+        "scope": scope,
         "product": "web",
         "state": state,
     })
@@ -126,7 +131,10 @@ def load_access_token(client_id: str, client_secret: str, explicit_access_token:
     return current["access_token"]
 
 
-def authorize_interactively(client_id: str, client_secret: str, redirect_uri: str, token_file: str) -> None:
+def authorize_interactively(client_id: str, client_secret: str, redirect_uri: str,
+                             token_file: str, scope: str = "accounts") -> None:
+    if scope not in {"accounts", "trading"}:
+        raise ValueError("Scope must be accounts or trading.")
     parsed_redirect = urlsplit(redirect_uri)
     if parsed_redirect.scheme != "http" or parsed_redirect.hostname not in {"127.0.0.1", "localhost"}:
         raise RuntimeError("For this local helper, redirect URI must use http://127.0.0.1 or http://localhost.")
@@ -160,8 +168,9 @@ def authorize_interactively(client_id: str, client_secret: str, redirect_uri: st
 
     server = HTTPServer((parsed_redirect.hostname, expected_port), CallbackHandler)
     server.timeout = 1
-    authorization_url = build_authorization_url(client_id, redirect_uri, state)
-    print("Opening cTrader authorization in your browser. Approve ACCOUNTS / VIEW-ONLY access.")
+    authorization_url = build_authorization_url(client_id, redirect_uri, state, scope=scope)
+    permission_label = "TRADING" if scope == "trading" else "ACCOUNTS / VIEW-ONLY"
+    print(f"Opening cTrader authorization in your browser. Approve {permission_label} access.")
     print("If the browser does not open, visit this URL:", authorization_url)
     webbrowser.open(authorization_url)
     deadline = time.monotonic() + 180
@@ -184,17 +193,20 @@ def authorize_interactively(client_id: str, client_secret: str, redirect_uri: st
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Set up or refresh cTrader view-only OAuth tokens.")
+    parser = argparse.ArgumentParser(description="Set up or refresh cTrader OAuth tokens.")
     parser.add_argument("command", choices=("authorize", "refresh"))
     args = parser.parse_args()
     client_id = os.getenv("CTRADER_CLIENT_ID", "").strip()
     client_secret = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
     redirect_uri = os.getenv("CTRADER_REDIRECT_URI", "http://127.0.0.1:8765/callback").strip()
     token_file = os.getenv("CTRADER_TOKEN_FILE", ".ctrader_tokens.json")
+    scope = os.getenv("CTRADER_SCOPE", "accounts").strip().lower()
+    if scope not in {"accounts", "trading"}:
+        raise SystemExit("CTRADER_SCOPE must be accounts or trading.")
     if not client_id or not client_secret:
         raise SystemExit("Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET in your local environment first.")
     if args.command == "authorize":
-        authorize_interactively(client_id, client_secret, redirect_uri, token_file)
+        authorize_interactively(client_id, client_secret, redirect_uri, token_file, scope=scope)
     else:
         refresh_token_file(client_id, client_secret, token_file)
         print("cTrader tokens refreshed and saved. Token values were not displayed.")
