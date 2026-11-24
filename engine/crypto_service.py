@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from engine.crypto_api import create_server
+from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoPlusSecurityFeed, PublicNewsRSS
+from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_monitor import CryptoPaperMonitor
 
@@ -99,6 +101,52 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         },
     }
     stop_event = threading.Event()
+    discovery_feed = DexScreenerDiscovery(timeout=8.0)
+    whale_feed = GeckoTerminalWhaleFeed(timeout=8.0, min_notional_usd=100_000.0)
+    security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
+    news_feed = PublicNewsRSS(timeout=8.0)
+    network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "fantom":"fantom", "cronos":"cronos"}
+
+    def agent_feed_loop() -> None:
+        while not stop_event.is_set():
+            try:
+                discovered = discovery_feed.discover(limit=8)
+                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume."}
+                whale_trades = []
+                whale_errors = 0
+                for token in discovered[:5]:
+                    network = network_map.get(token["chain_id"].lower())
+                    if not network or not token.get("pair_address"):
+                        continue
+                    try:
+                        whale_trades.extend(whale_feed.trades(network, token["pair_address"], token["symbol"]))
+                    except Exception:
+                        whale_errors += 1
+                whale_result = WhaleAgent(min_notional_usd=100_000.0).analyze(whale_trades)
+                state["agents"]["WHALE"] = {"status":"CONNECTED" if not whale_errors else "PARTIAL", "detail":f"GeckoTerminal checked {min(len(discovered), 5)} pools; {len(whale_result.findings)} trades met the USD 100,000 alert threshold.", "alerts":list(whale_result.findings[:5])}
+                if security_feed.token:
+                    security_results = []
+                    for token in discovered[:5]:
+                        if token["chain_id"].lower() not in GoPlusSecurityFeed.CHAIN_IDS:
+                            continue
+                        try:
+                            security_results.append(security_feed.assess(token["chain_id"], token["token_address"]))
+                        except Exception:
+                            security_results.append({"status":"FEED_ERROR"})
+                    risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
+                    state["agents"]["RUG"] = {"status":"CONNECTED" if security_results else "NO_SUPPORTED_TOKENS", "detail":f"GoPlus checked {len(security_results)} EVM contracts; {risk_count} returned explicit risk flags. Missing fields remain unknown.", "risk_flags":[item for item in security_results if item.get("risks")][:5]}
+                else:
+                    state["agents"]["RUG"] = {"status":"WAITING_FOR_API_TOKEN", "detail":"DEX Screener token/liquidity discovery is connected. GoPlus contract-security checks require a GoPlus API access token; none is configured."}
+                headlines = news_feed.headlines(limit=20)
+                hype_result = HypeAgent().score(headlines)
+                state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
+                state["agents"]["DESK MANAGER"] = {"status":"RUNNING", "detail":"Completed public-feed cycle: token discovery, whale-trade scan, token-security lookup status and news sentiment."}
+                state["agent_feed_last_cycle"] = datetime.now(timezone.utc).isoformat()
+                state["agent_feed_error"] = None
+            except Exception as exc:
+                state["agent_feed_error"] = type(exc).__name__
+                state["agents"]["DESK MANAGER"] = {"status":"PARTIAL", "detail":f"Agent feed cycle encountered {type(exc).__name__}; individual feed states are retained."}
+            stop_event.wait(60.0)
 
     def status_provider() -> dict:
         with _runtime_lock:
@@ -123,7 +171,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
                            host="127.0.0.1", port=api_port)
-    return stop_event, server, monitor_loop, state, symbols, interval
+    return stop_event, server, monitor_loop, agent_feed_loop, state, symbols, interval
 
 
 def start_embedded(data_dir: str, port: int = 8766) -> dict:
@@ -133,14 +181,15 @@ def start_embedded(data_dir: str, port: int = 8766) -> dict:
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, state, symbols, interval = _runtime_config(data_dir, port)
+        stop_event, server, monitor_loop, agent_feed_loop, state, symbols, interval = _runtime_config(data_dir, port)
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
-        api_thread = threading.Thread(target=server.serve_forever,
-                                      kwargs={"poll_interval": 0.5}, daemon=True)
+        agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
+        api_thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.5}, daemon=True)
         _runtime_stop, _runtime_server = stop_event, server
-        _runtime_threads = [worker, api_thread]
+        _runtime_threads = [worker, agent_worker, api_thread]
         _runtime_state = state
         worker.start()
+        agent_worker.start()
         api_thread.start()
         return {"started": True, "already_running": False,
                 "port": server.server_address[1], "symbols": list(symbols),
