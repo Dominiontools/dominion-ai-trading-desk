@@ -22,8 +22,8 @@ def fees():
     return VerifiedFees(D("10"), True)
 
 def prepare(gate, context, rules, fees, **overrides):
-    values = dict(symbol="BTCUSDT", entry_price="30000.00",
-        stop_loss="29900.00", take_profit="30200.00", context=context,
+    values = dict(symbol="BTCUSDT", entry_price="100.00",
+        stop_loss="98.50", take_profit="103.00", context=context,
         rules=rules, fees=fees, quote_age_seconds="1", spread_bps="2",
         estimated_slippage_bps="3")
     values.update(overrides)
@@ -61,7 +61,7 @@ def test_blocks_stale_quote(gate, context, rules, fees):
 
 def test_blocks_bad_stop_target_direction(gate, context, rules, fees):
     with pytest.raises(ValueError, match="stop-loss"):
-        prepare(gate, context, rules, fees, stop_loss="30100")
+        prepare(gate, context, rules, fees, stop_loss="101.00")
 
 def test_blocks_minimum_order_exceeding_risk_size(gate, context, fees):
     restrictive = BinanceSymbolRules(D("0.01"), D("0.1"), D("0.1"),
