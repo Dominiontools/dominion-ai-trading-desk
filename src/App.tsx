@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, ShieldCheck, Wallet, Waves } from "lucide-react";
 
 type Market = "All markets" | "Forex & Gold" | "Crypto";
@@ -60,6 +60,8 @@ export default function App() {
         <div className="panel-foot">Illustrative interface values only — not live market prices.</div>
       </div>
 
+      <CryptoMonitorPanel />
+
       <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">{paused ? "Scanner paused" : "System staged"}</span></div>
       <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className={i === 1 || i === 7 ? "agent-state ready" : "agent-state"}>{i === 1 || i === 7 ? "READY" : "STAGED"}</span></div><b>{name}</b><small>{role}</small><p>{name === "SCANNER" && paused ? "Scanner paused by operator" : status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
@@ -69,4 +71,61 @@ export default function App() {
 
 function Metric({ icon, label, value, note, positive = false }: { icon: ReactNode; label: string; value: string; note: string; positive?: boolean }) {
   return <div className="metric"><div className="metric-icon">{icon}</div><span>{label}</span><strong className={positive ? "positive" : ""}>{value}</strong><small>{note}</small></div>;
+}
+
+
+function CryptoMonitorPanel() {
+  const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+  const [decisions, setDecisions] = useState<Record<string, unknown>[]>([]);
+  const [connection, setConnection] = useState<"checking" | "connected" | "offline">("checking");
+  const [lastUpdated, setLastUpdated] = useState("");
+
+  const refresh = useCallback(async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 2500);
+    try {
+      const [statusResponse, decisionsResponse] = await Promise.all([
+        fetch("http://127.0.0.1:8766/api/crypto/status", { cache: "no-store", signal: controller.signal, credentials: "omit" }),
+        fetch("http://127.0.0.1:8766/api/crypto/decisions?limit=20", { cache: "no-store", signal: controller.signal, credentials: "omit" })
+      ]);
+      if (!statusResponse.ok || !decisionsResponse.ok) throw new Error("Local API unavailable");
+      const statusData = await statusResponse.json() as Record<string, unknown>;
+      const decisionData = await decisionsResponse.json() as { items?: unknown };
+      setStatus(statusData);
+      setDecisions(Array.isArray(decisionData.items) ? decisionData.items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : []);
+      setConnection("connected");
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch {
+      setConnection("offline");
+      setStatus(null);
+      setDecisions([]);
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const engine = typeof status?.engine === "string" ? status.engine : typeof status?.status === "string" ? status.status : "Status unavailable";
+  return <section className="crypto-monitor">
+    <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
+    <div className="crypto-summary">
+      <div><small>ENGINE</small><b>{engine}</b></div>
+      <div><small>MODE</small><b>Paper only</b></div>
+      <div><small>ORDER ROUTING</small><b>Disabled</b></div>
+      <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
+    </div>
+    <div className="decision-list">
+      <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
+      {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
+        decisions.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>The API is connected, but the monitor has not written any decisions.</span></div></div> :
+        decisions.map((item, index) => <div className="decision-row" key={String(item.recorded_at || index)}><div><b>{String(item.symbol || "Unknown symbol")}</b><small>{String(item.reason || "No reason supplied")}</small></div><span>{String(item.status || "UNKNOWN")}</span><small>{String(item.recorded_at || "")}</small></div>)
+      }
+    </div>
+    <div className="panel-foot">Read-only local connection. Paper mode only; no order controls are available.</div>
+  </section>;
 }
