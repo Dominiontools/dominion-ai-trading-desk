@@ -147,7 +147,7 @@ class GeckoTerminalWhaleFeed:
 
 
 class GoPlusSecurityFeed:
-    """Optional GoPlus EVM token-security lookup; requires user-supplied API token."""
+    """GoPlus EVM token-security lookup; anonymous free-tier calls are supported."""
 
     BASE = "https://api.gopluslabs.io/api/v1/token_security"
     CHAIN_IDS = {
@@ -163,12 +163,17 @@ class GoPlusSecurityFeed:
         chain_id = self.CHAIN_IDS.get(chain.lower())
         if not chain_id:
             return {"status": "UNSUPPORTED_CHAIN", "source": "GOPLUS"}
-        if not self.token:
-            return {"status": "WAITING_FOR_API_TOKEN", "source": "GOPLUS"}
         query = urlencode({"contract_addresses": address})
+        headers = {}
+        # GoPlus documents a free anonymous tier (30 calls/minute); an access
+        # token is optional for higher limits. Never block free-tier checks.
+        if self.token:
+            headers["Authorization"] = (
+                self.token if self.token.lower().startswith("bearer ")
+                else "Bearer " + self.token
+            )
         payload = self.fetch_json(
-            f"{self.BASE}/{chain_id}?{query}", self.timeout,
-            headers={"Authorization": self.token if self.token.lower().startswith("bearer ") else "Bearer " + self.token},
+            f"{self.BASE}/{chain_id}?{query}", self.timeout, headers=headers,
         )
         if not isinstance(payload, dict) or str(payload.get("code")) != "1":
             raise RuntimeError("GoPlus security request failed")
