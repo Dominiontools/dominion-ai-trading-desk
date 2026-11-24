@@ -82,6 +82,16 @@ class BinanceSpotTestnetClient:
             method, url, {"X-MBX-APIKEY": self._api_key}, self.timeout
         )
 
+    def exchange_info(self, symbol: str) -> dict:
+        """Fetch public symbol filters from the fixed Spot Testnet host."""
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        query = urlencode({"symbol": pair})
+        return self.transport(
+            "GET", f"{self.base_url}/api/v3/exchangeInfo?{query}", {}, self.timeout
+        )
+
     def account(self) -> dict:
         """Read the Testnet account only."""
         return self._signed("GET", "/api/v3/account", {})
