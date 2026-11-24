@@ -150,9 +150,20 @@ class BinanceTestnetRiskGate:
             estimated_round_trip_fee_quote=format(estimated_fees, "f"),
             notional_quote=format(notional, "f"))
 
-    def execute(self, client, plan: BinanceOrderPlan) -> dict:
-        """Fail closed until a verified protective OCO/bracket workflow exists."""
-        del client, plan
-        raise PermissionError(
-            "Entry blocked: the current Binance adapter cannot verify protective "
-            "stop-loss/take-profit orders. No order was sent.")
+    def execute(self, client, plan: BinanceOrderPlan, *, list_client_order_id: str) -> dict:
+        """Submit a FOK entry with exchange-hosted OTOCO exits, behind explicit gates."""
+        if not getattr(client, "allow_orders", False):
+            raise PermissionError("Binance Testnet order gate is disabled; no order was sent.")
+        submit = getattr(client, "place_protected_buy_otoco", None)
+        if not callable(submit):
+            raise PermissionError("Client lacks protected OTOCO support; no order was sent.")
+        if plan.side != "BUY":
+            raise PermissionError("Only BUY plans are supported by this protected workflow.")
+        if not list_client_order_id or len(list_client_order_id) > 20:
+            raise ValueError("A unique order-list ID of at most 20 characters is required.")
+        return submit(
+            symbol=plan.symbol, quantity=plan.quantity,
+            entry_price=plan.limit_price, stop_loss=plan.stop_loss,
+            take_profit=plan.take_profit,
+            list_client_order_id=list_client_order_id,
+        )
