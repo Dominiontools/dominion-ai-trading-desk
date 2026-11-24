@@ -54,12 +54,6 @@ class CryptoPaperMonitor:
             "orders_enabled": False,
         }
         required = {"Binance", "Bitget", "HTX"}
-        missing_fees = sorted(required.difference(self.costs_by_exchange))
-        if missing_fees:
-            record.update(status="BLOCKED", reason="FEE_CONFIG_MISSING",
-                          missing_fee_exchanges=missing_fees)
-            return self._write(record)
-
         try:
             quotes = self.feeds.snapshot(symbol)
         except Exception as exc:
@@ -94,6 +88,14 @@ class CryptoPaperMonitor:
             }
             for q in quotes
         ]
+        missing_fees = sorted(required.difference(self.costs_by_exchange))
+        if missing_fees:
+            record.update(
+                status="BLOCKED", reason="FEE_CONFIG_MISSING",
+                missing_fee_exchanges=missing_fees,
+            )
+            return self._write(record)
+
         opportunities = scan_arbitrage(
             quotes, self.costs_by_exchange, now=finished,
             max_quote_age_seconds=self.max_quote_age_seconds,
