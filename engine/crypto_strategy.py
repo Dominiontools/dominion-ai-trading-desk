@@ -58,9 +58,12 @@ class BinancePublicCandleFeed:
                 open=float(row[1]), high=float(row[2]), low=float(row[3]),
                 close=float(row[4]), volume=float(row[5]),
             ))
-        if len(result) < 31:
-            raise RuntimeError("Binance returned fewer than 31 usable candles.")
-        return result
+        # Binance includes the currently forming candle. Drop it so the
+        # crossover is evaluated only on completed bars.
+        completed = result[:-1]
+        if len(completed) < 31:
+            raise RuntimeError("Binance returned fewer than 31 completed usable candles.")
+        return completed
 
 
 class SmaPaperStrategy:
@@ -84,6 +87,12 @@ class SmaPaperStrategy:
         if not candles:
             return {"status": "BLOCKED", "reason": "NO_CANDLES", "mode": "PAPER_ONLY"}
         symbol = candles[-1].symbol.upper()
+        stamp = candles[-1].timestamp
+        if stamp.tzinfo is None:
+            return {"status": "BLOCKED", "reason": "NAIVE_CANDLE_TIMESTAMP", "mode": "PAPER_ONLY"}
+        candle_age = (datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)).total_seconds()
+        if candle_age < 0 or candle_age > 120:
+            return {"status": "BLOCKED", "reason": "STALE_CANDLE_DATA", "mode": "PAPER_ONLY"}
         if quote.symbol.replace("/", "").replace("-", "").upper() != symbol:
             return {"status": "BLOCKED", "reason": "QUOTE_SYMBOL_MISMATCH", "mode": "PAPER_ONLY"}
         if desk.position is not None:
