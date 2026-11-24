@@ -61,8 +61,8 @@ export default function App() {
 
       <CryptoMonitorPanel />
 
-      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">"System staged — agents not yet fully connected"</span></div>
-      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state"}>STAGED</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
+      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">System staged — agents not yet fully connected</span></div>
+      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state">STAGED</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
     </section>
   </main>;
@@ -101,7 +101,8 @@ function CryptoMonitorPanel() {
     } catch {
       setConnection("offline");
       setStatus(null);
-      setDecisions([]);\n      setLatestQuotes([]);
+      setDecisions([]);
+      setLatestQuotes([]);
     } finally {
       window.clearTimeout(timeout);
     }
