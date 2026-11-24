@@ -69,12 +69,27 @@ def test_blocks_minimum_order_exceeding_risk_size(gate, context, fees):
     with pytest.raises(PermissionError, match="quantity filters"):
         prepare(gate, context, restrictive, fees)
 
-def test_execution_never_sends_unprotected_entry(gate):
+def test_execution_requires_both_adapter_gates(gate):
     class FakeClient:
-        def place_limit_order(self, **kwargs):
-            pytest.fail("No exchange request may be sent without protection.")
-    with pytest.raises(PermissionError, match="protective"):
-        gate.execute(FakeClient(), object())
+        allow_orders = False
+        def place_protected_buy_otoco(self, **kwargs):
+            pytest.fail("Disabled adapter must not send a request.")
+    with pytest.raises(PermissionError, match="gate is disabled"):
+        gate.execute(FakeClient(), object(), list_client_order_id="dominion123")
+
+
+def test_execution_uses_protected_otoco_not_unprotected_entry(gate, context, rules, fees):
+    plan = prepare(gate, context, rules, fees)
+    class FakeClient:
+        allow_orders = True
+        def place_protected_buy_otoco(self, **kwargs):
+            assert kwargs["symbol"] == plan.symbol
+            assert kwargs["quantity"] == plan.quantity
+            assert kwargs["stop_loss"] == plan.stop_loss
+            assert kwargs["take_profit"] == plan.take_profit
+            return {"orderListId": 42}
+    result = gate.execute(FakeClient(), plan, list_client_order_id="dominion123")
+    assert result["orderListId"] == 42
 
 def test_blocks_emergency_stop(gate, rules, fees):
     ctx = SpotRiskContext(D("20"), D("20"), D("0"), 0, emergency_stop=True)
