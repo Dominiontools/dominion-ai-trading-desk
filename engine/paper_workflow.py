@@ -143,6 +143,9 @@ class PaperTradingDesk:
         if self.position is not None:
             return self._record("ENTRY_BLOCKED", symbol=signal.symbol,
                                 reason="MAX_OPEN_POSITIONS")
+        if self.equity <= 0:
+            return self._record("ENTRY_BLOCKED", symbol=signal.symbol,
+                                reason="PAPER_EQUITY_DEPLETED")
         values = (signal.entry_price, signal.stop_loss, signal.take_profit,
                   signal.quantity, signal.spread_bps,
                   signal.estimated_slippage_bps, signal.quote_age_seconds)
