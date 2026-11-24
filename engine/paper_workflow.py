@@ -56,6 +56,57 @@ class PaperTradingDesk:
         self.realized_pnl = 0.0
         self._day = self.clock().astimezone(timezone.utc).date()
         self._daily_realized_pnl = 0.0
+        self._restore_journal()
+
+    def _restore_journal(self) -> None:
+        """Recover realized P/L and any unclosed paper position after app restart."""
+        if self.journal is None or not self.journal.exists():
+            return
+        entries: dict[str, dict] = {}
+        closed: set[str] = set()
+        records: list[dict] = []
+        total_pnl = 0.0
+        today_pnl = 0.0
+        with self.journal.open("r", encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    item = json.loads(line)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                records.append(item)
+                if item.get("event") == "PAPER_ENTRY":
+                    position = item.get("position")
+                    if isinstance(position, dict) and position.get("position_id"):
+                        entries[str(position["position_id"])] = position
+                elif item.get("event") == "PAPER_EXIT":
+                    position_id = str(item.get("position_id", ""))
+                    if position_id:
+                        closed.add(position_id)
+                    try:
+                        pnl = float(item.get("realized_pnl", 0.0))
+                    except (TypeError, ValueError):
+                        pnl = 0.0
+                    total_pnl += pnl
+                    try:
+                        event_day = datetime.fromisoformat(
+                            str(item["timestamp"]).replace("Z", "+00:00")
+                        ).astimezone(timezone.utc).date()
+                    except (KeyError, TypeError, ValueError):
+                        event_day = None
+                    if event_day == self._day:
+                        today_pnl += pnl
+        self.trades = records[-20:]
+        self.realized_pnl = total_pnl
+        self._daily_realized_pnl = today_pnl
+        open_entries = [value for key, value in entries.items() if key not in closed]
+        if open_entries:
+            try:
+                self.position = SimulatedPosition(**open_entries[-1])
+            except (TypeError, ValueError):
+                # A malformed journal must never create a guessed position.
+                self.position = None
 
     @property
     def equity(self) -> float:
@@ -170,6 +221,8 @@ class PaperTradingDesk:
                             daily_loss_pct=round(self.daily_loss_pct, 8))
 
     def close_position(self, price: float, reason: str = "MANUAL_PAPER_CLOSE") -> dict:
+        if price <= 0:
+            raise ValueError("Exit price must be positive.")
         if self.position is None:
             return self._record("EXIT_WAITING", reason="NO_OPEN_POSITION")
         position = self.position
