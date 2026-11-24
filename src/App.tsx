@@ -48,16 +48,16 @@ export default function App() {
     <section className="content">
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / OVERVIEW</div><h1>Trading command center</h1></div>
-        <div className="top-actions"><span className="demo-pill"><span/> PAPER MODE ONLY</span><span className="muted">Engine runs separately on this phone</span></div>
+        <div className="top-actions"><span className="demo-pill"><span/> PAPER MODE ONLY</span><span className="muted">On-device engine controls below</span></div>
       </header>
 
       <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live orders are disabled. All future order routing must pass the Risk Agent and remain in demo/paper mode until separately approved.</span></div></div>
 
       <div className="metric-grid">
-        <Metric icon={<CircleDollarSign/>} label="Account equity" value="$10,000.00" note="Illustrative demo balance"/>
-        <Metric icon={<Activity/>} label="Open positions" value="0" note="No simulated positions"/>
-        <Metric icon={<ShieldCheck/>} label="Risk status" value="Protected" note="Pre-trade checks staged" positive/>
-        <Metric icon={<Gauge/>} label="Today's P/L" value="$0.00" note="No trades executed"/>
+        <Metric icon={<CircleDollarSign/>} label="Starting capital" value="$20.00" note="Planned balance · not an account connection"/>
+        <Metric icon={<Activity/>} label="Open positions" value="—" note="Broker account not connected"/>
+        <Metric icon={<ShieldCheck/>} label="Risk policy" value="0.5% / 2%" note="Per trade / daily stop" positive/>
+        <Metric icon={<Gauge/>} label="Today's P/L" value="—" note="No account connection"/>
       </div>
 
       <div className="section-head"><div><div className="eyebrow">MARKET MONITOR</div><h2>Watchlist</h2></div><select value={market} onChange={e => setMarket(e.target.value as Market)}><option>All markets</option><option>Forex & Gold</option><option>Crypto</option></select></div>
