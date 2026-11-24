@@ -134,7 +134,19 @@ function CryptoMonitorPanel() {
       setStatus(statusData);
       const items = Array.isArray(decisionData.items) ? decisionData.items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : [];
       setDecisions(items);
-      const quoteRows = Array.isArray(items[0]?.quotes) ? items[0].quotes.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : [];
+      const quoteRows: Record<string, unknown>[] = [];
+      const seenQuotes = new Set<string>();
+      for (const record of items) {
+        if (!Array.isArray(record.quotes)) continue;
+        for (const quote of record.quotes) {
+          if (!quote || typeof quote !== "object") continue;
+          const row = quote as Record<string, unknown>;
+          const key = String(record.symbol) + ":" + String(row.exchange);
+          if (seenQuotes.has(key)) continue;
+          seenQuotes.add(key);
+          quoteRows.push({ ...row, symbol: record.symbol });
+        }
+      }
       setLatestQuotes(quoteRows);
       setConnection("connected");
       setLastUpdated(new Date().toLocaleTimeString());
@@ -174,7 +186,7 @@ function CryptoMonitorPanel() {
     <div className="decision-list">
       <div className="decision-list-head"><b>LIVE TOP-OF-BOOK QUOTES</b><span>{latestQuotes.length} venues</span></div>
       {latestQuotes.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No live quote snapshot yet</b><span>Start the local paper service to fetch current Binance, Bitget and HTX prices.</span></div></div> :
-        latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
+        latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.symbol || "Symbol")} · {String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
       <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
       {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
         decisions.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>The API is connected, but the monitor has not written any decisions.</span></div></div> :
