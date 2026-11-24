@@ -60,6 +60,25 @@ export default function App() {
         <div className="panel-foot">Illustrative interface values only — not live market prices.</div>
       </div>
 
+      <section className="crypto-monitor">
+        <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className="monitor-state"><i/> ENGINE NOT CONNECTED</span></div>
+        <div className="crypto-venues">
+          {[
+            ["BINANCE", "Public ticker adapter", "Waiting for backend"],
+            ["BITGET", "Public ticker adapter", "Waiting for backend"],
+            ["HTX", "Public ticker adapter", "Waiting for backend"]
+          ].map(([name, source, state]) => <div className="venue-card" key={name}><div><b>{name}</b><span className="venue-dot"/></div><small>{source}</small><p>{state}</p></div>)}
+        </div>
+        <div className="crypto-summary">
+          <div><small>MONITOR MODE</small><b>Paper only</b></div>
+          <div><small>POLL INTERVAL</small><b>5 seconds (configured)</b></div>
+          <div><small>FEE CONFIGURATION</small><b className="blocked-text">Not verified · scanning blocked</b></div>
+          <div><small>ORDER ROUTING</small><b>Disabled</b></div>
+        </div>
+        <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>When the monitor backend is connected and run, accepted and rejected scan decisions will appear here.</span></div></div>
+        <div className="panel-foot">Dashboard preview only. It does not fetch prices or start the Python monitor. No exchange credentials or order permissions are connected.</div>
+      </section>
+
       <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">{paused ? "Scanner paused" : "System staged"}</span></div>
       <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className={i === 1 || i === 7 ? "agent-state ready" : "agent-state"}>{i === 1 || i === 7 ? "READY" : "STAGED"}</span></div><b>{name}</b><small>{role}</small><p>{name === "SCANNER" && paused ? "Scanner paused by operator" : status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
