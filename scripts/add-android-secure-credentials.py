@@ -70,7 +70,7 @@ final class CredentialVault {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
         String payload = new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
-        int separator = payload.indexOf('\\n');
+        int separator = payload.indexOf('\n');
         if (separator <= 0 || separator == payload.length() - 1) {
             throw new IllegalStateException("Stored credential data is invalid.");
         }
