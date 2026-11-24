@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, ShieldCheck, Wallet, Waves } from "lucide-react";
+interface TradingEngineBridge {
+  start(): Promise<{ accepted: boolean }>;
+  stop(): Promise<{ stopped: boolean }>;
+  status(): Promise<{ running: boolean; error?: string }>;
+}
+const TradingEngine = registerPlugin<TradingEngineBridge>("TradingEngine");
+
 
 type Market = "All markets" | "Forex & Gold" | "Crypto";
 const agents = [
@@ -79,8 +87,40 @@ function CryptoMonitorPanel() {
   const [latestQuotes, setLatestQuotes] = useState<Record<string, unknown>[]>([]);
   const [connection, setConnection] = useState<"checking" | "connected" | "offline">("checking");
   const [lastUpdated, setLastUpdated] = useState("");
+  const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
+    Capacitor.isNativePlatform() ? "stopped" : "web"
+  );
+  const isNativeApp = Capacitor.isNativePlatform();
+
+  const startPhoneEngine = useCallback(async () => {
+    if (!isNativeApp) return;
+    setEngineControl("starting");
+    try {
+      await TradingEngine.start();
+    } catch {
+      setEngineControl("error");
+    }
+  }, [isNativeApp]);
+
+  const stopPhoneEngine = useCallback(async () => {
+    if (!isNativeApp) return;
+    try {
+      await TradingEngine.stop();
+      setEngineControl("stopped");
+    } catch {
+      setEngineControl("error");
+    }
+  }, [isNativeApp]);
 
   const refresh = useCallback(async () => {
+    if (isNativeApp) {
+      try {
+        const nativeStatus = await TradingEngine.status();
+        setEngineControl(nativeStatus.running ? "running" : nativeStatus.error ? "error" : "stopped");
+      } catch {
+        setEngineControl("error");
+      }
+    }
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 2500);
     try {
@@ -117,6 +157,14 @@ function CryptoMonitorPanel() {
   const engine = typeof status?.engine === "string" ? status.engine : typeof status?.status === "string" ? status.status : "Status unavailable";
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
+    <div className="engine-controls">
+      <div className="engine-controls-copy"><b>On-device paper engine</b><span>{isNativeApp ? "Runs inside this app as an Android foreground service." : "Install the Android app to control the on-device service."}</span></div>
+      <div className="engine-control-actions">
+        <button className="engine-start" onClick={() => void startPhoneEngine()} disabled={!isNativeApp || engineControl === "starting" || engineControl === "running"}>Start phone engine</button>
+        <button className="engine-stop" onClick={() => void stopPhoneEngine()} disabled={!isNativeApp || engineControl === "stopped" || engineControl === "web"}>Stop</button>
+      </div>
+      <small className={"engine-control-state " + engineControl}>Phone service: {engineControl === "web" ? "Android app required" : engineControl}</small>
+    </div>
     <div className="crypto-summary">
       <div><small>ENGINE</small><b>{engine}</b></div>
       <div><small>MODE</small><b>Paper only</b></div>
