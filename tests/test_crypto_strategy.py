@@ -16,7 +16,7 @@ def sample_candles():
             for p in closes]
 
 def test_binance_candle_feed_parses_klines():
-    rows = [[1730000000000, "100", "102", "99", "101", "12"] for _ in range(31)]
+    rows = [[datetime.now(timezone.utc).timestamp() * 1000, "100", "102", "99", "101", "12"] for _ in range(32)]
     calls = []
     feed = BinancePublicCandleFeed(fetch_json=lambda url, timeout: calls.append(url) or rows)
     result = feed.candles("BTC/USDT")
