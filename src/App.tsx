@@ -181,6 +181,7 @@ function CryptoMonitorPanel() {
       <div><small>ENGINE</small><b>{engine}</b></div>
       <div><small>MODE</small><b>Paper only</b></div>
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
+      <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
     </div>
     <div className="decision-list">
