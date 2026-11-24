@@ -18,6 +18,7 @@ from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, SmaPaperStrategy
+from engine.readiness import build_readiness
 
 _runtime_lock = threading.RLock()
 _runtime_stop: threading.Event | None = None
@@ -188,6 +189,10 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         with _runtime_lock:
             snapshot = dict(state)
             snapshot["paper_trading"] = paper_desk.snapshot()
+            snapshot["integration_readiness"] = build_readiness(
+                phone_engine_running=state.get("engine") == "running",
+                verified_fee_exchanges=tuple(fees.keys()),
+            )
             return snapshot
 
     def monitor_loop() -> None:
