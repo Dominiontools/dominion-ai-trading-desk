@@ -16,6 +16,7 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_monitor import CryptoPaperMonitor
+from engine.paper_workflow import PaperTradingDesk
 
 _runtime_lock = threading.RLock()
 _runtime_stop: threading.Event | None = None
@@ -79,6 +80,10 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         min_net_edge_bps=10.0,
         max_notional=20.0,
     )
+    paper_desk = PaperTradingDesk(
+        starting_equity=20.0,
+        journal=Path(data_dir) / "paper_trades.jsonl",
+    )
     state = {
         "engine": "starting",
         "mode": "PAPER_ONLY",
@@ -91,11 +96,11 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "last_error": None,
         "agents": {
             "SCANNER": {"status": "RUNNING", "detail": "Public crypto price-gap scanner runs with the phone monitor."},
-            "RISK": {"status": "PAPER_READY", "detail": "0.5% trade-risk and 2% daily-loss checks are implemented; not yet wired to broker orders."},
-            "SNIPER": {"status": "PAPER_READY", "detail": "Risk-gated paper order proposals only; no exchange or broker order is sent."},
+            "RISK": {"status": "PAPER_READY", "detail": "Paper execution gate enforces 0.5% maximum risk per trade, 2% daily loss stop, one open position, quote age, spread and slippage limits."},
+            "SNIPER": {"status": "READY_FOR_VALIDATED_SIGNALS", "detail": "Risk-gated paper entry lifecycle is available. No directional strategy signal source or real order route is connected."},
             "WHALE": {"status": "WAITING_FOR_FEED", "detail": "Large-trade analysis is implemented; a trade-flow feed is not connected."},
             "RUG": {"status": "WAITING_FOR_EVIDENCE", "detail": "Token safety checklist is implemented; on-chain contract/liquidity evidence is not connected."},
-            "EXIT": {"status": "WAITING_FOR_POSITIONS", "detail": "Paper stop/target/trailing evaluation is implemented; no broker positions are connected."},
+            "EXIT": {"status": "PAPER_BOOK_EMPTY", "detail": "Paper position book is connected to stop-loss, take-profit and trailing-stop management; waiting for a validated paper entry."},
             "HYPE": {"status": "WAITING_FOR_FEED", "detail": "Text sentiment analysis is implemented; social/news collection is not connected."},
             "DESK MANAGER": {"status": "COORDINATOR_READY", "detail": "Specialist coordination component is implemented; full live workflow is not enabled."},
         },
@@ -177,7 +182,9 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
 
     def status_provider() -> dict:
         with _runtime_lock:
-            return dict(state)
+            snapshot = dict(state)
+            snapshot["paper_trading"] = paper_desk.snapshot()
+            return snapshot
 
     def monitor_loop() -> None:
         state["engine"] = "running"
