@@ -33,16 +33,16 @@ def configure_gradle() -> None:
     root_text = require(root_gradle)
     classpath = f"com.chaquo.python:gradle:{CHAQUOPY_VERSION}"
     if classpath not in root_text:
-        if re.search(r"plugins\\s*\\{", root_text):
+        if re.search(r"plugins\s*\{", root_text):
             root_text, count = re.subn(
-                r"(plugins\\s*\\{)",
-                r"\\1\\n    id 'com.chaquo.python' version '" + CHAQUOPY_VERSION + "' apply false",
+                r"(plugins\s*\{)",
+                r"\1\n    id 'com.chaquo.python' version '" + CHAQUOPY_VERSION + "' apply false",
                 root_text, count=1,
             )
         else:
             root_text, count = re.subn(
-                r"(dependencies\\s*\\{)",
-                r"\\1\\n        classpath '" + classpath + "'",
+                r"(dependencies\s*\{)",
+                r"\1\n        classpath '" + classpath + "'",
                 root_text, count=1,
             )
         if count != 1:
@@ -52,42 +52,42 @@ def configure_gradle() -> None:
     app_gradle = APP / "build.gradle"
     app_text = require(app_gradle)
     if "com.chaquo.python" not in app_text:
-        if re.search(r"plugins\\s*\\{", app_text):
-            app_text, count = re.subn(r"(plugins\\s*\\{)", r"\\1\\n    id 'com.chaquo.python'", app_text, count=1)
+        if re.search(r"plugins\s*\{", app_text):
+            app_text, count = re.subn(r"(plugins\s*\{)", r"\1\n    id 'com.chaquo.python'", app_text, count=1)
         else:
             app_text = re.sub(
-                r"(apply plugin:\\s*['\"]com\\.android\\.application['\"]\\s*)",
-                r"\\1\\napply plugin: 'com.chaquo.python'\\n",
+                r"(apply plugin:\s*['\"]com\.android\.application['\"]\s*)",
+                r"\1\napply plugin: 'com.chaquo.python'\n",
                 app_text, count=1,
             )
             count = 1 if "apply plugin: 'com.chaquo.python'" in app_text else 0
         if count != 1:
             raise SystemExit("Could not safely apply Chaquopy to the app Gradle file.")
 
-    app_text, min_count = re.subn(r"(minSdkVersion\\s+)(\\d+)", r"\\g<1>24", app_text, count=1)
+    app_text, min_count = re.subn(r"(minSdkVersion\s+)(\d+)", r"\g<1>24", app_text, count=1)
     if min_count == 0:
-        app_text, min_count = re.subn(r"(minSdk\\s*=\\s*)(\\d+)", r"\\g<1>24", app_text, count=1)
+        app_text, min_count = re.subn(r"(minSdk\s*=\s*)(\d+)", r"\g<1>24", app_text, count=1)
     if min_count == 0:
         raise SystemExit("Could not find minSdkVersion; Chaquopy requires Android API 24 or newer.")
 
     if "abiFilters" not in app_text:
         app_text, count = re.subn(
-            r"(defaultConfig\\s*\\{)",
-            r"\\1\\n        ndk { abiFilters 'arm64-v8a', 'x86_64' }",
+            r"(defaultConfig\s*\{)",
+            r"\1\n        ndk { abiFilters 'arm64-v8a', 'x86_64' }",
             app_text, count=1,
         )
         if count != 1:
             raise SystemExit("Could not add supported Android CPU architectures.")
 
     if "chaquopy {" not in app_text:
-        app_text += "\\n\\nchaquopy {\\n    defaultConfig {\\n        version = '3.11'\\n    }\\n}\\n"
+        app_text += "\n\nchaquopy {\n    defaultConfig {\n        version = '3.11'\n    }\n}\n"
     write(app_gradle, app_text)
 
 
 def configure_python_sources() -> None:
     source = APP / "src" / "main" / "python" / "engine"
     source.mkdir(parents=True, exist_ok=True)
-    (source / "__init__.py").write_text('"""Dominion embedded paper engine."""\\n', encoding="utf-8")
+    (source / "__init__.py").write_text('"""Dominion embedded paper engine."""\n', encoding="utf-8")
     for name in ("crypto_arbitrage.py", "crypto_feeds.py", "crypto_monitor.py", "crypto_api.py", "crypto_service.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
@@ -103,7 +103,7 @@ def configure_manifest() -> None:
     ):
         tag = f'<uses-permission android:name="{permission}" />'
         if tag not in text:
-            text = text.replace("<application", tag + "\\n    <application", 1)
+            text = text.replace("<application", tag + "\n    <application", 1)
 
     attribute = 'android:networkSecurityConfig="@xml/network_security_config"'
     if attribute not in text:
@@ -308,14 +308,14 @@ def configure_native_bridge() -> None:
     activity = candidates[0]
     text = require(activity)
     if "TradingEnginePlugin" not in text:
-        package_line = re.search(r"^package\\s+[\\w.]+;", text, re.M)
+        package_line = re.search(r"^package\s+[\w.]+;", text, re.M)
         if not package_line:
             raise SystemExit("Could not identify MainActivity package.")
-        text = text[:package_line.end()] + "\\n\\nimport android.os.Bundle;\\nimport com.dominion.aitradingdesk.TradingEnginePlugin;" + text[package_line.end():]
+        text = text[:package_line.end()] + "\n\nimport android.os.Bundle;\nimport com.dominion.aitradingdesk.TradingEnginePlugin;" + text[package_line.end():]
         if "onCreate(" in text:
             text = re.sub(
-                r"(protected void onCreate\\(Bundle savedInstanceState\\)\\s*\\{)",
-                r"\\1\\n        registerPlugin(TradingEnginePlugin.class);",
+                r"(protected void onCreate\(Bundle savedInstanceState\)\s*\{)",
+                r"\1\n        registerPlugin(TradingEnginePlugin.class);",
                 text, count=1,
             )
         else:
