@@ -3,7 +3,7 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 def test_dexscreener_discovers_token_and_enriches_pair():
     def fake(url, timeout, **kwargs):
         if url.endswith("/token-profiles/latest/v1"):
-            return [{"chainId":"ethereum","tokenAddress":"0xabc","description":"test"}]
+            return [{"chainId":"ethereum","tokenAddress":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","description":"test"}]
         return [{"baseToken":{"symbol":"ABC","name":"Alpha"},"pairAddress":"0xpool",
                  "priceUsd":"0.5","liquidity":{"usd":50000},"volume":{"h24":12000},
                  "txns":{"h24":{"buys":12,"sells":3}},"pairCreatedAt":1700000000000,"url":"https://dex"}]
@@ -21,8 +21,8 @@ def test_goplus_uses_free_tier_without_token():
     calls = []
     def fake(url, timeout, **kwargs):
         calls.append(kwargs.get("headers", {}))
-        return {"code":1,"result":{"0xabc":{"is_honeypot":"0","is_open_source":"1"}}}
-    result=GoPlusSecurityFeed(fetch_json=fake).assess("ethereum","0xabc")
+        return {"code":1,"result":{"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"is_honeypot":"0","is_open_source":"1"}}}
+    result=GoPlusSecurityFeed(fetch_json=fake).assess("ethereum","0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     assert result["status"]=="DATA_RETURNED_REQUIRES_REVIEW"
     assert calls == [{}]
 
@@ -30,11 +30,37 @@ def test_goplus_flags_honeypot_and_missing_fields_not_safe():
     calls = []
     def fake(url, timeout, **kwargs):
         calls.append(kwargs.get("headers", {}))
-        return {"code":1,"result":{"0xabc":{"is_honeypot":"1","is_open_source":"0"}}}
-    result=GoPlusSecurityFeed(fetch_json=fake,token="test-token").assess("ethereum","0xabc")
+        return {"code":1,"result":{"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"is_honeypot":"1","is_open_source":"0"}}}
+    result=GoPlusSecurityFeed(fetch_json=fake,token="test-token").assess("ethereum","0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     assert calls == [{"Authorization":"Bearer test-token"}]
     assert "HONEYPOT" in result["risks"]
     assert "UNVERIFIED_CONTRACT" in result["risks"]
+
+def test_goplus_accepts_dexscreener_avax_alias():
+    calls = []
+    address = "0x" + "b" * 40
+    def fake(url, timeout, **kwargs):
+        calls.append(url)
+        return {"code":1,"result":{address:{"is_honeypot":"0"}}}
+    result = GoPlusSecurityFeed(fetch_json=fake).assess("avax", address)
+    assert result["status"] == "DATA_RETURNED_REQUIRES_REVIEW"
+    assert "/43114?" in calls[0]
+
+
+def test_goplus_rejects_malformed_contract_address_without_request():
+    calls = []
+    def fake(url, timeout, **kwargs):
+        calls.append(url)
+        raise AssertionError("invalid address must not make a network request")
+    result = GoPlusSecurityFeed(fetch_json=fake).assess("ethereum", "0xabc")
+    assert result["status"] == "INVALID_CONTRACT_ADDRESS"
+    assert calls == []
+
+
+def test_goplus_reports_unsupported_dex_chain():
+    result = GoPlusSecurityFeed(fetch_json=lambda *args, **kwargs: None).assess("solana", "0x" + "c" * 40)
+    assert result["status"] == "UNSUPPORTED_CHAIN"
+
 
 def test_public_rss_parses_headlines():
     xml="<rss><channel><item><title>Bitcoin bullish adoption</title><description>growth</description><pubDate>today</pubDate></item></channel></rss>"
