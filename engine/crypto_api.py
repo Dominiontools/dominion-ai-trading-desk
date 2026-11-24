@@ -6,6 +6,7 @@ endpoints. It binds only to 127.0.0.1 so it is not a remotely reachable API.
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
@@ -42,9 +43,20 @@ def make_handler(
     class ReadOnlyHandler(BaseHTTPRequestHandler):
         server_version = "DominionPaperAPI/0.1"
 
+        _allowed_origins = {"https://localhost", "http://localhost:5173"}
+
+        def _cors(self) -> None:
+            origin = self.headers.get("Origin")
+            if origin in self._allowed_origins:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
         def _send(self, status: int, payload: dict) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             self.send_response(status)
+            self._cors()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
@@ -52,12 +64,26 @@ def make_handler(
             self.end_headers()
             self.wfile.write(body)
 
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            if self.headers.get("Origin") not in self._allowed_origins:
+                self._send(403, {"error": "origin_not_allowed"})
+                return
+            self.send_response(204)
+            self._cors()
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_GET(self) -> None:  # noqa: N802
-            if self.path == "/health":
+            origin = self.headers.get("Origin")
+            if origin and origin not in self._allowed_origins:
+                self._send(403, {"error": "origin_not_allowed"})
+                return
+            route = urlsplit(self.path)
+            if route.path == "/health":
                 self._send(200, {"ok": True, "mode": "PAPER_ONLY",
                                  "orders_enabled": False})
                 return
-            if self.path == "/api/crypto/status":
+            if route.path == "/api/crypto/status":
                 try:
                     status = get_status()
                     if not isinstance(status, dict):
@@ -70,11 +96,11 @@ def make_handler(
                     self._send(503, {"ok": False, "status": "unavailable",
                                      "mode": "PAPER_ONLY", "orders_enabled": False})
                 return
-            if self.path.startswith("/api/crypto/decisions"):
+            if route.path == "/api/crypto/decisions":
                 limit = 50
-                if "?" in self.path:
-                    from urllib.parse import parse_qs, urlsplit
-                    raw = parse_qs(urlsplit(self.path).query).get("limit", ["50"])[0]
+                if route.query:
+                    from urllib.parse import parse_qs
+                    raw = parse_qs(route.query).get("limit", ["50"])[0]
                     try:
                         limit = max(1, min(100, int(raw)))
                     except ValueError:
