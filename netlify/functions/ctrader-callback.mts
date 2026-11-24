@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+import { getDeployStore, getStore } from "@netlify/blobs";
 import { createCipheriv, randomBytes } from "node:crypto";
 
 const REDIRECT_URI =
@@ -39,7 +39,7 @@ function encryptTokens(payload: unknown, keyText: string) {
   };
 }
 
-export default async (request: Request) => {
+export default async (request: Request, context: { deploy: { context: string } }) => {
   if (request.method !== "GET") {
     return html("Method not allowed", "Use the cTrader authorization link with a browser.", 405);
   }
@@ -60,7 +60,9 @@ export default async (request: Request) => {
     // Opening the callback URL without a code starts the OAuth authorization.
     if (!code && !returnedState) {
       const nonce = randomBytes(32).toString("base64url");
-      const states = getStore({ name: "dominion-ctrader-oauth", consistency: "strong" });
+      const states = context.deploy.context === "production"
+        ? getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" })
+        : getDeployStore({ name: "dominion-ctrader-oauth-preview", consistency: "strong" });
       await states.setJSON(`state/${nonce}`, { createdAt: Date.now() }, { onlyIfNew: true });
 
       const authorize = new URL(AUTHORIZE_URL);
@@ -79,7 +81,9 @@ export default async (request: Request) => {
       return html("Invalid callback", "The authorization response is incomplete. Start again from the Dominion app.", 400);
     }
 
-    const states = getStore({ name: "dominion-ctrader-oauth", consistency: "strong" });
+    const states = context.deploy.context === "production"
+      ? getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" })
+      : getDeployStore({ name: "dominion-ctrader-oauth-preview", consistency: "strong" });
     const stateKey = `state/${returnedState}`;
     const stateRecord = await states.get(stateKey, { type: "json" }) as { createdAt?: number } | null;
     if (!stateRecord || typeof stateRecord.createdAt !== "number" || Date.now() - stateRecord.createdAt > 10 * 60 * 1000) {
@@ -116,7 +120,9 @@ export default async (request: Request) => {
     }
 
     const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
-    const tokenStore = getStore({ name: "dominion-ctrader-oauth", consistency: "strong" });
+    const tokenStore = context.deploy.context === "production"
+      ? getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" })
+      : getDeployStore({ name: "dominion-ctrader-oauth-preview", consistency: "strong" });
     await tokenStore.setJSON("account/tokens", encrypted);
 
     return html(
