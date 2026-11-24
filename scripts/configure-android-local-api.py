@@ -105,6 +105,7 @@ def configure_manifest() -> None:
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
         "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.INTERNET",
     ):
@@ -232,6 +233,14 @@ public class TradingEngineService extends Service {
             startupThread.start();
         }
         return START_STICKY;
+    }
+
+    private void startForegroundForApi(Notification notification) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        }
     }
 
     private void startForegroundForApi(Notification notification) {
