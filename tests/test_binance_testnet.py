@@ -151,3 +151,19 @@ def test_cancel_refuses_to_remove_bracket_from_filled_position(monkeypatch):
     with pytest.raises(PermissionError, match="filled position"):
         client.cancel_order_list(symbol="BTCUSDT", list_client_order_id="dominion123")
     assert calls == ["GET"]
+
+
+def test_exchange_info_is_public_and_pinned_to_testnet(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url, headers=headers)
+        return {"symbols": []}
+    client = make_client(monkeypatch, transport)
+    result = client.exchange_info("BTCUSDT")
+    parsed = parse_qs(urlsplit(captured["url"]).query)
+    assert result == {"symbols": []}
+    assert captured["method"] == "GET"
+    assert urlsplit(captured["url"]).netloc == "testnet.binance.vision"
+    assert urlsplit(captured["url"]).path == "/api/v3/exchangeInfo"
+    assert parsed["symbol"] == ["BTCUSDT"]
+    assert captured["headers"] == {}
