@@ -119,6 +119,57 @@ class BinanceSpotTestnetClient:
         }
         return self._signed("POST", "/api/v3/order", params)
 
+    def place_protected_buy_otoco(self, *, symbol: str, quantity: str, entry_price: str,
+                                  stop_loss: str, take_profit: str, list_client_order_id: str) -> dict:
+        """Submit a FOK BUY entry with exchange-held OCO exit legs (Spot Testnet only)."""
+        if not self.allow_orders:
+            raise PermissionError("Binance Testnet orders are disabled.")
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        if not list_client_order_id or len(list_client_order_id) > 20 or not list_client_order_id.isascii():
+            raise ValueError("Order-list client ID must be 1-20 ASCII characters.")
+        qty = _positive_decimal(quantity, "quantity")
+        entry = _positive_decimal(entry_price, "entry price")
+        stop = _positive_decimal(stop_loss, "stop loss")
+        target = _positive_decimal(take_profit, "take profit")
+        if not Decimal(stop) < Decimal(entry) < Decimal(target):
+            raise ValueError("BUY bracket requires stop-loss < entry < take-profit.")
+        params = {
+            "symbol": pair, "listClientOrderId": list_client_order_id,
+            "workingType": "LIMIT", "workingSide": "BUY",
+            "workingPrice": entry, "workingQuantity": qty,
+            "workingTimeInForce": "FOK",
+            "workingClientOrderId": list_client_order_id + "E",
+            "pendingSide": "SELL", "pendingQuantity": qty,
+            "pendingAboveType": "LIMIT_MAKER", "pendingAbovePrice": target,
+            "pendingAboveClientOrderId": list_client_order_id + "T",
+            "pendingBelowType": "STOP_LOSS_LIMIT",
+            "pendingBelowStopPrice": stop, "pendingBelowPrice": stop,
+            "pendingBelowTimeInForce": "GTC",
+            "pendingBelowClientOrderId": list_client_order_id + "S",
+            "newOrderRespType": "RESULT",
+        }
+        return self._signed("POST", "/api/v3/orderList/otoco", params)
+
+    def query_order_list(self, *, list_client_order_id: str) -> dict:
+        if not list_client_order_id or len(list_client_order_id) > 20:
+            raise ValueError("A valid order-list client ID is required.")
+        return self._signed("GET", "/api/v3/orderList", {"origClientOrderId": list_client_order_id})
+
+    def query_order_by_client_id(self, *, symbol: str, client_order_id: str) -> dict:
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not client_order_id or len(client_order_id) > 36:
+            raise ValueError("A valid symbol and client order ID are required.")
+        return self._signed("GET", "/api/v3/order", {"symbol": pair, "origClientOrderId": client_order_id})
+
+    def cancel_order_list(self, *, symbol: str, list_client_order_id: str) -> dict:
+        if not self.allow_orders:
+            raise PermissionError("Binance Testnet order actions are disabled.")
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not list_client_order_id or len(list_client_order_id) > 20:
+            raise ValueError("A valid symbol and order-list client ID are required.")
+        return self._signed("DELETE", "/api/v3/orderList", {"symbol": pair, "listClientOrderId": list_client_order_id})
     def query_order(self, *, symbol: str, order_id: int) -> dict:
         pair = symbol.strip().upper()
         if not pair.isalnum() or order_id <= 0:
