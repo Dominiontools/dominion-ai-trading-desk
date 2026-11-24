@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "feat/demo-first-foundation"]
+    branches: ["main", "feat/demo-first-foundation", "feat/android-app", "feat/crypto-arbitrage-paper"]
   pull_request:
     branches: ["main"]
 
