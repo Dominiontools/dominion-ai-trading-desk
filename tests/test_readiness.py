@@ -25,6 +25,7 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         crypto_testnet_authorized=True,
         crypto_testnet_orders_verified=True,
         verified_fee_exchanges=("Binance", "Bitget", "HTX"),
+        agent_workflow_verified=True,
     )
     assert result["overall_status"] == "READY_FOR_FINAL_REVIEW"
     assert result["live_trading_enabled"] is False
