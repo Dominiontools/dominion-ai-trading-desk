@@ -1,0 +1,11 @@
+{
+  "name": "dominion-ctrader-auth",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0"
+  }
+}
