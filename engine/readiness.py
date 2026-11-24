@@ -16,6 +16,7 @@ def build_readiness(
     crypto_testnet_authorized: bool = False,
     crypto_testnet_orders_verified: bool = False,
     verified_fee_exchanges: tuple[str, ...] = (),
+    agent_workflow_verified: bool = False,
 ) -> dict:
     """Return the next actionable integration tasks without claiming completion."""
     tasks = [
@@ -68,7 +69,7 @@ def build_readiness(
         {
             "id": "agent_execution",
             "title": "Connect all specialist agents to validated execution and exit workflows",
-            "status": "BLOCKED_UNTIL_DEMO_EXECUTION",
+            "status": "VERIFIED" if agent_workflow_verified else "BLOCKED_UNTIL_DEMO_EXECUTION",
             "detail": "Scanner, risk, sniper, whale, rug, exit, hype and desk manager are not all autonomous execution agents yet.",
             "owner": "DEVELOPMENT",
         },
