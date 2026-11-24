@@ -63,6 +63,20 @@ def test_records_paper_opportunity_without_submitting_orders(tmp_path):
     assert len(read_records(log)) == 1
 
 
+
+def test_incomplete_exchange_snapshot_fails_closed(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "decisions.jsonl"
+    monitor = CryptoPaperMonitor(
+        FakeFeeds(make_quotes(now)[:2]), decision_log=log,
+        costs_by_exchange=FEES, clock=lambda: now,
+    )
+    result = monitor.poll_once("BTC/USDT")
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "INCOMPLETE_OR_DUPLICATE_EXCHANGE_SNAPSHOT"
+    assert result["missing_exchanges"] == ["HTX"]
+
+
 def test_records_feed_failure(tmp_path):
     now = datetime.now(timezone.utc)
     log = tmp_path / "decisions.jsonl"
