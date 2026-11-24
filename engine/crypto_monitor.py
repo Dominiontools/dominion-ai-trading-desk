@@ -54,8 +54,12 @@ class CryptoPaperMonitor:
             "orders_enabled": False,
         }
         required = {"Binance", "Bitget", "HTX"}
+        venue_errors: dict[str, str] = {}
         try:
-            quotes = self.feeds.snapshot(symbol)
+            if hasattr(self.feeds, "snapshot_with_diagnostics"):
+                quotes, venue_errors = self.feeds.snapshot_with_diagnostics(symbol)
+            else:
+                quotes = self.feeds.snapshot(symbol)
         except Exception as exc:
             record.update(status="BLOCKED", reason="MARKET_DATA_FETCH_FAILED",
                           error_type=type(exc).__name__, error=str(exc)[:240])
@@ -63,14 +67,17 @@ class CryptoPaperMonitor:
 
         finished = self.clock()
         exchanges_seen = {q.exchange for q in quotes}
-        missing_exchanges = sorted(required.difference(exchanges_seen))
-        if missing_exchanges or len(exchanges_seen) != len(quotes):
+        duplicates = len(exchanges_seen) != len(quotes)
+        record["venue_errors"] = venue_errors
+        record["available_exchanges"] = sorted(exchanges_seen)
+        if duplicates or len(exchanges_seen) < 2:
             record.update(
                 status="BLOCKED",
-                reason="INCOMPLETE_OR_DUPLICATE_EXCHANGE_SNAPSHOT",
-                missing_exchanges=missing_exchanges,
+                reason="INSUFFICIENT_INDEPENDENT_EXCHANGES",
+                missing_exchanges=sorted(required.difference(exchanges_seen)),
                 exchanges_seen=sorted(exchanges_seen),
                 quote_count=len(quotes),
+                error="At least two independent exchanges with valid quotes are required.",
             )
             return self._write(record)
 
@@ -88,7 +95,7 @@ class CryptoPaperMonitor:
             }
             for q in quotes
         ]
-        missing_fees = sorted(required.difference(self.costs_by_exchange))
+        missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
         if missing_fees:
             record.update(
                 status="BLOCKED", reason="FEE_CONFIG_MISSING",
