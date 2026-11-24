@@ -73,6 +73,11 @@ def test_embedded_service_starts_read_only_api_and_stops(tmp_path, monkeypatch):
         assert status["mode"] == "PAPER_ONLY"
         assert status["orders_enabled"] is False
         assert status["engine"] == "running"
+        assert status["paper_trading"]["mode"] == "PAPER_ONLY"
+        assert status["paper_trading"]["starting_equity"] == 20.0
+        assert status["paper_trading"]["open_position"] is None
+        assert status["paper_trading"]["orders_enabled"] is False
+        assert status["agents"]["SNIPER"]["status"] == "READY_FOR_VALIDATED_SIGNALS"
     finally:
         stopped = service.stop_embedded()
 
