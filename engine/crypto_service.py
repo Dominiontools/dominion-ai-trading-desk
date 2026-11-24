@@ -119,13 +119,19 @@ def main() -> None:
         signal.signal(signal.SIGTERM, request_stop)
 
     worker.start()
+    api_thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.5}, daemon=True)
+    api_thread.start()
     print(f"Dominion paper API listening on http://127.0.0.1:{api_port}")
     print(f"Symbols: {', '.join(symbols)} | interval: {interval}s | orders: disabled")
     try:
-        server.serve_forever(poll_interval=0.5)
+        while not stop_event.wait(0.5):
+            pass
     finally:
         stop_event.set()
+        server.shutdown()
         server.server_close()
+        api_thread.join(timeout=3)
         worker.join(timeout=10)
         state["engine"] = "stopped"
 
