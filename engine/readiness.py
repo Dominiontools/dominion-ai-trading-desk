@@ -54,8 +54,8 @@ def build_readiness(
             "title": "Connect exchange testnet accounts and verify test orders",
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
-                      else "BINANCE_ADAPTER_READY_AWAITING_CONNECTION",
-            "detail": "A Binance Spot Testnet limit-order adapter is built and gated, but is not wired into the phone service or dashboard. Testnet credentials, symbol filters, fee validation and test-order verification remain outstanding. Bitget and HTX order adapters are not built.",
+                      else "BINANCE_RISK_GATE_READY_PROTECTION_PENDING",
+            "detail": "A Binance Spot Testnet limit-order adapter and default-deny 0.5%/2% risk planner are built. The planner requires verified filters, account-tier fees, fresh quotes and one-position checks. Entry submission remains blocked until protective stop-loss/take-profit order handling, credential storage, phone-service wiring and an authorized testnet lifecycle test are complete. Bitget and HTX order adapters are not built.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
         },
         {
