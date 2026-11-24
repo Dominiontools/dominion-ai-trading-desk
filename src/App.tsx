@@ -182,6 +182,12 @@ function CryptoMonitorPanel() {
   const agentStates = status?.agents && typeof status.agents === "object"
     ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
     : {};
+  const readiness = status?.integration_readiness && typeof status.integration_readiness === "object"
+    ? status.integration_readiness as { overall_status?: unknown; verified_tasks?: unknown; total_tasks?: unknown; tasks?: unknown }
+    : null;
+  const readinessTasks = Array.isArray(readiness?.tasks)
+    ? readiness.tasks.filter((task): task is Record<string, unknown> => !!task && typeof task === "object")
+    : [];
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -198,6 +204,15 @@ function CryptoMonitorPanel() {
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
+    </div>
+    <div className="agent-runtime-list readiness-panel">
+      <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 8)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
+      {readinessTasks.map(task => <div className="readiness-row" key={String(task.id)}>
+        <div><b>{String(task.title || task.id)}</b><small>{String(task.detail || "")}</small></div>
+        <span className={"readiness-state " + String(task.status || "UNKNOWN").toLowerCase()}>{String(task.status || "UNKNOWN").replaceAll("_", " ")}</span>
+      </div>)}
+      {readinessTasks.length === 0 && <div className="decision-empty"><div><b>Integration checklist unavailable</b><span>Start the phone engine to load the outstanding work and external approval gates.</span></div></div>}
+      <div className="panel-foot">This checklist separates code work from external approvals and tests. Live-money trading remains locked, even after demo checks pass.</div>
     </div>
     <div className="agent-runtime-list paper-book-panel">
       <div className="decision-list-head"><b>PAPER TRADING ACCOUNT</b><span>{paperTrading ? "CONNECTED TO LOCAL ENGINE" : "WAITING FOR ENGINE"}</span></div>
