@@ -6,6 +6,7 @@ These are REST snapshots, not exchange WebSocket streams.
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Callable
 from urllib.parse import urlencode
@@ -88,5 +89,12 @@ class PublicCryptoFeeds:
                              stamp, float(tick["bid"][1]), float(tick["ask"][1]))
 
     def snapshot(self, symbol: str) -> list[ExchangeQuote]:
-        """Fetch each exchange independently; failures are raised, never hidden."""
-        return [self.binance(symbol), self.bitget(symbol), self.htx(symbol)]
+        """Fetch exchanges concurrently to reduce inter-venue collection skew.
+
+        Any venue failure aborts the snapshot; partial sets are not presented as
+        a complete three-exchange comparison.
+        """
+        methods = (self.binance, self.bitget, self.htx)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = [pool.submit(method, symbol) for method in methods]
+            return [future.result(timeout=self.timeout + 1.0) for future in futures]
