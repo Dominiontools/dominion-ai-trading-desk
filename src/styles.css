@@ -45,3 +45,5 @@
 .agent-runtime-state.running,.agent-runtime-state.paper_ready,.agent-runtime-state.coordinator_ready{color:#8bd8ac}
 .agent-runtime-state.waiting_for_feed,.agent-runtime-state.waiting_for_evidence,.agent-runtime-state.waiting_for_positions{color:#e8bd76}
 @media(min-width:900px){.agent-runtime-list{display:grid;grid-template-columns:1fr 1fr;column-gap:24px}.agent-runtime-list>.decision-list-head{grid-column:1/-1}}
+
+.feed-error{color:#f0a0a0!important;white-space:normal;overflow-wrap:anywhere}
