@@ -7,6 +7,7 @@ interface TradingEngineBridge {
   status(): Promise<{ running: boolean; error?: string }>;
   saveBinanceTestnetCredentials(options: { apiKey: string; apiSecret: string }): Promise<{ saved: boolean; storage: string }>;
   binanceTestnetCredentialStatus(): Promise<{ saved: boolean; storage: string }>;
+  getBinanceTestnetAccount(): Promise<{ connected: boolean; environment?: string; can_trade?: boolean; can_withdraw?: boolean; account_type?: string; balances?: { asset: string; free: string; locked: string }[]; error?: string; exchange_code?: number | null }>;
   clearBinanceTestnetCredentials(): Promise<{ cleared: boolean }>;
 }
 const TradingEngine = registerPlugin<TradingEngineBridge>("TradingEngine");
@@ -95,6 +96,8 @@ function CryptoMonitorPanel() {
   const [credentialSaved, setCredentialSaved] = useState(false);
   const [credentialMessage, setCredentialMessage] = useState("Credentials not saved");
   const [credentialBusy, setCredentialBusy] = useState(false);
+  const [testnetAccount, setTestnetAccount] = useState<{ connected: boolean; environment?: string; can_trade?: boolean; can_withdraw?: boolean; account_type?: string; balances?: { asset: string; free: string; locked: string }[]; error?: string; exchange_code?: number | null } | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
   const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
     Capacitor.isNativePlatform() ? "stopped" : "web"
   );
@@ -130,12 +133,29 @@ function CryptoMonitorPanel() {
     }
   }, [isNativeApp, testnetApiKey, testnetApiSecret]);
 
+  const checkTestnetAccount = useCallback(async () => {
+    if (!isNativeApp || !credentialSaved) return;
+    setAccountBusy(true);
+    setTestnetAccount(null);
+    try {
+      const result = await TradingEngine.getBinanceTestnetAccount();
+      setTestnetAccount(result);
+      setCredentialMessage(result.connected ? "Connected to Binance Spot Testnet (read-only account check)." : "Testnet account check failed. Verify credentials and network.");
+    } catch {
+      setTestnetAccount({ connected: false, error: "ACCOUNT_CHECK_FAILED" });
+      setCredentialMessage("Could not check the Testnet account.");
+    } finally {
+      setAccountBusy(false);
+    }
+  }, [isNativeApp, credentialSaved]);
+
   const clearTestnetCredentials = useCallback(async () => {
     if (!isNativeApp) return;
     setCredentialBusy(true);
     try {
       await TradingEngine.clearBinanceTestnetCredentials();
       setCredentialSaved(false);
+      setTestnetAccount(null);
       setTestnetApiKey("");
       setTestnetApiSecret("");
       setCredentialMessage("Stored credentials and their encryption key were cleared.");
@@ -259,9 +279,23 @@ function CryptoMonitorPanel() {
       <input aria-label="Binance Testnet API secret" type="password" autoComplete="off" placeholder="Binance Spot Testnet API secret" value={testnetApiSecret} onChange={event => setTestnetApiSecret(event.target.value)} disabled={!isNativeApp || credentialBusy} />
       <div className="engine-control-actions">
         <button className="engine-start" onClick={() => void saveTestnetCredentials()} disabled={!isNativeApp || credentialBusy || !testnetApiKey.trim() || !testnetApiSecret.trim()}>Save encrypted credentials</button>
+        <button className="engine-start" onClick={() => void checkTestnetAccount()} disabled={!isNativeApp || !credentialSaved || accountBusy || credentialBusy}>{accountBusy ? "Checking account…" : "Check Testnet account"}</button>
         <button className="engine-stop" onClick={() => void clearTestnetCredentials()} disabled={!isNativeApp || credentialBusy || !credentialSaved}>Clear credentials</button>
       </div>
       <small className="engine-control-state">{isNativeApp ? credentialMessage : "Install the Android app to use device-secure credential storage."}</small>
+      {testnetAccount && <div className="decision-list">
+        <div className="decision-list-head"><b>BINANCE SPOT TESTNET ACCOUNT</b><span>{testnetAccount.connected ? "CONNECTED · READ ONLY" : "NOT CONNECTED"}</span></div>
+        {testnetAccount.connected ? <>
+          <div className="crypto-summary">
+            <div><small>ENVIRONMENT</small><b>{testnetAccount.environment || "—"}</b></div>
+            <div><small>ACCOUNT TYPE</small><b>{testnetAccount.account_type || "—"}</b></div>
+            <div><small>TRADING PERMISSION</small><b>{testnetAccount.can_trade ? "Enabled" : "Disabled"}</b></div>
+            <div><small>WITHDRAWAL PERMISSION</small><b>{testnetAccount.can_withdraw ? "Enabled" : "Disabled"}</b></div>
+          </div>
+          {(testnetAccount.balances || []).length === 0 ? <div className="decision-empty"><div><b>No non-zero balances returned</b><span>The Testnet account responded, but no asset balance is currently available.</span></div></div> :
+            (testnetAccount.balances || []).map(balance => <div className="decision-row" key={balance.asset}><b>{balance.asset}</b><span>Free {balance.free}</span><span>Locked {balance.locked}</span></div>)}
+        </> : <div className="decision-empty"><div><b>Account check failed</b><span>{testnetAccount.error || "The exchange did not confirm the account."}{testnetAccount.exchange_code ? " (Exchange code " + testnetAccount.exchange_code + ")" : ""}</span></div></div>}
+      </div>}
     </div>
     <div className="crypto-summary">
       <div><small>ENGINE</small><b>{engine}</b></div>
