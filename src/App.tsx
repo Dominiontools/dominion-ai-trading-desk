@@ -23,7 +23,6 @@ const watch = [
 
 export default function App() {
   const [market, setMarket] = useState<Market>("All markets");
-  const [paused, setPaused] = useState(false);
   const filtered = useMemo(() => market === "All markets" ? watch : watch.filter(x => x.group === market), [market]);
 
   return <main className="shell">
@@ -41,7 +40,7 @@ export default function App() {
     <section className="content">
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / OVERVIEW</div><h1>Trading command center</h1></div>
-        <div className="top-actions"><span className="demo-pill"><span/> DEMO MODE ONLY</span><button className={paused ? "resume" : "pause"} onClick={() => setPaused(!paused)}>{paused ? "Resume scanner" : "Pause scanner"}</button></div>
+        <div className="top-actions"><span className="demo-pill"><span/> PAPER MODE ONLY</span><span className="muted">Engine runs separately on this phone</span></div>
       </header>
 
       <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live orders are disabled. All future order routing must pass the Risk Agent and remain in demo/paper mode until separately approved.</span></div></div>
@@ -57,13 +56,13 @@ export default function App() {
       <div className="panel watch-panel">
         <div className="table-head"><span>INSTRUMENT</span><span>LAST PRICE</span><span>24H CHANGE</span><span>FEED STATUS</span></div>
         {filtered.map(item => <div className="watch-row" key={item.symbol}><div className="instrument"><b>{item.symbol}</b><small>{item.name}</small></div><b className="price">{item.price}</b><span className={item.tone === "up" ? "positive" : "negative"}>{item.tone === "up" ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {item.change}</span><span className="feed-pending">Awaiting data</span></div>)}
-        <div className="panel-foot">Illustrative interface values only — not live market prices.</div>
+        <div className="panel-foot">No fabricated prices. Forex and gold will show live data after cTrader is connected; crypto snapshots appear in the paper monitor below.</div>
       </div>
 
       <CryptoMonitorPanel />
 
-      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">{paused ? "Scanner paused" : "System staged"}</span></div>
-      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className={i === 1 || i === 7 ? "agent-state ready" : "agent-state"}>{i === 1 || i === 7 ? "READY" : "STAGED"}</span></div><b>{name}</b><small>{role}</small><p>{name === "SCANNER" && paused ? "Scanner paused by operator" : status}</p></div>)}</div>
+      <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent system</h2></div><span className="muted">"System staged — agents not yet fully connected"</span></div>
+      <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state"}>STAGED</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
     </section>
   </main>;
