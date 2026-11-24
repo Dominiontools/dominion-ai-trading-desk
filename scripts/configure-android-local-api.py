@@ -243,14 +243,6 @@ public class TradingEngineService extends Service {
         }
     }
 
-    private void startForegroundForApi(Notification notification) {
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        } else {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-        }
-    }
-
     private void startPythonEngine() {
         try {
             if (!Python.isStarted()) {
