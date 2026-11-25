@@ -84,9 +84,11 @@ export default async (request: Request, context: { deploy: { context: string } }
     return html("cTrader authorization not completed", "cTrader did not grant access. Return to Dominion AI Trading Desk and try again.", 400, { "set-cookie": clearCookie });
   }
 
+  let stage = "checking configuration";
   try {
     const clientId = requiredEnv("CTRADER_CLIENT_ID");
     const clientSecret = requiredEnv("CTRADER_CLIENT_SECRET");
+    stage = "opening secure storage";
     const storesForDeploy = stores(context);
 
     // cTrader's documented redirect response returns the authorization code;
@@ -94,6 +96,7 @@ export default async (request: Request, context: { deploy: { context: string } }
     // with a short-lived, HttpOnly, Secure, SameSite=Lax cookie instead.
     if (!code) {
       const nonce = randomBytes(32).toString("base64url");
+      stage = "creating authorization session";
       await storesForDeploy.state.setJSON(
         `state/${nonce}`,
         { createdAt: Date.now() },
@@ -119,16 +122,19 @@ export default async (request: Request, context: { deploy: { context: string } }
       });
     }
 
+    stage = "validating browser session";
     const nonce = readCookie(request, STATE_COOKIE);
     if (!nonce || !/^[A-Za-z0-9_-]{40,60}$/.test(nonce)) {
       return html("Authorization session missing", "The browser authorization session was not preserved. Start again from Dominion AI Trading Desk in the same browser.", 400, { "set-cookie": clearCookie });
     }
 
     const stateKey = `state/${nonce}`;
+    stage = "reading authorization session";
     const stateRecord = await storesForDeploy.state.get(stateKey, { type: "json" }) as { createdAt?: number } | null;
     if (!stateRecord || typeof stateRecord.createdAt !== "number" || Date.now() - stateRecord.createdAt > 10 * 60 * 1000) {
       return html("Authorization session expired", "Please start cTrader authorization again from Dominion AI Trading Desk.", 400, { "set-cookie": clearCookie });
     }
+    stage = "consuming authorization session";
     await storesForDeploy.state.delete(stateKey);
 
     const tokenParams = new URLSearchParams({
@@ -138,6 +144,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       client_id: clientId,
       client_secret: clientSecret,
     });
+    stage = "exchanging cTrader authorization code";
     const tokenResponse = await fetch(`${TOKEN_URL}?${tokenParams.toString()}`, {
       method: "GET",
       headers: { Accept: "application/json" },
@@ -147,6 +154,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       return html("Token exchange failed", "cTrader did not accept the authorization code. Start again; no token was saved.", 502, { "set-cookie": clearCookie });
     }
 
+    stage = "reading cTrader token response";
     const tokenData = await tokenResponse.json() as Record<string, unknown>;
     if (
       tokenData.errorCode ||
@@ -159,7 +167,9 @@ export default async (request: Request, context: { deploy: { context: string } }
       return html("Token exchange failed", "cTrader returned an incomplete authorization response. No token was saved.", 502, { "set-cookie": clearCookie });
     }
 
+    stage = "encrypting cTrader tokens";
     const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
+    stage = "saving encrypted cTrader tokens";
     await storesForDeploy.tokens.setJSON("account/tokens", encrypted);
 
     return html(
@@ -169,9 +179,11 @@ export default async (request: Request, context: { deploy: { context: string } }
       { "set-cookie": clearCookie },
     );
   } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("cTrader callback failed", { stage, error: detail });
     const safeMessage = error instanceof Error && error.message.startsWith("Missing required Netlify environment variable:")
       ? error.message
-      : "The callback could not complete securely. Check the Netlify function logs and configuration.";
+      : `The callback failed while ${stage}. Please start authorization again after the issue is fixed.`;
     return html("Callback setup incomplete", safeMessage, 500, { "set-cookie": clearCookie });
   }
 };
