@@ -284,6 +284,15 @@ class ConfluencePaperStrategy:
                     "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
         try:
             snapshot = risk_context_provider.snapshot(now=current)
+            if snapshot.context.open_positions > 0:
+                return {
+                    "event": "TESTNET_POSITION_OPEN",
+                    "mode": "BINANCE_SPOT_TESTNET",
+                    "orders_enabled": True,
+                    "symbol": symbol,
+                    "open_positions": snapshot.context.open_positions,
+                    "detail": "An existing or unmanaged Spot holding is present; no additional entry was sent.",
+                }
             routed = router.submit_verified_setup(
                 setup, quote, snapshot=snapshot, fees=None, now=current,
             )
