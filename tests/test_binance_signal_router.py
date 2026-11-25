@@ -8,7 +8,7 @@ from engine.risk_execution import SpotRiskContext, VerifiedFees
 
 
 class FakeRulesClient:
-    allow_orders = False
+    allow_orders = True
 
     def __init__(self):
         self.exchange_info_calls = 0
@@ -148,3 +148,16 @@ def test_router_never_reports_protected_when_lifecycle_cannot_confirm_it():
     assert result["protected"] is False
     assert result["halted"] is True
     assert result["operator_action_required"] is True
+
+
+
+def test_router_refuses_to_route_when_testnet_order_gate_is_disabled():
+    router, client, lifecycle, setup, quote, context, fees, now = fixtures()
+    client.allow_orders = False
+    with pytest.raises(PermissionError, match="order gate is disabled"):
+        router.submit_setup(
+            setup, quote, context=context, fees=fees,
+            account_snapshot_verified=True, daily_loss_verified=True, now=now,
+        )
+    assert client.exchange_info_calls == 0
+    assert lifecycle.calls == []
