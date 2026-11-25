@@ -119,3 +119,128 @@ def test_confluence_strategy_blocks_stale_quote_before_position_management():
     )
     assert result["status"] == "BLOCKED"
     assert result["reason"] == "STALE_QUOTE_DATA"
+
+
+
+def test_confluence_strategy_routes_valid_setup_through_testnet_router():
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243, now, 10, 10)
+    setup = SimpleNamespace(
+        market="CRYPTO", side="BUY", symbol="BTCUSDT",
+        score=8, score_threshold=6, strategy="MTF_TEST",
+        stop_loss=1.12, target_2r=1.13,
+        execution_timeframe="15m", context_timeframe="4h",
+    )
+
+    class FakeStrategy:
+        def evaluate(self, *args, **kwargs):
+            return setup
+
+    class FakeProvider:
+        def snapshot(self, *, now=None):
+            return SimpleNamespace(context=object(), account_snapshot_verified=True,
+                                   daily_loss_verified=True)
+
+    class FakeRouter:
+        def __init__(self):
+            self.calls = []
+
+        def submit_verified_setup(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return {
+                "protected": True, "halted": False,
+                "operator_action_required": False, "orders_enabled": True,
+                "status": "PROTECTED",
+                "plan": {"quantity": "10", "max_planned_loss_quote": "0.5"},
+            }
+
+    strategy = ConfluencePaperStrategy()
+    strategy.strategy = FakeStrategy()
+    router = FakeRouter()
+    result = strategy.run_testnet_once(
+        execution, context, quote, router=router,
+        risk_context_provider=FakeProvider(), now=now,
+    )
+    assert result["event"] == "TESTNET_ORDER"
+    assert result["mode"] == "BINANCE_SPOT_TESTNET"
+    assert result["protected"] is True
+    assert result["score"] == 8
+    assert len(router.calls) == 1
+
+
+def test_testnet_strategy_blocks_without_fresh_quote_or_validated_context():
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243,
+                          now - timedelta(seconds=5), 10, 10)
+
+    class NeverRouter:
+        def submit_verified_setup(self, *args, **kwargs):
+            pytest.fail("Stale quote must be rejected before routing.")
+
+    class NeverProvider:
+        def snapshot(self, **kwargs):
+            pytest.fail("Stale quote must be rejected before account lookup.")
+
+    result = ConfluencePaperStrategy().run_testnet_once(
+        execution, context, quote, router=NeverRouter(),
+        risk_context_provider=NeverProvider(), now=now,
+    )
+    assert result["event"] == "TESTNET_BLOCKED"
+    assert result["reason"] == "STALE_QUOTE_DATA"
+
+
+def test_testnet_strategy_reports_protection_failure_as_blocked():
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243, now, 10, 10)
+    setup = SimpleNamespace(
+        market="CRYPTO", side="BUY", symbol="BTCUSDT",
+        score=8, score_threshold=6, strategy="MTF_TEST",
+        stop_loss=1.12, target_2r=1.13,
+        execution_timeframe="15m", context_timeframe="4h",
+    )
+
+    class FakeStrategy:
+        def evaluate(self, *args, **kwargs):
+            return setup
+
+    class FakeProvider:
+        def snapshot(self, *, now=None):
+            return object()
+
+    class FakeRouter:
+        def submit_verified_setup(self, *args, **kwargs):
+            return {"protected": False, "halted": True,
+                    "operator_action_required": True,
+                    "orders_enabled": False, "status": "PROTECTION_UNCONFIRMED"}
+
+    strategy = ConfluencePaperStrategy()
+    strategy.strategy = FakeStrategy()
+    result = strategy.run_testnet_once(
+        execution, context, quote, router=FakeRouter(),
+        risk_context_provider=FakeProvider(), now=now,
+    )
+    assert result["event"] == "TESTNET_BLOCKED"
+    assert result["halted"] is True
+    assert result["operator_action_required"] is True
