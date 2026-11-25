@@ -25,7 +25,7 @@ The view-only token is never overwritten. The scheduled engine refuses to run wi
 
 `ctrader-engine-cycle.mts` is a Netlify Scheduled Function configured for one cycle per minute. It is not a persistent WebSocket process and does not provide second-by-second Forex execution.
 
-The engine configuration is stored in Netlify Blobs at `account/engine-config`. If no configuration exists, automation is disabled. The dashboard can enable it only after trading authorization is verified and the user confirms the demo-automation warning.
+The engine configuration is stored in Netlify Blobs at `account/engine-config`. If no configuration exists, automation is disabled. The dashboard can configure the timeframe profile (scalp/intraday/swing), broker symbol watchlist, minimum confluence score, London/New York session filter, risk per trade and daily-loss stop. Risk can be reduced below the hard limits but cannot be raised above 0.5% per trade or 2% daily loss. The dashboard can enable automation only after trading authorization is verified and the user confirms the demo-automation warning.
 
 The cycle:
 1. Acquires a short-lived lock to avoid overlapping runs.
@@ -42,8 +42,8 @@ The broker-side stop-loss and take-profit remain active if the scheduled functio
 
 ## Risk and execution gates
 
-- Maximum planned price risk plus estimated round-trip commission: **0.5% of account equity per trade**.
-- Daily realized-loss stop: **2%**. Deal and cash-flow history must be complete to calculate it.
+- Maximum planned price risk plus estimated round-trip commission: **0.5% of account equity per trade**; the user may configure a lower value down to 0.05%.
+- Daily realized plus bot-position mark-to-market loss stop: **2% maximum**, configurable down to 0.5%. Deal and cash-flow history must be complete to calculate the realized component.
 - Maximum one open position; existing pending orders block a new entry.
 - Maximum spread: **20 bps**.
 - Maximum market-range slippage: **15 bps**.
