@@ -270,7 +270,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       expectedScope,
     );
     stage = "encrypting cTrader tokens";
-    const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
+    const encrypted = encryptTokens({ ...tokenData, issuedAt: Date.now() }, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
     stage = "saving encrypted cTrader tokens";
     const tokenKey = authorizationMode === "trading" ? "account/trading-tokens" : "account/tokens";
     const statusKey = authorizationMode === "trading" ? "account/trading-status" : "account/status";
