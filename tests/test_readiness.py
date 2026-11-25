@@ -65,5 +65,6 @@ def test_crypto_readiness_describes_verified_context_but_not_enabled_execution()
     crypto = next(task for task in result["tasks"] if task["id"] == "crypto_testnet")
     assert crypto["status"] == "BINANCE_ROUTER_AND_RISK_CONTEXT_READY_TESTNET_EXECUTION_PENDING"
     assert "daily-loss ledger" in crypto["detail"]
-    assert "not yet connected to the Android strategy loop" in crypto["detail"]
+    assert "wired into the Android strategy loop" in crypto["detail"]
+    assert "off-by-default Testnet automation setting" in crypto["detail"]
     assert result["live_trading_enabled"] is False
