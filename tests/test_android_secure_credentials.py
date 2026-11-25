@@ -24,3 +24,11 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "call.resolve" in script
     assert "call.resolve(apiSecret)" not in script
     assert "Log." not in script
+
+
+def test_android_python_bundle_includes_official_gmgn_read_only_and_sniper_modules():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    assert '"gmgn_api.py"' in script
+    assert '"gmgn_sniper.py"' in script
+    assert 'callAttr("start_embedded"' in script
+    assert 'loadGmgnApiKeyForNativeUse' in script
