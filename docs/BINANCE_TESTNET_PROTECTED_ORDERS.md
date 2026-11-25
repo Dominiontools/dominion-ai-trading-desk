@@ -68,3 +68,18 @@ The router is currently a tested integration component, not enabled in the
 Android strategy loop. The Android engine remains paper-only until account
 balance and daily-loss accounting are connected, Testnet order authorization
 is explicitly enabled, and end-to-end demo verification is completed.
+
+
+## Daily loss and account context
+
+The Binance Testnet risk context provider reads the account's USDT free and
+locked balances, requires the account to confirm `canTrade`, and obtains
+open-position state only from a successful full journal reconciliation. It
+uses USDT-only equity (excluding other assets) as a conservative sizing basis.
+Unknown account permissions, unresolved orders, or a corrupt daily-loss ledger
+block new entries.
+
+The append-only UTC daily-loss ledger records the conservative planned-risk
+amount only after Binance confirms a stop-loss exit. Entries are idempotent by
+order-list ID and are not double-counted after restart. Older journal entries
+without a saved risk basis remain halted if their stop-loss exit is discovered.
