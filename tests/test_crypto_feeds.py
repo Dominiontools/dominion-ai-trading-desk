@@ -21,7 +21,7 @@ def fake_fetch(url, timeout):
     raise AssertionError(url)
 
 
-def test_fetches_three_public_spot_quotes_without_credentials():
+def test_fetches_four_public_spot_quotes_without_credentials():
     feeds = PublicCryptoFeeds(fetch_json=fake_fetch)
     quotes = feeds.snapshot("BTC/USDT")
     assert [q.exchange for q in quotes] == ["Binance", "Bitget", "HTX"]
@@ -95,3 +95,17 @@ def test_batch_snapshot_fetches_all_requested_pairs_with_one_request_per_exchang
     assert len(quotes) == 6
     assert {quote.symbol for quote in quotes} == {"BTCUSDT", "ETHUSDT"}
     assert {quote.exchange for quote in quotes} == {"Binance", "Bitget", "HTX"}
+
+
+def test_okx_rejects_api_error():
+    def bad(url, timeout):
+        return {"code": "50000", "data": []}
+    with pytest.raises(RuntimeError, match="OKX"):
+        PublicCryptoFeeds(fetch_json=bad).okx("BTCUSDT")
+
+
+def test_okx_rejects_missing_instrument():
+    def missing(url, timeout):
+        return {"code": "0", "data": []}
+    with pytest.raises(RuntimeError, match="did not return"):
+        PublicCryptoFeeds(fetch_json=missing).okx("BTCUSDT")
