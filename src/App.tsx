@@ -392,7 +392,7 @@ function CryptoMonitorPanel() {
       {gmgnFeed?.trending_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trending_preview)}</pre> : null}
     </div>
     <div className="agent-runtime-list readiness-panel">
-      <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 8)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
+      <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 9)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
       {readinessTasks.map(task => <div className="readiness-row" key={String(task.id)}>
         <div><b>{String(task.title || task.id)}</b><small>{String(task.detail || "")}</small></div>
         <span className={"readiness-state " + String(task.status || "UNKNOWN").toLowerCase()}>{String(task.status || "UNKNOWN").replaceAll("_", " ")}</span>
