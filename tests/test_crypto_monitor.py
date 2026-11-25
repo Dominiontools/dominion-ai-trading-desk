@@ -114,3 +114,64 @@ def test_interval_cannot_be_faster_than_one_second(tmp_path):
     with pytest.raises(ValueError):
         CryptoPaperMonitor(FakeFeeds(), decision_log=tmp_path / "x",
                            interval_seconds=0.5)
+
+
+class FakeBatchFeeds:
+    def __init__(self, quotes=None, errors=None):
+        self.quotes = quotes or []
+        self.errors = errors or {}
+
+    def snapshot_many_with_diagnostics(self, symbols):
+        self.symbols = tuple(symbols)
+        return self.quotes, self.errors
+
+
+def make_multi_quotes(now):
+    return [
+        ExchangeQuote("Binance", "BTCUSDT", 99.9, 100.0, now, 2, 2),
+        ExchangeQuote("Bitget", "BTCUSDT", 101.0, 101.1, now, 2, 2),
+        ExchangeQuote("Binance", "ETHUSDT", 199.9, 200.0, now, 2, 2),
+        ExchangeQuote("HTX", "ETHUSDT", 202.0, 202.1, now, 2, 2),
+    ]
+
+
+def test_multi_market_scan_compares_multiple_pairs_in_one_batch(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "multi.jsonl"
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(make_multi_quotes(now)), decision_log=log,
+        costs_by_exchange=FEES, max_notional=8.0, clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
+    assert result["status"] == "PAPER_OPPORTUNITY"
+    assert result["symbols_requested"] == 2
+    assert result["symbols_with_two_venues"] == 2
+    assert result["orders_enabled"] is False
+    assert result["opportunities_count"] >= 2
+    assert len(read_records(log)) == 1
+
+
+def test_multi_market_scan_blocks_without_two_venues_for_any_pair(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "multi.jsonl"
+    quotes = [ExchangeQuote("Binance", "BTCUSDT", 99.9, 100.0, now, 2, 2)]
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(quotes), decision_log=log,
+        costs_by_exchange=FEES, clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "INSUFFICIENT_INDEPENDENT_MARKET_QUOTES"
+
+
+def test_multi_market_scan_requires_fee_configuration_for_seen_venues(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "multi.jsonl"
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(make_multi_quotes(now)), decision_log=log,
+        costs_by_exchange={"Binance": (0, 1)}, clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "FEE_CONFIG_MISSING"
+    assert result["missing_fee_exchanges"] == ["Bitget", "HTX"]
