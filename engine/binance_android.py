@@ -55,3 +55,32 @@ def account_summary(api_key: str, api_secret: str) -> str:
             "error": "BINANCE_REQUEST_FAILED",
             "exchange_code": int(code) if isinstance(code, int) else None,
         }, separators=(",", ":"))
+
+
+def reconcile_saved_orders(api_key: str, api_secret: str, journal_path: str) -> str:
+    """Read-only restart recovery for previously journaled Testnet brackets."""
+    if not api_key or not api_secret:
+        return json.dumps({"status": "SKIPPED", "reason": "CREDENTIALS_MISSING",
+                           "halted": True, "orders_enabled": False})
+    try:
+        from pathlib import Path
+        from .binance_lifecycle import BinanceProtectedLifecycle
+        from .risk_execution import BinanceTestnetRiskGate
+
+        # allow_orders=False is deliberate: startup recovery can query state,
+        # but cannot submit, cancel, or amend any exchange order.
+        client = BinanceSpotTestnetClient(api_key, api_secret, allow_orders=False)
+        lifecycle = BinanceProtectedLifecycle(
+            BinanceTestnetRiskGate(), client, journal_path=Path(journal_path)
+        )
+        result = lifecycle.reconcile_after_restart()
+        result["orders_enabled"] = False
+        result["environment"] = "BINANCE_SPOT_TESTNET"
+        return json.dumps(result, separators=(",", ":"))
+    except Exception:
+        # Keep the recovery state blocked; never expose signed request details.
+        return json.dumps({"status": "RECOVERY_FAILED", "halted": True,
+                           "operator_action_required": True,
+                           "orders_enabled": False,
+                           "environment": "BINANCE_SPOT_TESTNET"},
+                          separators=(",", ":"))
