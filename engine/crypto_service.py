@@ -16,6 +16,7 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
+from engine.gmgn_api import GMGNReadOnlyClient
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -61,7 +62,7 @@ def _fee_config() -> dict[str, tuple[float, float]]:
     return fees
 
 
-def _runtime_config(data_dir: str | Path, port: int | None = None):
+def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key: str = ""):
     symbols = tuple(
         item.strip().upper().replace("/", "")
         for item in os.getenv("DOMINION_CRYPTO_SYMBOLS", "BTCUSDT,ETHUSDT,PAXGUSDT").split(",")
@@ -164,6 +165,15 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     whale_feed = GeckoTerminalWhaleFeed(timeout=8.0, min_notional_usd=100_000.0)
     security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
     news_feed = PublicNewsRSS(timeout=8.0)
+    gmgn_client = GMGNReadOnlyClient(gmgn_api_key, timeout=8.0) if gmgn_api_key.strip() else None
+    state["gmgn_feed"] = {
+        "status": "READY_TO_CONNECT" if gmgn_client else "NOT_CONFIGURED",
+        "detail": "Official GMGN read-only API key is stored in Android Keystore." if gmgn_client
+            else "Add a GMGN API key from gmgn.ai/ai to enable official token discovery and trending data.",
+        "last_checked_at": None,
+        "trenches_preview": None,
+        "trending_preview": None,
+    }
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
     def agent_feed_loop() -> None:
@@ -223,6 +233,26 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                     "unsupported_tokens": unsupported_count,
                     "errors": error_count,
                 }
+                if gmgn_client is not None:
+                    try:
+                        trenches = gmgn_client.trenches("sol", limit=30)
+                        trending = gmgn_client.trending("sol", "1h", limit=20)
+                        state["gmgn_feed"] = {
+                            "status": "CONNECTED",
+                            "detail": "Official GMGN Agent API read-only requests succeeded for Solana new-token discovery and 1-hour trending.",
+                            "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                            "trenches_preview": __import__("json").dumps(trenches, ensure_ascii=False)[:5000],
+                            "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000],
+                        }
+                    except Exception as exc:
+                        state["gmgn_feed"] = {
+                            "status": "API_ERROR",
+                            "detail": "Official GMGN read-only request failed; no trade was attempted.",
+                            "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                            "error": str(exc)[:120],
+                            "trenches_preview": None,
+                            "trending_preview": None,
+                        }
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
                 state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
@@ -350,14 +380,14 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval
 
 
-def start_embedded(data_dir: str, port: int = 8766) -> dict:
+def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "") -> dict:
     """Start the Python engine for the Android foreground service; return immediately."""
     global _runtime_stop, _runtime_server, _runtime_threads, _runtime_state
     with _runtime_lock:
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(data_dir, port)
+        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(data_dir, port, gmgn_api_key)
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
         agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
         strategy_worker = threading.Thread(target=strategy_loop, name="dominion-paper-strategy", daemon=True)
