@@ -63,3 +63,35 @@ def test_snapshot_reports_each_failed_venue_without_returning_partial_quotes():
     assert "connection timed out" in failures["Bitget"]
     assert "OSError" in failures["Htx"]
     assert "TLS handshake failed" in failures["Htx"]
+
+
+def test_batch_snapshot_fetches_all_requested_pairs_with_one_request_per_exchange():
+    calls = []
+
+    def batch_fetch(url, timeout):
+        calls.append(url)
+        if "binance" in url:
+            return [
+                {"symbol": "BTCUSDT", "bidPrice": "100", "bidQty": "1", "askPrice": "101", "askQty": "2"},
+                {"symbol": "ETHUSDT", "bidPrice": "200", "bidQty": "3", "askPrice": "201", "askQty": "4"},
+            ]
+        if "bitget" in url:
+            return {"code": "00000", "data": [
+                {"symbol": "BTCUSDT", "bidPr": "102", "askPr": "103", "bidSz": "2", "askSz": "3", "ts": "1795521600000"},
+                {"symbol": "ETHUSDT", "bidPr": "202", "askPr": "203", "bidSz": "4", "askSz": "5", "ts": "1795521600000"},
+            ]}
+        if "huobi" in url:
+            return {"status": "ok", "ts": 1795521600000, "data": [
+                {"symbol": "btcusdt", "bid": "99", "ask": "100", "bidSize": "1", "askSize": "2"},
+                {"symbol": "ethusdt", "bid": "199", "ask": "200", "bidSize": "3", "askSize": "4"},
+            ]}
+        raise AssertionError(url)
+
+    quotes, failures = PublicCryptoFeeds(fetch_json=batch_fetch).snapshot_many_with_diagnostics(
+        ["BTC/USDT", "ETHUSDT"]
+    )
+    assert not failures
+    assert len(calls) == 3
+    assert len(quotes) == 6
+    assert {quote.symbol for quote in quotes} == {"BTCUSDT", "ETHUSDT"}
+    assert {quote.exchange for quote in quotes} == {"Binance", "Bitget", "HTX"}
