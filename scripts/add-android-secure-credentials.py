@@ -158,8 +158,16 @@ def main():
     JAVA_DIR.mkdir(parents=True, exist_ok=True)
     (JAVA_DIR / "CredentialVault.java").write_text(VAULT, encoding="utf-8")
     text = PLUGIN.read_text(encoding="utf-8")
+    def append_methods(methods: str) -> None:
+        nonlocal text
+        marker = "\\n}"
+        index = text.rfind(marker)
+        if index < 0:
+            raise SystemExit("Could not find end of TradingEnginePlugin class.")
+        text = text[:index] + "\\n" + methods + text[index:]
+
     if "saveBinanceTestnetCredentials" not in text:
-        methods = r'''
+        append_methods(r'''
     @PluginMethod
     public void saveBinanceTestnetCredentials(PluginCall call) {
         String apiKey = call.getString("apiKey");
@@ -210,6 +218,21 @@ def main():
     }
 
     @PluginMethod
+    public void clearBinanceTestnetCredentials(PluginCall call) {
+        try {
+            new CredentialVault(getContext()).clear();
+            JSObject result = new JSObject();
+            result.put("cleared", true);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Could not clear the saved Testnet credentials.");
+        }
+    }
+''');
+
+    if "saveGmgnApiKey" not in text:
+        append_methods(r'''
+    @PluginMethod
     public void saveGmgnApiKey(PluginCall call) {
         String apiKey = call.getString("apiKey");
         try {
@@ -244,25 +267,9 @@ def main():
             call.reject("Could not clear the saved GMGN API key.");
         }
     }
+''');
 
-    @PluginMethod
-    public void clearBinanceTestnetCredentials(PluginCall call) {
-        try {
-            new CredentialVault(getContext()).clear();
-            JSObject result = new JSObject();
-            result.put("cleared", true);
-            call.resolve(result);
-        } catch (Exception error) {
-            call.reject("Could not clear the saved Testnet credentials.");
-        }
-    }
-'''
-        marker = "\n}"
-        index = text.rfind(marker)
-        if index < 0:
-            raise SystemExit("Could not find end of TradingEnginePlugin class.")
-        text = text[:index] + "\n" + methods + text[index:]
-        PLUGIN.write_text(text, encoding="utf-8")
+    PLUGIN.write_text(text, encoding="utf-8")
     print("Configured Android Keystore-backed credential vault.")
 
 if __name__ == "__main__":
