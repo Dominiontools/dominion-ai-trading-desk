@@ -289,8 +289,6 @@ class BinanceProtectedLifecycle:
                 state_name = state.get("state")
                 safe = (state_name in safe_states and state.get("action_required") is False
                         and (state_name != "PROTECTED" or state.get("protected") is True))
-                results.append({"order_list_id": order_id, "symbol": symbol,
-                                "state": state_name, "safe": safe})
                 if state_name == "EXITED_STOP_LOSS":
                     planned_loss = self._submitted_risk_quote.get(order_id)
                     if not planned_loss:
@@ -312,6 +310,12 @@ class BinanceProtectedLifecycle:
                             unresolved.append({"order_list_id": order_id,
                                                "reason": "DAILY_LOSS_LEDGER_WRITE_FAILED",
                                                "error_type": type(exc).__name__})
+                # Publish the final safety decision only after every required
+                # accounting check has completed. In particular, an exchange-
+                # confirmed stop-loss is not fully reconciled until its loss has
+                # been durably recorded in the daily-loss ledger.
+                results.append({"order_list_id": order_id, "symbol": symbol,
+                                "state": state_name, "safe": safe})
                 if not safe and not any(
                     item.get("order_list_id") == order_id for item in unresolved
                 ):
