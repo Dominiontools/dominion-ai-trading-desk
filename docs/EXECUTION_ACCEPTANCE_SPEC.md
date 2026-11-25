@@ -41,7 +41,7 @@ Initial watchlist candidates include XAUUSD, EURUSD, GBPUSD and broker-enabled a
 - The user-requested crypto watchlist includes PAXGUSDT, BTCUSDT, ETHUSDT and additional configurable markets; token discovery may monitor up to 52 markets, subject to feed/API limits.
 - Missing or stale safety evidence blocks a token from execution. A score is evidence for review, not a guarantee that a token is safe.
 
-The user's 40% equity-per-trade setting is treated only as an upper bound on capital/notional allocation, never as permitted loss. The stricter shared loss-risk limit below takes precedence. The user's 2% slippage value is an absolute rejection ceiling, not a target; the current stricter execution gate (15 bps / 0.15%) remains the default until separately reviewed.
+For Crypto, the user's 40% equity-per-trade setting is treated only as an upper bound on capital/notional allocation, never as permitted loss. Forex/Gold sizing instead uses the broker's verified contract, volume, currency-conversion and margin rules; the Crypto notional cap is not applied to leveraged Forex/Gold positions. The user's 2% slippage value is an absolute rejection ceiling, not a target; the current stricter Crypto execution gate (15 bps / 0.15%) remains the default until separately reviewed.
 
 ## 4. Shared risk and order-management policy
 
