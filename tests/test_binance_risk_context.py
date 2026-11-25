@@ -8,15 +8,16 @@ from engine.binance_daily_loss import BinanceDailyLossLedger
 
 
 class AccountClient:
-    def __init__(self, can_trade=True):
+    def __init__(self, can_trade=True, btc_free="0"):
         self.can_trade = can_trade
+        self.btc_free = btc_free
 
     def account(self):
         return {
             "canTrade": self.can_trade,
             "balances": [
                 {"asset": "USDT", "free": "250.00", "locked": "10.00"},
-                {"asset": "BTC", "free": "0.1", "locked": "0"},
+                {"asset": "BTC", "free": self.btc_free, "locked": "0"},
             ],
         }
 
@@ -99,4 +100,32 @@ def test_provider_blocks_when_daily_loss_ledger_is_corrupt(tmp_path):
     with pytest.raises(RuntimeError, match="ledger is invalid"):
         BinanceRiskContextProvider(
             AccountClient(), recovery, BinanceDailyLossLedger(path),
+        ).snapshot()
+
+
+
+def test_provider_counts_unmanaged_non_quote_asset_as_open_position(tmp_path):
+    ledger = BinanceDailyLossLedger(tmp_path / "loss.jsonl")
+    recovery = Recovery({
+        "status": "NO_JOURNALED_ORDERS", "halted": False,
+        "operator_action_required": False, "orders": [],
+    })
+    snapshot = BinanceRiskContextProvider(
+        AccountClient(btc_free="0.001"), recovery, ledger,
+    ).snapshot()
+    assert snapshot.context.open_positions == 1
+
+
+def test_provider_blocks_two_total_positions_including_unmanaged_holdings(tmp_path):
+    ledger = BinanceDailyLossLedger(tmp_path / "loss.jsonl")
+    recovery = Recovery({
+        "status": "RECONCILED", "halted": False,
+        "operator_action_required": False,
+        "orders": [
+            {"order_list_id": "open001", "state": "PROTECTED", "safe": True},
+        ],
+    })
+    with pytest.raises(PermissionError, match="unmanaged Spot holding"):
+        BinanceRiskContextProvider(
+            AccountClient(btc_free="0.001"), recovery, ledger,
         ).snapshot()
