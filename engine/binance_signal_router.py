@@ -40,6 +40,22 @@ class BinanceTestnetSignalRouter:
         self.max_quote_age_seconds = max_quote_age_seconds
         self.estimated_slippage_bps = estimated_slippage_bps
 
+    def submit_verified_setup(
+        self, setup, quote: ExchangeQuote, *, snapshot, fees: VerifiedFees,
+        list_client_order_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict:
+        """Route using a fresh BinanceRiskSnapshot rather than caller-made flags."""
+        return self.submit_setup(
+            setup, quote,
+            context=snapshot.context,
+            fees=fees,
+            account_snapshot_verified=snapshot.account_snapshot_verified,
+            daily_loss_verified=snapshot.daily_loss_verified,
+            list_client_order_id=list_client_order_id,
+            now=now,
+        )
+
     def submit_setup(
         self,
         setup,
