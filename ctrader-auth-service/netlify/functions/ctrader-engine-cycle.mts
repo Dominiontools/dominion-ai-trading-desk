@@ -618,6 +618,10 @@ async function executeCycle(): Promise<RecordData> {
             mode: "DEMO_ONLY",
           };
           const partialEntryPrice = number(partialPosition.price ?? entryPrice);
+          if (Math.abs(partialEntryPrice - entryPrice) > slippagePrice + point) {
+            await session.closePosition(partialId, partialVolume);
+            throw new Error("PARTIAL_FILL_EXCEEDED_SLIPPAGE_CAP_EMERGENCY_CLOSE_SENT");
+          }
           await store.setJSON("account/active-position", {
             positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
             side: best.setup.side, entryPrice: partialEntryPrice,
@@ -677,6 +681,11 @@ async function executeCycle(): Promise<RecordData> {
       mode: "DEMO_ONLY",
     };
     const confirmedEntryPrice = number(position.price ?? entryPrice);
+    if (Math.abs(confirmedEntryPrice - entryPrice) > slippagePrice + point) {
+      await session.closePosition(positionId, number((position.tradeData as RecordData).volume));
+      await store.delete("account/active-position");
+      throw new Error("BROKER_FILL_EXCEEDED_SLIPPAGE_CAP_EMERGENCY_CLOSE_SENT");
+    }
     await store.setJSON("account/active-position", {
       positionId,
       symbol: best.symbolName,
