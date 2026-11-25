@@ -48,6 +48,24 @@ function utcDayStart(now: Date): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 function buildCandidate(
   symbolName: string,
   lightSymbol: RecordData,
@@ -445,7 +463,7 @@ async function executeCycle(): Promise<RecordData> {
     const candidates: Candidate[] = [];
     const errors: Array<{ symbol: string; reason: string }> = [];
     const periods = TIMEFRAME_PROFILES[profile];
-    for (const requested of requestedSymbols) {
+    const candidateResults = await mapWithConcurrency(requestedSymbols, 4, async (requested) => {
       try {
         const light = symbolByName.get(requested);
         if (!light || light.enabled === false) throw new Error("SYMBOL_NOT_AVAILABLE_OR_DISABLED");
@@ -454,23 +472,21 @@ async function executeCycle(): Promise<RecordData> {
         if (quoteAssetId !== depositAssetId) throw new Error("QUOTE_ASSET_MUST_MATCH_DEPOSIT_CURRENCY");
         const symbol = await session.symbolDetails(symbolId);
         if (number(symbol.distanceSetIn ?? 1) !== 1) throw new Error("UNSUPPORTED_STOP_DISTANCE_UNIT");
-        if (requested !== "XAUUSD" && symbol.enableShortSelling === false) {
-          // Buy signals remain eligible; sell signals are filtered after strategy evaluation.
-        }
         const [spot, executionBars, contextBars] = await Promise.all([
           session.spot(symbolId),
           session.trendbars(symbolId, periods.executionPeriod, 220),
           session.trendbars(symbolId, periods.contextPeriod, 220),
         ]);
-        const candidate = buildCandidate(
+        return buildCandidate(
           requested, light, symbol, spot, executionBars, contextBars,
           profile, scoreThreshold, useSessionFilter, now,
         );
-        if (candidate) candidates.push(candidate);
       } catch (error) {
         errors.push({ symbol: requested, reason: error instanceof Error ? error.message : "UNKNOWN_SYMBOL_ERROR" });
+        return null;
       }
-    }
+    });
+    candidates.push(...candidateResults.filter((candidate): candidate is Candidate => candidate !== null));
 
     candidates.sort((a, b) => b.setup.score - a.setup.score);
     const best = candidates[0];
