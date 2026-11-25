@@ -16,12 +16,30 @@ No GMGN wallet swaps or trading orders are currently enabled.
 ## 2. Binance Spot Testnet account
 
 - Create a Spot Testnet API key from the official Binance Spot Testnet environment.
-- Enable only the permissions needed for the testnet account check and future Spot test orders.
-- Keep withdrawals disabled.
+- Enable Spot trading permission for the Testnet key; keep withdrawals disabled.
 - Enter the key and secret in the Android app's Binance Testnet panel.
-- Confirm the account check reports `BINANCE_SPOT_TESTNET` and `can_withdraw: false`.
+- Confirm the read-only account/risk snapshot is verified and the account reports trading permission.
+- The **Binance Testnet automation** switch is OFF by default. Only enable it when you explicitly want simulated Spot BUY orders on Binance Testnet.
+- The router requires fresh quotes, verified symbol filters, authenticated per-symbol fees, available USDT, the shared position limit, and the durable daily-loss ledger.
 
-Saving credentials and reading the account does not enable order execution. The protected-order lifecycle must be completed and tested before any testnet order switch is exposed.
+The Android strategy loop is now wired to the protected Testnet router, but no actual Testnet order has yet been placed or verified. Automatic emergency market-flattening for an unprotected fill is not implemented; an uncertain protection state halts new entries and requires manual review.
+
+## 3. Bitget Spot Demo API
+
+Bitget officially supports Demo API keys. The documented flow is:
+- Switch the Bitget account to **Demo mode** first.
+- Open **Personal Center → API Key Management → Create a Demo API Key**.
+- Use that Demo key with the `paptrading: 1` request header. The REST host remains `api.bitget.com`; the Demo key and header select the simulated environment.
+- Keep withdrawals disabled. Do not use a live key with the demo header.
+- Demo API access requires KYC according to Bitget's documentation.
+
+Bitget's public market-data feed is already connected. The order adapter remains separate and must be completed and verified against the Demo API before the app exposes Bitget execution.
+
+## 4. HTX Unified Account Demo
+
+HTX announced Unified Account Demo Trading on 9 November 2026. Its demo interface supports Spot, Futures and Multi-Currency Margin with virtual funds. The older public Spot API reference still labels its legacy testnet as stopped; the new demo announcement does not document a matching REST API host or authentication flow.
+
+Use the official demo interface for manual familiarization only. Do not connect an HTX live trading key to the old live API and call it a demo test. HTX execution stays disabled until the new Unified Account Demo API route is confirmed from official documentation and can be tested safely.
 
 ## 3. cTrader / Pepperstone demo
 
@@ -31,12 +49,13 @@ Saving credentials and reading the account does not enable order execution. The 
 - Confirm the account is Pepperstone demo and the backend reports trading permission before enabling demo automation.
 - Do not authorize a live account.
 
-## 4. Exchange execution costs
+## 5. Exchange execution costs
 
-- Supply or verify the actual account-tier taker fees for Binance, Bitget, HTX and OKX. OKX public market data does not require an API key; its fee value is still required before its quotes can contribute to fee-adjusted arbitrage comparisons.
+- Binance's Testnet router fetches authenticated per-symbol commission rates directly; it does not rely on guessed fees.
+- Bitget, HTX and OKX still need verified account-tier fees before their quotes can contribute to fee-adjusted arbitrage comparisons.
 - Unknown fees keep cross-exchange arbitrage execution blocked. Do not use guessed fees to claim net profitability.
 
-## 5. Final two-account Netlify connection
+## 6. Final two-account Netlify connection
 
 Before the single coordinated deployment:
 - Set the same random `DOMINION_CONTROL_API_SECRET` as a server-side secret in both the old cTrader backend project and the new dashboard project.
@@ -55,7 +74,7 @@ Do not silently switch backend accounts or redirect URIs. Choose that migration 
 
 ## Safety boundary
 
-- The Android crypto strategy and arbitrage scanner are paper-only today.
-- The Binance Testnet order lifecycle is not yet wired to the Android strategy loop.
+- The Android crypto strategy is paper-only by default. Binance Spot Testnet execution is an optional BUY-only mode behind an explicit OFF-by-default Android switch.
+- Bitget and HTX public market-data feeds are connected; their execution adapters remain disabled pending implementation and demo verification.
 - The cTrader engine is demo-only and requires trading-scope authorization and verified demo-order tests.
 - Live-money trading remains locked and requires a separate explicit decision after demo acceptance.
