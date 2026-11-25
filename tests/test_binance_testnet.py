@@ -167,3 +167,29 @@ def test_exchange_info_is_public_and_pinned_to_testnet(monkeypatch):
     assert urlsplit(captured["url"]).path == "/api/v3/exchangeInfo"
     assert parsed["symbol"] == ["BTCUSDT"]
     assert captured["headers"] == {}
+
+
+
+@pytest.mark.parametrize("entry_status,expected_state", [
+    ("EXPIRED", "NO_POSITION"),
+    ("CANCELED", "NO_POSITION"),
+    ("NEW", "ENTRY_PENDING"),
+    ("PARTIALLY_FILLED", "UNPROTECTED_PARTIAL_FILL"),
+])
+def test_reconcile_does_not_query_exit_orders_before_entry_fills(
+    monkeypatch, entry_status, expected_state
+):
+    calls = []
+    def transport(method, url, headers, timeout):
+        params = parse_qs(urlsplit(url).query)
+        client_id = params.get("origClientOrderId", [""])[0]
+        calls.append(client_id)
+        return {"status": entry_status}
+    client = make_client(monkeypatch, transport)
+    result = client.reconcile_protected_buy_otoco(
+        symbol="BTCUSDT", list_client_order_id="dominion123"
+    )
+    assert result["state"] == expected_state
+    assert calls == ["dominion123E"]
+    assert result["take_profit_status"] is None
+    assert result["stop_loss_status"] is None
