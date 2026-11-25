@@ -260,9 +260,11 @@ public class TradingEngineService extends Service {
                 try {
                     credentials = vault.loadForNativeUse();
                     PyObject recovery = Python.getInstance().getModule("engine.binance_android");
-                    String recoveryJson = recovery.callAttr("reconcile_saved_orders",
+                    String dataDirectory = getFilesDir().getAbsolutePath();
+                    String recoveryJson = recovery.callAttr("account_risk_snapshot",
                         credentials[0], credentials[1],
-                        getFilesDir().getAbsolutePath() + "/binance-lifecycle.json").toString();
+                        dataDirectory + "/binance-lifecycle.json",
+                        dataDirectory + "/binance-daily-loss.jsonl").toString();
                     binanceRecoveryJson = recoveryJson;
                 } catch (Exception recoveryError) {
                     Log.w(TAG, "Binance Testnet recovery remains blocked; manual review required.");
