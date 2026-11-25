@@ -527,7 +527,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
     return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval
 
 
-def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "") -> dict:
+def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "", binance_recovery_json: str = "") -> dict:
     """Start the Python engine for the Android foreground service; return immediately."""
     global _runtime_stop, _runtime_server, _runtime_threads, _runtime_state
     with _runtime_lock:
@@ -535,6 +535,27 @@ def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "") -> d
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(data_dir, port, gmgn_api_key)
+        try:
+            recovery = json.loads(binance_recovery_json) if binance_recovery_json else {}
+            if not isinstance(recovery, dict):
+                raise ValueError("Recovery status must be an object.")
+            state["binance_testnet_recovery"] = {
+                "status": str(recovery.get("status", "NOT_RUN"))[:48],
+                "halted": bool(recovery.get("halted", True)),
+                "reconciled": int(recovery.get("reconciled", 0) or 0),
+                "unresolved_count": len(recovery.get("unresolved", []))
+                    if isinstance(recovery.get("unresolved", []), list) else 1,
+                "operator_action_required": bool(recovery.get("operator_action_required", False)),
+                "orders_enabled": False,
+                "environment": "BINANCE_SPOT_TESTNET",
+            }
+        except (TypeError, ValueError, json.JSONDecodeError):
+            state["binance_testnet_recovery"] = {
+                "status": "RECOVERY_STATUS_INVALID", "halted": True,
+                "reconciled": 0, "unresolved_count": 1,
+                "operator_action_required": True, "orders_enabled": False,
+                "environment": "BINANCE_SPOT_TESTNET",
+            }
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
         agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
         strategy_worker = threading.Thread(target=strategy_loop, name="dominion-paper-strategy", daemon=True)
