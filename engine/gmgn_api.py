@@ -176,12 +176,12 @@ def summarize_security_evidence(payload: object, chain: str) -> dict:
 
     if open_source == "no":
         flags.append("GMGN_SOURCE_NOT_VERIFIED")
-    elif open_source not in {"yes", "unknown"}:
+    elif open_source != "yes":
         unknown.append("open_source")
 
     if owner_renounced == "no":
         flags.append("GMGN_OWNER_NOT_RENOUNCED")
-    elif owner_renounced not in {"yes", "unknown"}:
+    elif owner_renounced != "yes":
         unknown.append("owner_renounced")
 
     if wash_trading is True:
