@@ -108,3 +108,19 @@ test("unknown commission metadata fails closed", () => {
     minCommissionAsset: "USD",
   }, 1000000, 1.1), /UNVERIFIED_BROKER_COMMISSION/);
 });
+
+test("user may lower risk below 0.5 percent but cannot raise the hard ceiling", () => {
+  const symbol = {
+    minVolume: 1000,
+    maxVolume: 10000000,
+    stepVolume: 1000,
+    lotSize: 10000000,
+    commissionType: 1,
+    preciseTradingCommissionRate: 0,
+    preciseMinCommission: 0,
+    minCommissionAsset: "USD",
+  };
+  const reduced = sizeVolume(symbol, 1.1, 0.001, 1000, 0.0025);
+  assert.ok(reduced.riskAmount + reduced.commission <= 2.5 + 1e-9);
+  assert.throws(() => sizeVolume(symbol, 1.1, 0.001, 1000, 0.006), /RISK_FRACTION_EXCEEDS_HARD_LIMIT/);
+});
