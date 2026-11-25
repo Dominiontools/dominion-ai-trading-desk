@@ -32,3 +32,10 @@ def test_android_python_bundle_includes_official_gmgn_read_only_and_sniper_modul
     assert '"gmgn_sniper.py"' in script
     assert 'callAttr("start_embedded"' in script
     assert 'loadGmgnApiKeyForNativeUse' in script
+
+
+def test_android_python_bundle_includes_restart_safe_binance_lifecycle_module():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    assert '"binance_lifecycle.py"' in script
+    assert '"risk_execution.py"' in script
+    assert '"binance_protection.py"' in script
