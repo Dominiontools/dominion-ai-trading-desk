@@ -6,7 +6,7 @@ This specification records the user's requested operating model. It is an implem
 
 - **Implemented in code, not deployed or broker-tested:** separate cTrader demo trading authorization, encrypted token separation, scheduled demo execution cycle, broker-side SL/TP verification, risk sizing, daily stop, break-even, 2R scale-out and 3R runner management.
 - **Implemented in code, paper-only:** Android multi-timeframe crypto confluence strategy and dynamic top-52 liquid USDT cross-exchange batch REST monitor.
-- **Implemented in code, awaiting user's GMGN API key:** official GMGN read-only Solana Trenches, trending and token-security connector, with Android Keystore storage and GMGN security evidence routed into the Rug agent. No GMGN trading route is enabled.
+- **Implemented in code, awaiting user's GMGN API key:** official GMGN read-only Solana Trenches, trending and token-security connector, with Android Keystore storage, GMGN security evidence routed into the Rug agent, and a paper-only sniper candidate filter. No GMGN trading route is enabled.
 - **Implemented in code, not yet broker-tested:** cTrader demo strategy settings for timeframe profile, watchlist, confluence threshold, London/New York session filter, and bounded risk controls.
 - **Still outstanding:** crypto exchange testnet order lifecycle, shared cross-division position/risk lock, full independent division controls, all eight agents connected to verified feeds/workflows, GMGN wallet/order integration, broader custom indicator/rule builder, and broker/exchange integration tests.
 - No new Netlify deployment has been started and this development engine has not placed a trade.
