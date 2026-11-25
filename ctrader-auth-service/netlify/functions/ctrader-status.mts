@@ -169,6 +169,7 @@ export default async (request: Request) => {
         broker: "Pepperstone",
         environment: "demo",
         access: mode,
+        permissionScope: verified.permissionScope,
         demoAccountCount: verified.accounts.length,
         authorizedAccountId: verified.authorizedAccountId,
         verifiedAt: new Date().toISOString(),
