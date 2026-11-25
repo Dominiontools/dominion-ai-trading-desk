@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feat/android-app
+      - feat/complete-demo-trading-engine
 
 permissions:
   contents: read
