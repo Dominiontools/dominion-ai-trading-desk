@@ -83,3 +83,9 @@ The append-only UTC daily-loss ledger records the conservative planned-risk
 amount only after Binance confirms a stop-loss exit. Entries are idempotent by
 order-list ID and are not double-counted after restart. Older journal entries
 without a saved risk basis remain halted if their stop-loss exit is discovered.
+
+
+The risk-context provider also treats any non-zero non-USDT Spot balance as
+an unmanaged open holding. That is intentionally conservative: manual holdings
+are not silently ignored by the one-position rule. Such a balance must be
+reviewed or explicitly handled before the bot can open another position.
