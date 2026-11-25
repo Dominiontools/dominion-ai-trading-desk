@@ -307,6 +307,13 @@ export class CTraderDemoSession {
     return Array.isArray(result.symbol) ? result.symbol as JsonRecord[] : [];
   }
 
+  async assets(): Promise<JsonRecord[]> {
+    const result = await this.request(2112, 2113, {
+      ctidTraderAccountId: this.requireAccount(),
+    });
+    return Array.isArray(result.asset) ? result.asset as JsonRecord[] : [];
+  }
+
   async symbolDetails(symbolId: number): Promise<JsonRecord> {
     const result = await this.request(2116, 2117, {
       ctidTraderAccountId: this.requireAccount(),
