@@ -5,6 +5,7 @@ The embedded start/stop functions are called by the Android foreground service.
 """
 from __future__ import annotations
 
+import json
 import os
 import signal
 import threading
