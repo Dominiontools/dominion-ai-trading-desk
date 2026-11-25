@@ -38,7 +38,7 @@ The cycle:
 8. Reconciles the broker position and confirms protective levels. If a bot-filled position is unprotected, it requests an emergency close.
 9. Manages an open bot position: strategy-invalidation exit, break-even stop at 1R, partial close at 2R where broker volume rules allow, and a broker-side 3R target for the remaining position.
 
-The broker-side stop-loss and take-profit remain active if the scheduled function is delayed or unavailable.
+Pausing automation blocks new entries but continues managing an already-open bot position. The broker-side stop-loss and take-profit remain active if the scheduled function is delayed or unavailable.
 
 ## Risk and execution gates
 
