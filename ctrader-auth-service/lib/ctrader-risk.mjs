@@ -74,7 +74,7 @@ export function estimateRoundTripCommission(symbol, volumeCents, entryPrice) {
   return 2 * Math.max(perSide, minimum);
 }
 
-export function sizeVolume(symbol, entryPrice, stopDistance, equity) {
+export function sizeVolume(symbol, entryPrice, stopDistance, equity, riskFraction = MAX_RISK_PER_TRADE) {
   const minVolume = number(symbol.minVolume);
   const maxVolume = number(symbol.maxVolume);
   const stepVolume = number(symbol.stepVolume);
@@ -84,7 +84,10 @@ export function sizeVolume(symbol, entryPrice, stopDistance, equity) {
   if (!(entryPrice > 0) || !(stopDistance > 0) || !(equity > 0)) {
     throw new Error("INVALID_TRADE_PRICES");
   }
-  const riskBudget = equity * MAX_RISK_PER_TRADE;
+  if (!Number.isFinite(riskFraction) || riskFraction <= 0 || riskFraction > MAX_RISK_PER_TRADE) {
+    throw new Error("RISK_FRACTION_EXCEEDS_HARD_LIMIT");
+  }
+  const riskBudget = equity * riskFraction;
   const rawVolume = Math.floor((riskBudget / stopDistance) * 100);
   let volume = Math.min(maxVolume, Math.floor(rawVolume / stepVolume) * stepVolume);
   for (let attempts = 0; attempts < 10000 && volume >= minVolume; attempts++, volume -= stepVolume) {
