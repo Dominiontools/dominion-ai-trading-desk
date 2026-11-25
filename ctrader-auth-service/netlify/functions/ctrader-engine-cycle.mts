@@ -657,16 +657,44 @@ async function executeCycle(): Promise<RecordData> {
     let positionId = number(position.positionId);
     if (!(number(position.stopLoss) > 0) || !(number(position.takeProfit) > 0)) {
       if (!(positionId > 0)) throw new Error("FILLED_POSITION_ID_MISSING");
-      await session.amendProtection(positionId, stopLoss, takeProfit);
+      try {
+        await session.amendProtection(positionId, stopLoss, takeProfit);
+      } catch {
+        // Reconcile below; an amend response error is not proof the broker rejected it.
+      }
       reconciled = await session.reconcile();
       position = reconciled.positions.find((item) => number(item.positionId) === positionId);
     }
     if (!position || !(number(position.stopLoss) > 0) || !(number(position.takeProfit) > 0)) {
-      if (positionId > 0) {
-        const remaining = reconciled.positions.find((item) => number(item.positionId) === positionId);
-        if (remaining) await session.closePosition(positionId, number((remaining.tradeData as RecordData).volume));
+      const remaining = positionId > 0
+        ? reconciled.positions.find((item) => number(item.positionId) === positionId)
+        : undefined;
+      if (remaining && positionId > 0) {
+        const remainingVolume = number((remaining.tradeData as RecordData).volume);
+        if (!(remainingVolume > 0)) throw new Error("UNPROTECTED_POSITION_VOLUME_MISSING");
+        await session.closePosition(positionId, remainingVolume);
+        const afterEmergencyClose = await session.reconcile();
+        const stillOpen = afterEmergencyClose.positions.some((item) => number(item.positionId) === positionId);
+        if (stillOpen) {
+          const emergencyPending = {
+            status: "EMERGENCY_CLOSE_PENDING",
+            reason: "BROKER_PROTECTIVE_SL_TP_NOT_CONFIRMED_AND_POSITION_REMAINS_OPEN",
+            positionId, symbol: best.symbolName, mode: "DEMO_ONLY",
+          };
+          await saveStatus(store, emergencyPending);
+          await appendEvent(store, emergencyPending);
+          return emergencyPending;
+        }
       }
-      throw new Error("PROTECTIVE_SL_TP_NOT_CONFIRMED_EMERGENCY_CLOSE_REQUESTED");
+      await store.delete("account/active-position");
+      const emergency = {
+        status: "UNPROTECTED_POSITION_CLOSE_CONFIRMED",
+        reason: "BROKER_PROTECTIVE_SL_TP_NOT_CONFIRMED_POSITION_CLOSED_OR_NOT_PRESENT",
+        positionId, symbol: best.symbolName, mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, emergency);
+      await appendEvent(store, emergency);
+      return emergency;
     }
 
     const completed = {
