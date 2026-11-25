@@ -117,6 +117,7 @@ class PublicCryptoFeeds:
         whether enough independent, fresh venues remain for a comparison.
         """
         methods = (self.binance, self.bitget, self.htx, self.okx)
+        venue_names = {"binance": "Binance", "bitget": "Bitget", "htx": "HTX", "okx": "OKX"}
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -126,7 +127,7 @@ class PublicCryptoFeeds:
                     quotes.append(future.result(timeout=self.timeout + 1.0))
                 except Exception as exc:
                     detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
-                    failures[venue.title()] = f"{type(exc).__name__}: {detail}"
+                    failures[venue_names[venue]] = f"{type(exc).__name__}: {detail}"
         return quotes, failures
 
     def snapshot(self, symbol: str) -> list[ExchangeQuote]:
