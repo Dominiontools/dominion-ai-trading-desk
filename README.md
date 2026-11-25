@@ -25,6 +25,12 @@ Foundation scaffold plus a read-only cTrader demo market-data connector. The das
 - Require explicit human approval before any live-trading implementation or deployment.
 - Validate strategies with historical data, paper trading, fees, slippage, and drawdown tests before considering live use.
 
+## Netlify deployment
+- Production branch: `feat/ctrader-auth-service`
+- Build command: `npm run build`
+- Publish directory: `dist`
+- Node.js version: 22 (also specified in `netlify.toml`).
+
 ## Android app
 
 The dashboard can be installed as an Android app. See [docs/ANDROID_APP.md](docs/ANDROID_APP.md) for local setup and the GitHub Actions APK build. The Android app is currently a demo-only dashboard shell; live broker data and order execution are not connected.
