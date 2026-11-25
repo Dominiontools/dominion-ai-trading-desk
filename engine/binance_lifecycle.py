@@ -1,12 +1,16 @@
 """Single-submit, fail-closed Binance Spot Testnet protected-order lifecycle.
 
-This coordinator is deliberately not wired to the phone strategy loop yet.
-It prevents duplicate submissions within its lifetime and never reports an
-entry as protected until the exchange confirms both OCO exit legs are active.
-An unconfirmed bracket halts further submissions and requires operator review.
+The optional journal persists client order IDs and halt state before network
+submission. A process restart therefore cannot silently forget an uncertain
+submission and place a duplicate. The journal is local state, not a substitute
+for querying Binance during recovery.
 """
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+from pathlib import Path
 from threading import RLock
 from time import sleep
 from typing import Any, Callable
@@ -15,7 +19,9 @@ from engine.risk_execution import BinanceOrderPlan, BinanceTestnetRiskGate
 
 
 class BinanceProtectedLifecycle:
-    """Coordinate one protected order-list submission and its verification."""
+    """Coordinate protected orders with restart-safe submission idempotency."""
+
+    JOURNAL_VERSION = 1
 
     def __init__(
         self,
@@ -25,6 +31,7 @@ class BinanceProtectedLifecycle:
         reconcile_attempts: int = 4,
         reconcile_interval_seconds: float = 0.25,
         wait: Callable[[float], None] = sleep,
+        journal_path: str | Path | None = None,
     ):
         if reconcile_attempts < 1 or reconcile_attempts > 10:
             raise ValueError("Reconciliation attempts must be between 1 and 10.")
@@ -36,9 +43,66 @@ class BinanceProtectedLifecycle:
         self._reconcile_interval_seconds = reconcile_interval_seconds
         self._wait = wait
         self._lock = RLock()
+        self._journal_path = Path(journal_path) if journal_path is not None else None
         self._submitted_ids: set[str] = set()
         self._halted = False
         self._last_result: dict[str, Any] | None = None
+        self._restore_state()
+
+    def _restore_state(self) -> None:
+        if self._journal_path is None or not self._journal_path.exists():
+            return
+        try:
+            payload = json.loads(self._journal_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or payload.get("version") != self.JOURNAL_VERSION:
+                raise ValueError("Unsupported lifecycle journal.")
+            submitted = payload.get("submitted_ids")
+            halted = payload.get("halted")
+            last_result = payload.get("last_result")
+            if (not isinstance(submitted, list)
+                    or any(not isinstance(item, str) or not item or len(item) > 20 for item in submitted)
+                    or not isinstance(halted, bool)
+                    or (last_result is not None and not isinstance(last_result, dict))):
+                raise ValueError("Invalid lifecycle journal fields.")
+            self._submitted_ids = set(submitted)
+            self._halted = halted
+            self._last_result = last_result
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            # Corrupt or unreadable state must never permit a fresh order.
+            self._halted = True
+            self._last_result = {
+                "status": "LIFECYCLE_JOURNAL_INVALID",
+                "protected": False,
+                "halted": True,
+                "operator_action_required": True,
+            }
+
+    def _persist_state(self) -> None:
+        if self._journal_path is None:
+            return
+        self._journal_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": self.JOURNAL_VERSION,
+            "submitted_ids": sorted(self._submitted_ids),
+            "halted": self._halted,
+            "last_result": self._last_result,
+        }
+        fd, temporary = tempfile.mkstemp(
+            prefix=self._journal_path.name + ".", suffix=".tmp",
+            dir=str(self._journal_path.parent),
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(payload, stream, sort_keys=True, separators=(",", ":"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self._journal_path)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
 
     @property
     def halted(self) -> bool:
@@ -53,7 +117,7 @@ class BinanceProtectedLifecycle:
     def submit_and_verify(
         self, plan: BinanceOrderPlan, *, list_client_order_id: str
     ) -> dict[str, Any]:
-        """Submit once, then reconcile exchange state before reporting protection."""
+        """Persist idempotency before submission; confirm exchange-held protection."""
         with self._lock:
             if self._halted:
                 raise PermissionError(
@@ -63,7 +127,15 @@ class BinanceProtectedLifecycle:
                 raise ValueError("A unique order-list ID of at most 20 characters is required.")
             if list_client_order_id in self._submitted_ids:
                 raise PermissionError("Duplicate order-list ID; refusing a second submission.")
+
+            # Write-ahead record: if the process dies after this point, a new
+            # process will reject the same ID instead of sending it twice.
             self._submitted_ids.add(list_client_order_id)
+            try:
+                self._persist_state()
+            except Exception:
+                self._submitted_ids.discard(list_client_order_id)
+                raise
 
             try:
                 submitted = self._gate.execute(
@@ -85,9 +157,6 @@ class BinanceProtectedLifecycle:
                         and exchange_state.get("action_required") is False
                     ):
                         break
-                    # Binance may initially report child OCO legs as
-                    # PENDING_NEW immediately after the working order fills.
-                    # Re-query briefly; never treat pending as protected.
                     if attempt + 1 < self._reconcile_attempts:
                         self._wait(self._reconcile_interval_seconds)
                 protected = (
@@ -104,13 +173,13 @@ class BinanceProtectedLifecycle:
                     "exchange_state": exchange_state,
                     "operator_action_required": not protected,
                 }
-                if not protected:
-                    self._halted = True
+                self._halted = not protected
                 self._last_result = result
+                self._persist_state()
                 return dict(result)
             except Exception:
-                # The submission may have reached the exchange even if the
-                # response was lost. Never retry automatically with a new ID.
+                # The request may have reached Binance even if its response
+                # was lost. Keep the ID and halt state durable; never retry.
                 self._halted = True
                 self._last_result = {
                     "status": "SUBMISSION_OR_RECONCILIATION_UNKNOWN",
@@ -119,18 +188,23 @@ class BinanceProtectedLifecycle:
                     "order_list_id": list_client_order_id,
                     "operator_action_required": True,
                 }
+                self._persist_state()
                 raise
 
     def reconcile_existing(self, *, symbol: str, list_client_order_id: str) -> dict[str, Any]:
-        """Refresh an existing order-list state without submitting another order."""
+        """Refresh an existing order list; never submit a replacement order."""
         with self._lock:
+            if not list_client_order_id or len(list_client_order_id) > 20:
+                raise ValueError("A valid order-list ID is required.")
             reconcile = getattr(self._client, "reconcile_protected_buy_otoco", None)
             if not callable(reconcile):
                 self._halted = True
+                self._persist_state()
                 raise RuntimeError("Client cannot reconcile protected order-list legs.")
             state = reconcile(symbol=symbol, list_client_order_id=list_client_order_id)
             if not isinstance(state, dict):
                 self._halted = True
+                self._persist_state()
                 raise RuntimeError("Exchange reconciliation returned an invalid response.")
             protected = (
                 state.get("state") == "PROTECTED"
@@ -147,4 +221,6 @@ class BinanceProtectedLifecycle:
             }
             self._halted = not protected
             self._last_result = result
+            self._submitted_ids.add(list_client_order_id)
+            self._persist_state()
             return dict(result)
