@@ -32,8 +32,8 @@ class StrategyConfig:
     def __post_init__(self):
         if self.profile not in TIMEFRAME_PROFILES:
             raise ValueError("Profile must be scalp, intraday, or swing.")
-        if not 1 <= self.score_threshold <= 12:
-            raise ValueError("Score threshold must be between 1 and 12.")
+        if not 1 <= self.score_threshold <= 15:
+            raise ValueError("Score threshold must be between 1 and 15.")
         if self.atr_period < 2 or self.swing_lookback < 5:
             raise ValueError("ATR period and swing lookback are too small.")
         if not 0.8 <= self.min_stop_atr <= self.max_stop_atr <= 2.5:
@@ -208,6 +208,24 @@ class MultiTimeframeConfluenceStrategy:
         bearish_sweep = last.high > swing_high and last.close < swing_high
         bullish_bos = last.close > swing_high
         bearish_bos = last.close < swing_low
+        internal_high = max(c.high for c in execution[-6:-1])
+        internal_low = min(c.low for c in execution[-6:-1])
+        bullish_choch = htf_fast <= htf_slow and last.close > internal_high
+        bearish_choch = htf_fast >= htf_slow and last.close < internal_low
+        recent_opposite_bull = next(
+            (c for c in reversed(execution[-7:-1]) if c.close < c.open), None
+        )
+        recent_opposite_bear = next(
+            (c for c in reversed(execution[-7:-1]) if c.close > c.open), None
+        )
+        bullish_ob_retest = bool(
+            recent_opposite_bull and last.low <= recent_opposite_bull.high
+            and last.close >= recent_opposite_bull.low and last.close > last.open
+        )
+        bearish_ob_retest = bool(
+            recent_opposite_bear and last.high >= recent_opposite_bear.low
+            and last.close <= recent_opposite_bear.high and last.close < last.open
+        )
         bullish_fvg = last.low > execution[-3].high
         bearish_fvg = last.high < execution[-3].low
         fib_bull_discount = swing_high - 0.786 * impulse_range <= last.close <= swing_high - 0.5 * impulse_range
@@ -252,6 +270,18 @@ class MultiTimeframeConfluenceStrategy:
         if bearish_bos:
             sell_score += 2
             sell_reasons.append("Price closed below the recent swing low (bearish BOS).")
+        if bullish_choch:
+            buy_score += 2
+            buy_reasons.append("Internal structure shifted bullish against the prior higher-timeframe trend (CHoCH).")
+        if bearish_choch:
+            sell_score += 2
+            sell_reasons.append("Internal structure shifted bearish against the prior higher-timeframe trend (CHoCH).")
+        if bullish_ob_retest:
+            buy_score += 1
+            buy_reasons.append("Price retested a recent bearish-candle order-block zone.")
+        if bearish_ob_retest:
+            sell_score += 1
+            sell_reasons.append("Price retested a recent bullish-candle order-block zone.")
         if bullish_sweep:
             buy_score += 2
             buy_reasons.append("Price swept the prior swing low and closed back above it.")
