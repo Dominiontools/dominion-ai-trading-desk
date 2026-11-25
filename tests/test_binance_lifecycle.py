@@ -351,10 +351,13 @@ def test_confirmed_stop_loss_is_recorded_once_in_daily_loss_ledger(plan, tmp_pat
                 {"state": "PROTECTED", "protected": True, "action_required": False},
                 {"state": "EXITED_STOP_LOSS", "protected": False, "action_required": False},
             ]
+            self.last_state = self.states[0]
 
         def reconcile_protected_buy_otoco(self, **kwargs):
             self.reconciliations += 1
-            return self.states.pop(0)
+            if self.states:
+                self.last_state = self.states.pop(0)
+            return dict(self.last_state)
 
     client = SequenceClient()
     first = BinanceProtectedLifecycle(
