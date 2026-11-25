@@ -215,14 +215,17 @@ function CryptoMonitorPanel() {
       const quoteRows: Record<string, unknown>[] = [];
       const seenQuotes = new Set<string>();
       for (const record of items) {
-        if (!Array.isArray(record.quotes)) continue;
-        for (const quote of record.quotes) {
+        const recordQuotes = Array.isArray(record.quotes_preview)
+          ? record.quotes_preview
+          : Array.isArray(record.quotes) ? record.quotes : [];
+        for (const quote of recordQuotes) {
           if (!quote || typeof quote !== "object") continue;
           const row = quote as Record<string, unknown>;
-          const key = String(record.symbol) + ":" + String(row.exchange);
+          const quoteSymbol = String(row.symbol || record.symbol);
+          const key = quoteSymbol + ":" + String(row.exchange);
           if (seenQuotes.has(key)) continue;
           seenQuotes.add(key);
-          quoteRows.push({ ...row, symbol: record.symbol });
+          quoteRows.push({ ...row, symbol: quoteSymbol });
         }
       }
       setLatestQuotes(quoteRows);
@@ -260,6 +263,9 @@ function CryptoMonitorPanel() {
   const arbitrageUniverse = status?.arbitrage_universe && typeof status.arbitrage_universe === "object"
     ? status.arbitrage_universe as Record<string, unknown>
     : null;
+  const scannerOpportunities = Array.isArray(arbitrageScanner?.opportunities)
+    ? arbitrageScanner.opportunities.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -363,6 +369,14 @@ function CryptoMonitorPanel() {
       <div className="decision-list-head"><b>LIVE TOP-OF-BOOK QUOTES</b><span>{latestQuotes.length} venues</span></div>
       {latestQuotes.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No live quote snapshot yet</b><span>Start the local paper service to fetch current Binance, Bitget and HTX prices.</span></div></div> :
         latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.symbol || "Symbol")} · {String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
+      <div className="decision-list-head"><b>TOP CROSS-EXCHANGE OPPORTUNITIES</b><span>{scannerOpportunities.length} candidates · paper only</span></div>
+      {scannerOpportunities.length === 0
+        ? <div className="decision-empty"><div><b>No qualifying price gaps</b><span>Only fresh quotes with verified fees, depth and net edge are shown here.</span></div></div>
+        : scannerOpportunities.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "")}>
+            <div><b>{String(item.symbol || "—")}</b><small>Buy {String(item.buy_exchange || "—")} → Sell {String(item.sell_exchange || "—")}</small></div>
+            <span>Net {Number(item.net_edge_bps ?? 0).toFixed(1)} bps</span>
+            <small>Top-of-book cap ${Number(item.max_notional_at_top_of_book ?? 0).toFixed(2)}}</small>
+          </div>)}
       <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
       {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
         decisions.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>The API is connected, but the monitor has not written any decisions.</span></div></div> :
