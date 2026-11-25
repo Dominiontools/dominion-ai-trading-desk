@@ -111,3 +111,112 @@ class PublicCryptoFeeds:
         """Compatibility wrapper returning only successful venue quotes."""
         quotes, _failures = self.snapshot_with_diagnostics(symbol)
         return quotes
+
+
+    @staticmethod
+    def _requested_pairs(symbols: tuple[str, ...] | list[str]) -> dict[str, str]:
+        requested: dict[str, str] = {}
+        for symbol in symbols:
+            pair, _quote = _symbol_parts(symbol)
+            requested[pair] = pair
+        if not requested:
+            raise ValueError("At least one market symbol is required.")
+        if len(requested) > 100:
+            raise ValueError("Batch market scan is limited to 100 symbols.")
+        return requested
+
+    def _binance_many(self, requested: dict[str, str]) -> list[ExchangeQuote]:
+        payload = self._get("https://data-api.binance.vision/api/v3/ticker/bookTicker")
+        if not isinstance(payload, list):
+            raise RuntimeError("Unexpected Binance all-book-ticker response.")
+        rows = {str(row.get("symbol", "")).upper(): row for row in payload if isinstance(row, dict)}
+        received = datetime.now(timezone.utc)
+        quotes = []
+        for pair in requested:
+            row = rows.get(pair)
+            if row is None:
+                continue
+            try:
+                quotes.append(ExchangeQuote(
+                    "Binance", pair, float(row["bidPrice"]), float(row["askPrice"]),
+                    received, float(row["bidQty"]), float(row["askQty"]),
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return quotes
+
+    def _bitget_many(self, requested: dict[str, str]) -> list[ExchangeQuote]:
+        payload = self._get("https://api.bitget.com/api/v2/spot/market/tickers")
+        if not isinstance(payload, dict) or payload.get("code") != "00000":
+            raise RuntimeError("Bitget all-tickers request was not successful.")
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            raise RuntimeError("Unexpected Bitget all-tickers response.")
+        wanted = set(requested)
+        quotes = []
+        for row in rows:
+            if not isinstance(row, dict) or str(row.get("symbol", "")).upper() not in wanted:
+                continue
+            try:
+                stamp = datetime.fromtimestamp(int(row["ts"]) / 1000, timezone.utc)
+                quotes.append(ExchangeQuote(
+                    "Bitget", str(row["symbol"]).upper(),
+                    float(row["bidPr"]), float(row["askPr"]), stamp,
+                    float(row.get("bidSz", 0)), float(row.get("askSz", 0)),
+                ))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+        return quotes
+
+    def _htx_many(self, requested: dict[str, str]) -> list[ExchangeQuote]:
+        payload = self._get("https://api.huobi.pro/market/tickers")
+        if not isinstance(payload, dict) or payload.get("status") != "ok":
+            raise RuntimeError("HTX all-tickers request was not successful.")
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            raise RuntimeError("Unexpected HTX all-tickers response.")
+        try:
+            stamp = datetime.fromtimestamp(int(payload["ts"]) / 1000, timezone.utc)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            stamp = datetime.now(timezone.utc)
+        wanted = set(pair.lower() for pair in requested)
+        quotes = []
+        for row in rows:
+            if not isinstance(row, dict) or str(row.get("symbol", "")).lower() not in wanted:
+                continue
+            try:
+                quotes.append(ExchangeQuote(
+                    "HTX", str(row["symbol"]).upper(),
+                    float(row["bid"]), float(row["ask"]), stamp,
+                    float(row.get("bidSize", row.get("bid-size", 0))),
+                    float(row.get("askSize", row.get("ask-size", 0))),
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return quotes
+
+    def snapshot_many_with_diagnostics(
+        self, symbols: tuple[str, ...] | list[str]
+    ) -> tuple[list[ExchangeQuote], dict[str, str]]:
+        """Fetch one all-symbol REST snapshot per venue for a multi-market scan."""
+        requested = self._requested_pairs(symbols)
+        methods = {
+            "Binance": self._binance_many,
+            "Bitget": self._bitget_many,
+            "HTX": self._htx_many,
+        }
+        failures: dict[str, str] = {}
+        quotes: list[ExchangeQuote] = []
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {name: pool.submit(method, requested) for name, method in methods.items()}
+            for venue, future in futures.items():
+                try:
+                    quotes.extend(future.result(timeout=self.timeout + 1.0))
+                except Exception as exc:
+                    detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
+                    failures[venue] = f"{type(exc).__name__}: {detail}"
+        return quotes, failures
+
+    def snapshot_many(self, symbols: tuple[str, ...] | list[str]) -> list[ExchangeQuote]:
+        quotes, _failures = self.snapshot_many_with_diagnostics(symbols)
+        return quotes
