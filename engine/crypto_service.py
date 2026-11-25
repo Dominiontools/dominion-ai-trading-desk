@@ -17,7 +17,8 @@ from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
-from engine.crypto_strategy import BinancePublicCandleFeed, SmaPaperStrategy
+from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
+from engine.confluence_strategy import TIMEFRAME_PROFILES
 from engine.readiness import build_readiness
 
 _runtime_lock = threading.RLock()
@@ -67,27 +68,33 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     )
     if not symbols or any(not item.isalnum() for item in symbols):
         raise RuntimeError("DOMINION_CRYPTO_SYMBOLS must contain valid pairs such as BTCUSDT.")
-    interval = _positive_float("DOMINION_CRYPTO_INTERVAL_SECONDS", 5.0)
+    interval = _positive_float("DOMINION_CRYPTO_INTERVAL_SECONDS", 1.0)
     if interval < 1.0:
         raise RuntimeError("Polling interval cannot be below one second.")
     log_path = Path(data_dir) / "crypto_decisions.jsonl"
     fees = _fee_config()
     feeds = PublicCryptoFeeds(timeout=5.0)
+    paper_desk = PaperTradingDesk(
+        starting_equity=20.0,
+        journal=Path(data_dir) / "paper_trades.jsonl",
+    )
     monitor = CryptoPaperMonitor(
         feeds,
         decision_log=log_path,
         costs_by_exchange=fees,
         interval_seconds=interval,
-        max_quote_age_seconds=5.0,
+        max_quote_age_seconds=2.0,
         min_net_edge_bps=10.0,
-        max_notional=20.0,
-    )
-    paper_desk = PaperTradingDesk(
-        starting_equity=20.0,
-        journal=Path(data_dir) / "paper_trades.jsonl",
+        max_notional=paper_desk.starting_equity * 0.40,
     )
     candle_feed = BinancePublicCandleFeed(timeout=8.0)
-    sma_strategy = SmaPaperStrategy()
+    strategy_profile = os.getenv("DOMINION_CRYPTO_STRATEGY_PROFILE", "intraday").strip().lower()
+    score_threshold = int(os.getenv("DOMINION_STRATEGY_SCORE_THRESHOLD", "6"))
+    confluence_strategy = ConfluencePaperStrategy(
+        profile=strategy_profile,
+        score_threshold=score_threshold,
+        max_notional_fraction=0.40,
+    )
     state = {
         "engine": "starting",
         "mode": "PAPER_ONLY",
@@ -98,7 +105,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
         "last_cycle_at": None,
         "last_error": None,
-        "strategy_engine": {"status": "STARTING", "strategy": "SMA_CROSS_10_30", "detail": "Waiting for public Binance candle and quote data."},
+        "strategy_engine": {"status": "STARTING", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "score_threshold": score_threshold, "detail": "Waiting for completed execution/context candles and a fresh Binance quote."},
         "agents": {
             "SCANNER": {"status": "RUNNING", "detail": "Public crypto price-gap scanner runs with the phone monitor."},
             "RISK": {"status": "PAPER_READY", "detail": "Paper execution gate enforces 0.5% maximum risk per trade, 2% daily loss stop, one open position, quote age, spread and slippage limits."},
@@ -217,13 +224,25 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                 if stop_event.is_set():
                     break
                 try:
-                    candles = candle_feed.candles(symbol, timeframe="1m", limit=80)
+                    execution_tf, context_tf = TIMEFRAME_PROFILES[strategy_profile]
+                    execution_candles = candle_feed.candles(symbol, timeframe=execution_tf, limit=220)
+                    context_candles = candle_feed.candles(symbol, timeframe=context_tf, limit=220)
                     quote = feeds.binance(symbol)
-                    result = sma_strategy.run_once(candles, quote, paper_desk)
+                    result = confluence_strategy.run_once(
+                        execution_candles, context_candles, quote, paper_desk,
+                        now=datetime.now(timezone.utc),
+                    )
                     event = result.get("event", result.get("status", "UNKNOWN"))
-                    state["strategy_engine"] = {"status": str(event), "strategy": "SMA_CROSS_10_30",
-                        "symbol": symbol, "detail": str(result.get("reason") or result.get("signal_reason") or event),
-                        "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+                    state["strategy_engine"] = {
+                        "status": str(event), "strategy": "MTF_CONFLUENCE",
+                        "profile": strategy_profile, "symbol": symbol,
+                        "score": result.get("score"),
+                        "score_threshold": result.get("score_threshold", score_threshold),
+                        "execution_timeframe": result.get("execution_timeframe", execution_tf),
+                        "context_timeframe": result.get("context_timeframe", context_tf),
+                        "detail": str(result.get("reason") or result.get("signal_reason") or event),
+                        "last_cycle_at": datetime.now(timezone.utc).isoformat(),
+                    }
                     if event == "PAPER_ENTRY":
                         side = result.get("position", {}).get("side", "")
                         state["agents"]["RISK"] = {"status": "APPROVED_PAPER", "detail": "Signal passed the 0.5% risk cap, daily stop, spread, slippage and quote-age checks."}
@@ -243,7 +262,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                             state["agents"]["RISK"] = {"status": "PAPER_READY", "detail": "0.5% trade-risk and 2% daily-loss checks are active; waiting for a strategy candidate."}
                             state["agents"]["SNIPER"] = {"status": "WAITING_FOR_SIGNAL", "detail": "No entry signal passed to the paper execution desk in this cycle."}
                 except Exception as exc:
-                    state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "SMA_CROSS_10_30", "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+                    state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
             stop_event.wait(60.0)
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
