@@ -200,6 +200,164 @@ async function saveStatus(store: ReturnType<typeof getStore>, status: RecordData
   });
 }
 
+async function manageBotPosition(
+  session: CTraderDemoSession,
+  store: ReturnType<typeof getStore>,
+  position: RecordData,
+  activePosition: RecordData,
+  symbols: RecordData[],
+  profile: StrategyProfile,
+  scoreThreshold: number,
+  now: Date,
+): Promise<RecordData> {
+  const positionId = number(position.positionId);
+  const tradeData = position.tradeData as RecordData | undefined;
+  const volume = number(tradeData?.volume);
+  const symbolId = number(activePosition.symbolId ?? tradeData?.symbolId);
+  const side = String(activePosition.side ?? (number(tradeData?.tradeSide) === 1 ? "BUY" : "SELL"));
+  const entryPrice = number(activePosition.entryPrice ?? position.price);
+  const initialRiskDistance = number(activePosition.initialRiskDistance);
+  const target2R = number(activePosition.target2R);
+  const target3R = number(activePosition.target3R);
+  if (!(positionId > 0) || !(symbolId > 0) || !(volume > 0) ||
+      !["BUY", "SELL"].includes(side) || !(entryPrice > 0) ||
+      !(initialRiskDistance > 0) || !(target2R > 0) || !(target3R > 0)) {
+    return { status: "BOT_POSITION_STATE_INCOMPLETE", reason: "BROKER_POSITION_REMAINS_PROTECTED_NO_NEW_ENTRY", positionId, mode: "DEMO_ONLY" };
+  }
+
+  const light = symbols.find((item) => number(item.symbolId) === symbolId);
+  if (!light) return { status: "BOT_POSITION_SYMBOL_MISSING", positionId, mode: "DEMO_ONLY" };
+  const symbolName = normalizeSymbol(light.symbolName);
+  const symbol = await session.symbolDetails(symbolId);
+  const spot = await session.spot(symbolId);
+  const bid = number(spot.bid) / 100000;
+  const ask = number(spot.ask) / 100000;
+  const quoteTimestamp = number(spot.timestamp);
+  const quoteAge = (now.getTime() - quoteTimestamp) / 1000;
+  if (!(bid > 0) || !(ask >= bid) || quoteAge < 0 || quoteAge > MAX_QUOTE_AGE_SECONDS) {
+    return { status: "POSITION_OPEN_PROTECTED_STALE_QUOTE", reason: "BROKER_SIDE_SL_TP_REMAINS_ACTIVE", positionId, quoteAgeSeconds: quoteAge, mode: "DEMO_ONLY" };
+  }
+  const currentPrice = side === "BUY" ? bid : ask;
+  const periods = TIMEFRAME_PROFILES[profile];
+  const [executionBars, contextBars] = await Promise.all([
+    session.trendbars(symbolId, periods.executionPeriod, 220),
+    session.trendbars(symbolId, periods.contextPeriod, 220),
+  ]);
+  let oppositeSetup: ReturnType<typeof evaluateConfluence> = null;
+  try {
+    const market = symbolName.startsWith("XAU") ? "GOLD" : "FOREX";
+    oppositeSetup = evaluateConfluence(
+      trendbarsToCandles(symbolName, market, periods.execution, executionBars, periods.executionSeconds, now.getTime()),
+      trendbarsToCandles(symbolName, market, periods.context, contextBars, periods.contextSeconds, now.getTime()),
+      profile, now, scoreThreshold,
+    );
+  } catch {
+    // Keep broker-side protection active if strategy data is temporarily unavailable.
+  }
+  if (oppositeSetup && oppositeSetup.side !== side) {
+    await session.closePosition(positionId, volume);
+    await store.delete("account/active-position");
+    const exit = {
+      status: "STRATEGY_INVALIDATION_EXIT_SENT",
+      reason: "OPPOSITE_CONFLUENCE_SIGNAL",
+      positionId, symbol: symbolName, side, oppositeSignal: oppositeSetup.side,
+      oppositeScore: oppositeSetup.score, mode: "DEMO_ONLY",
+    };
+    await appendEvent(store, exit);
+    return exit;
+  }
+
+  const partialTaken = activePosition.partialTaken === true;
+  const reached2R = side === "BUY" ? currentPrice >= target2R : currentPrice <= target2R;
+  const reached3R = side === "BUY" ? currentPrice >= target3R : currentPrice <= target3R;
+  if (reached3R) {
+    await session.closePosition(positionId, volume);
+    await store.delete("account/active-position");
+    const exit = { status: "TAKE_PROFIT_3R_EXIT_SENT", reason: "THREE_R_TARGET_REACHED", positionId, symbol: symbolName, mode: "DEMO_ONLY" };
+    await appendEvent(store, exit);
+    return exit;
+  }
+
+  if (!partialTaken && reached2R) {
+    const minVolume = number(activePosition.minVolume ?? symbol.minVolume);
+    const stepVolume = number(activePosition.stepVolume ?? symbol.stepVolume);
+    if (!(minVolume > 0) || !(stepVolume > 0)) throw new Error("PARTIAL_CLOSE_VOLUME_RULES_MISSING");
+    const partialVolume = Math.floor((volume / 2) / stepVolume) * stepVolume;
+    if (partialVolume >= minVolume && volume - partialVolume >= minVolume) {
+      await session.closePosition(positionId, partialVolume);
+      let afterPartial = await session.reconcile();
+      let remaining = afterPartial.positions.find((item) => number(item.positionId) === positionId);
+      if (!remaining) {
+        await store.delete("account/active-position");
+        const closed = { status: "POSITION_CLOSED_AT_2R", reason: "PARTIAL_VOLUME_NOT_REMAINING", positionId, mode: "DEMO_ONLY" };
+        await appendEvent(store, closed);
+        return closed;
+      }
+      if (!(number(remaining.stopLoss) > 0) || !(number(remaining.takeProfit) > 0)) {
+        await session.closePosition(positionId, number((remaining.tradeData as RecordData).volume));
+        await store.delete("account/active-position");
+        throw new Error("PARTIAL_CLOSE_LEFT_POSITION_UNPROTECTED_EMERGENCY_CLOSE_SENT");
+      }
+      const breakEven = Number(entryPrice.toFixed(number(symbol.digits)));
+      try {
+        await session.amendProtection(positionId, breakEven, target3R);
+        afterPartial = await session.reconcile();
+        remaining = afterPartial.positions.find((item) => number(item.positionId) === positionId);
+      } catch {
+        // The previous broker-side SL/TP is still checked below; do not assume the amend succeeded.
+      }
+      const verified = Boolean(remaining && number(remaining.stopLoss) > 0 &&
+        number(remaining.takeProfit) > 0 && Math.abs(number(remaining.stopLoss) - breakEven) <= 10 ** -number(symbol.digits));
+      const updated = {
+        ...activePosition,
+        partialTaken: true,
+        breakEvenSet: verified,
+        remainingVolume: remaining ? number((remaining.tradeData as RecordData).volume) : null,
+        partialClosedAt: new Date().toISOString(),
+      };
+      await store.setJSON("account/active-position", updated);
+      const status = {
+        status: verified ? "PARTIAL_TAKE_PROFIT_2R_AND_BREAKEVEN_CONFIRMED" : "PARTIAL_TAKE_PROFIT_2R_CONFIRMED",
+        reason: verified ? "HALF_CLOSED_AND_REMAINDER_PROTECTED_AT_BREAKEVEN_WITH_3R_TARGET" : "HALF_CLOSED_REMAINDER_RETAINS_BROKER_PROTECTION",
+        positionId, symbol: symbolName, partialVolume,
+        remainingVolume: updated.remainingVolume, mode: "DEMO_ONLY",
+      };
+      await appendEvent(store, status);
+      return status;
+    }
+    await session.closePosition(positionId, volume);
+    await store.delete("account/active-position");
+    const fullExit = { status: "FULL_TAKE_PROFIT_2R_EXIT_SENT", reason: "BROKER_MINIMUM_VOLUME_PREVENTED_SCALE_OUT", positionId, mode: "DEMO_ONLY" };
+    await appendEvent(store, fullExit);
+    return fullExit;
+  }
+
+  const favorableMove = side === "BUY" ? currentPrice - entryPrice : entryPrice - currentPrice;
+  if (activePosition.breakEvenSet !== true && favorableMove >= initialRiskDistance) {
+    const breakEven = Number(entryPrice.toFixed(number(symbol.digits)));
+    await session.amendProtection(positionId, breakEven, target3R);
+    const afterAmend = await session.reconcile();
+    const verified = afterAmend.positions.find((item) => number(item.positionId) === positionId);
+    if (verified && Math.abs(number(verified.stopLoss) - breakEven) <= 10 ** -number(symbol.digits) &&
+        number(verified.takeProfit) > 0) {
+      await store.setJSON("account/active-position", { ...activePosition, breakEvenSet: true });
+      const status = { status: "BREAKEVEN_STOP_CONFIRMED", reason: "ONE_R_REACHED", positionId, symbol: symbolName, mode: "DEMO_ONLY" };
+      await appendEvent(store, status);
+      return status;
+    }
+    return { status: "BREAKEVEN_UPDATE_PENDING", reason: "ORIGINAL_BROKER_PROTECTION_REMAINS", positionId, mode: "DEMO_ONLY" };
+  }
+
+  return {
+    status: "POSITION_OPEN_PROTECTED",
+    reason: partialTaken ? "RUNNER_PROTECTED_WITH_3R_TARGET" : "BROKER_SIDE_SL_AND_3R_TP_ACTIVE",
+    positionId, symbol: symbolName, side, currentPrice,
+    stopLoss: number(position.stopLoss), takeProfit: number(position.takeProfit),
+    partialTaken, breakEvenSet: activePosition.breakEvenSet === true,
+    mode: "DEMO_ONLY",
+  };
+}
+
 async function executeCycle(): Promise<RecordData> {
   const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
   const config = await store.get("account/engine-config", { type: "json" }) as RecordData | null;
