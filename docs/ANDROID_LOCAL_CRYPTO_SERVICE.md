@@ -16,11 +16,13 @@ not required for this embedded build.
    exchange quote snapshots and scanner decisions.
 6. Tap **Stop** when you want the monitor to stop.
 
-The default strategy watchlist is BTCUSDT, ETHUSDT and PAXGUSDT. The cross-exchange
-price-gap monitor separately targets BTCUSDT on Binance, Bitget and HTX with a
-one-second REST polling target. Actual cycles can be slower due to venue
-response times, mobile connectivity and rate limits. This is not WebSocket
-streaming or high-frequency trading.
+The default strategy watchlist is BTCUSDT, ETHUSDT and PAXGUSDT. The separate
+cross-exchange price-gap monitor dynamically selects up to 52 liquid USDT spot
+pairs from Binance 24-hour quote volume, then requests one batched public REST
+snapshot from Binance, Bitget and HTX per cycle. The one-second polling target
+is not guaranteed; actual cycles can be slower due to venue response times,
+mobile connectivity and rate limits. This is not WebSocket streaming or
+high-frequency trading.
 
 ## Samsung background settings
 
@@ -67,8 +69,9 @@ and Fibonacci retracement confluence. It discards the currently forming candle
 and blocks stale quotes or stale candle data. A candidate is sized from the
 configured $20 paper equity and 0.5% maximum risk, with a 2R paper target,
 40% maximum notional allocation, spread/slippage gates, and one open position.
-The separate BTC cross-exchange scan is analysis-only and does not create
-directional entries.
+The 52-market cross-exchange scan is analysis-only and does not create
+directional entries. Symbols can be overridden with DOMINION_ARBITRAGE_SYMBOLS;
+otherwise the top liquid USDT pairs refresh hourly.
 
 The paper book writes entry, hold, blocked-entry and exit events to
 `paper_trades.jsonl`. On engine restart it restores realized P/L and any
@@ -79,8 +82,8 @@ open-position status and multi-timeframe strategy status.
 This is still PAPER_ONLY. The directional strategy is a paper implementation, not a claim of
 profitability or a full implementation of every strategy in the user's
 strategy guide. It uses public REST candles and a single Binance quote, not a
-WebSocket stream. The current default strategy watchlist has three pairs; the
-requested 52-market dynamic universe scan is still outstanding. The separate arbitrage monitor remains analysis-only;
+WebSocket stream. The directional paper strategy watchlist has three default pairs; the
+separate cross-exchange scanner has a dynamic top-52 market universe. The separate arbitrage monitor remains analysis-only;
 an arbitrage price gap is never converted into a one-sided directional trade.
 
 ## Remaining integration checklist
