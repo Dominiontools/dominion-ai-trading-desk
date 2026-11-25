@@ -313,6 +313,9 @@ function CryptoMonitorPanel() {
   const gmgnFeed = status?.gmgn_feed && typeof status.gmgn_feed === "object"
     ? status.gmgn_feed as Record<string, unknown>
     : null;
+  const gmgnTokens = Array.isArray(gmgnFeed?.tokens)
+    ? gmgnFeed.tokens.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -388,6 +391,11 @@ function CryptoMonitorPanel() {
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>GMGN TOKEN DISCOVERY</b><span>{String(gmgnFeed?.status || "NOT CONFIGURED")}</span></div>
       <div className="panel-foot">{String(gmgnFeed?.detail || "Configure the official GMGN API key in the Android app to enable this feed.")}</div>
+      {gmgnTokens.slice(0, 10).map((token, index) => <div className="decision-row" key={String(token.token_address || index)}>
+        <div><b>{String(token.symbol || "—")} · {String(token.name || "Token")}</b><small>{String(token.launchpad || "GMGN Trenches")} · {String(token.chain || "sol")}</small></div>
+        <small>{String(token.token_address || "")}</small>
+        <span>{token.rug_ratio === undefined ? "Risk score pending" : "Rug ratio " + String(token.rug_ratio)}</span>
+      </div>)}
       {gmgnFeed?.trenches_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trenches_preview)}</pre> : null}
       {gmgnFeed?.trending_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trending_preview)}</pre> : null}
       {gmgnFeed?.security_preview ? <pre className="gmgn-preview">{String(gmgnFeed.security_preview)}</pre> : null}
