@@ -254,25 +254,23 @@ public class TradingEngineService extends Service {
             }
             PyObject module = Python.getInstance().getModule("engine.crypto_service");
             CredentialVault vault = new CredentialVault(getApplicationContext());
-            String binanceRecoveryJson = "{\"status\":\"SKIPPED\",\"halted\":true,\"orders_enabled\":false}";
+            String binanceRecoveryJson = "{\\"status\\":\\"SKIPPED\\",\\"halted\\":true,\\"orders_enabled\\":false}";
+            String[] binanceCredentials = null;
+            boolean binanceOrdersEnabled = false;
             if (vault.hasCredentials()) {
-                String[] credentials = null;
                 try {
-                    credentials = vault.loadForNativeUse();
+                    binanceCredentials = vault.loadForNativeUse();
                     PyObject recovery = Python.getInstance().getModule("engine.binance_android");
                     String dataDirectory = getFilesDir().getAbsolutePath();
                     String recoveryJson = recovery.callAttr("account_risk_snapshot",
-                        credentials[0], credentials[1],
+                        binanceCredentials[0], binanceCredentials[1],
                         dataDirectory + "/binance-lifecycle.json",
                         dataDirectory + "/binance-daily-loss.jsonl").toString();
                     binanceRecoveryJson = recoveryJson;
+                    binanceOrdersEnabled = vault.binanceTestnetOrdersEnabled();
                 } catch (Exception recoveryError) {
                     Log.w(TAG, "Binance Testnet recovery remains blocked; manual review required.");
-                } finally {
-                    if (credentials != null) {
-                        credentials[0] = null;
-                        credentials[1] = null;
-                    }
+                    binanceOrdersEnabled = false;
                 }
             }
             String gmgnApiKey = "";
@@ -281,11 +279,22 @@ public class TradingEngineService extends Service {
             } catch (Exception ignored) {
                 // GMGN is optional; the rest of the paper engine must still start.
             }
-            PyObject result = module.callAttr("start_embedded",
-                getFilesDir().getAbsolutePath(), 8766, gmgnApiKey, binanceRecoveryJson);
+            String binanceApiKey = binanceOrdersEnabled && binanceCredentials != null ? binanceCredentials[0] : "";
+            String binanceApiSecret = binanceOrdersEnabled && binanceCredentials != null ? binanceCredentials[1] : "";
+            PyObject result;
+            try {
+                result = module.callAttr("start_embedded",
+                    getFilesDir().getAbsolutePath(), 8766, gmgnApiKey, binanceRecoveryJson,
+                    binanceApiKey, binanceApiSecret, binanceOrdersEnabled);
+            } finally {
+                if (binanceCredentials != null) {
+                    binanceCredentials[0] = null;
+                    binanceCredentials[1] = null;
+                }
+            }
             running = true;
             lastError = "";
-            Log.i(TAG, "Embedded paper engine started: " + result.toString());
+            Log.i(TAG, "Embedded trading engine started: " + result.toString());
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.notify(NOTIFICATION_ID, notification("Paper monitor is running"));
         } catch (Exception error) {
