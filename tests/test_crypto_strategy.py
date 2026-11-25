@@ -244,3 +244,43 @@ def test_testnet_strategy_reports_protection_failure_as_blocked():
     assert result["event"] == "TESTNET_BLOCKED"
     assert result["halted"] is True
     assert result["operator_action_required"] is True
+
+
+
+def test_testnet_strategy_does_not_add_to_existing_position():
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243, now, 10, 10)
+    setup = SimpleNamespace(
+        market="CRYPTO", side="BUY", symbol="BTCUSDT", score=8,
+        score_threshold=6, strategy="MTF_TEST", stop_loss=1.12,
+        target_2r=1.13, execution_timeframe="15m", context_timeframe="4h",
+    )
+
+    class FakeStrategy:
+        def evaluate(self, *args, **kwargs):
+            return setup
+
+    class FakeProvider:
+        def snapshot(self, *, now=None):
+            return SimpleNamespace(context=SimpleNamespace(open_positions=1))
+
+    class NeverRouter:
+        def submit_verified_setup(self, *args, **kwargs):
+            pytest.fail("An existing position must block a new order.")
+
+    strategy = ConfluencePaperStrategy()
+    strategy.strategy = FakeStrategy()
+    result = strategy.run_testnet_once(
+        execution, context, quote, router=NeverRouter(),
+        risk_context_provider=FakeProvider(), now=now,
+    )
+    assert result["event"] == "TESTNET_POSITION_OPEN"
+    assert result["open_positions"] == 1
