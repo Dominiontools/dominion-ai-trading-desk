@@ -31,7 +31,7 @@ The view-only token is never overwritten. The scheduled engine refuses to run wi
 
 `ctrader-engine-cycle.mts` is a Netlify Scheduled Function configured for one cycle per minute. It is not a persistent WebSocket process and does not provide second-by-second Forex execution.
 
-The engine configuration is stored in Netlify Blobs at `account/engine-config`. If no configuration exists, automation is disabled. The dashboard can configure the timeframe profile (scalp/intraday/swing), broker symbol watchlist, minimum confluence score, London/New York session filter, risk per trade and daily-loss stop. Risk can be reduced below the hard limits but cannot be raised above 0.5% per trade or 2% daily loss. The dashboard can enable automation only after trading authorization is verified and the user confirms the demo-automation warning.
+The engine configuration is stored in Netlify Blobs at `account/engine-config`. If no configuration exists, automation is disabled. The dashboard can configure the timeframe profile (scalp/intraday/swing), broker symbol watchlist, minimum confluence score, London/New York session filter, risk per trade and daily-loss stop. The dashboard displays an explicit Demo/Testnet account mode and a visible but disabled Live option; this is a status/control affordance only, not a live execution route. Risk can be reduced below the hard limits but cannot be raised above 0.5% per trade or 2% daily loss. The dashboard can enable automation only after trading authorization is verified and the user confirms the demo-automation warning.
 
 The cycle:
 1. Acquires a short-lived lock to avoid overlapping runs.
@@ -86,4 +86,4 @@ Before activation:
 6. Confirm status and run read-only reconciliation first.
 7. The user must explicitly enable demo automation in the dashboard before the scheduled engine can place demo orders.
 
-Live-money trading remains disabled in code. This engine has no live endpoint, no live-account selection and no live activation control.
+Live-money trading remains disabled in code. The UI's Live option is visibly locked and cannot be selected. There is no live endpoint, live OAuth token store, live account selector or live activation path. A future live route requires a separate implementation and security review, not merely enabling this disabled UI option.
