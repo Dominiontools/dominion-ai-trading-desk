@@ -15,6 +15,7 @@ from engine.crypto_api import create_server
 from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoPlusSecurityFeed, PublicNewsRSS
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
+from engine.crypto_universe import BinanceMarketUniverse
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -68,13 +69,32 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     )
     if not symbols or any(not item.isalnum() for item in symbols):
         raise RuntimeError("DOMINION_CRYPTO_SYMBOLS must contain valid pairs such as BTCUSDT.")
-    arbitrage_symbols = tuple(
-        item.strip().upper().replace("/", "")
-        for item in os.getenv("DOMINION_ARBITRAGE_SYMBOLS", "BTCUSDT").split(",")
-        if item.strip()
-    )
-    if not arbitrage_symbols or any(not item.isalnum() for item in arbitrage_symbols):
-        raise RuntimeError("DOMINION_ARBITRAGE_SYMBOLS must contain valid pairs such as BTCUSDT.")
+    raw_arbitrage_symbols = os.getenv("DOMINION_ARBITRAGE_SYMBOLS", "").strip()
+    universe_feed = BinanceMarketUniverse(timeout=8.0)
+    universe_error = None
+    if raw_arbitrage_symbols:
+        arbitrage_symbols = tuple(
+            item.strip().upper().replace("/", "")
+            for item in raw_arbitrage_symbols.split(",")
+            if item.strip()
+        )
+        universe_status = "USER_CONFIGURED"
+        universe_source = "DOMINION_ARBITRAGE_SYMBOLS"
+    else:
+        try:
+            min_quote_volume = _positive_float("DOMINION_ARBITRAGE_MIN_QUOTE_VOLUME", 1_000_000.0)
+            arbitrage_symbols = universe_feed.top_usdt_symbols(limit=52, min_quote_volume=min_quote_volume)
+            if not arbitrage_symbols:
+                raise RuntimeError("Binance returned no eligible liquid USDT markets.")
+            universe_status = "DYNAMIC_TOP_52" if len(arbitrage_symbols) == 52 else "DYNAMIC_UNDER_52"
+            universe_source = "BINANCE_24H_QUOTE_VOLUME"
+        except Exception as exc:
+            arbitrage_symbols = ("BTCUSDT",)
+            universe_status = "FALLBACK_SINGLE_SYMBOL"
+            universe_source = "STATIC_SAFETY_FALLBACK"
+            universe_error = type(exc).__name__
+    if not arbitrage_symbols or len(arbitrage_symbols) > 100 or any(not item.isalnum() for item in arbitrage_symbols):
+        raise RuntimeError("DOMINION_ARBITRAGE_SYMBOLS must contain 1–100 valid pairs such as BTCUSDT.")
     interval = _positive_float("DOMINION_CRYPTO_INTERVAL_SECONDS", 1.0)
     if interval < 1.0:
         raise RuntimeError("Polling interval cannot be below one second.")
@@ -108,15 +128,22 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "orders_enabled": False,
         "symbols": list(symbols),
         "arbitrage_symbols": list(arbitrage_symbols),
+        "arbitrage_universe": {
+            "status": universe_status, "source": universe_source,
+            "target_count": 52, "actual_count": len(arbitrage_symbols),
+            "last_refreshed_at": datetime.now(timezone.utc).isoformat(),
+            "error": universe_error,
+        },
         "exchanges": ["Binance", "Bitget", "HTX"],
         "poll_interval_seconds": interval,
         "market_data_mode": "PUBLIC_REST_SNAPSHOT_LOCAL_RECEIPT_TIME",
-        "market_data_note": "BTC cross-exchange scan targets a one-second cycle; REST response time and venue rate limits can make actual cycles slower.",
+        "market_data_note": "Dynamic top-52 liquid USDT cross-exchange scan uses one batched REST snapshot per venue; one-second polling is a target, not a guaranteed execution time.",
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
         "arbitrage_scanner": {
             "status": "STARTING", "symbol": arbitrage_symbols[0],
+            "symbols_scanned": len(arbitrage_symbols),
             "mode": "PAPER_ONLY", "orders_enabled": False,
-            "detail": "Waiting for public Binance, Bitget and HTX quote snapshots and verified fee settings.",
+            "detail": f"Waiting for one batched public quote snapshot per venue across {len(arbitrage_symbols)} symbols and verified fee settings.",
         },
         "last_cycle_at": None,
         "last_error": None,
@@ -219,29 +246,55 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
 
     def monitor_loop() -> None:
         state["engine"] = "running"
+        active_symbols = tuple(arbitrage_symbols)
+        last_universe_refresh = datetime.now(timezone.utc)
         while not stop_event.is_set():
-            cycle_started = datetime.now(timezone.utc).isoformat()
-            for symbol in arbitrage_symbols:
-                if stop_event.is_set():
-                    break
+            cycle_started = datetime.now(timezone.utc)
+            if not raw_arbitrage_symbols and (cycle_started - last_universe_refresh).total_seconds() >= 3600:
                 try:
-                    scan = monitor.poll_once(symbol)
-                    state["arbitrage_scanner"] = {
-                        "status": scan.get("status", "UNKNOWN"),
-                        "reason": scan.get("reason"),
-                        "symbol": symbol,
-                        "quotes": scan.get("quotes", []),
-                        "opportunities": scan.get("opportunities", []),
-                        "available_exchanges": scan.get("available_exchanges", []),
-                        "collection_duration_ms": scan.get("collection_duration_ms"),
-                        "last_cycle_at": scan.get("recorded_at"),
-                        "mode": "PAPER_ONLY",
-                        "orders_enabled": False,
-                    }
-                    state["last_error"] = None
+                    refreshed = universe_feed.top_usdt_symbols(
+                        limit=52,
+                        min_quote_volume=_positive_float("DOMINION_ARBITRAGE_MIN_QUOTE_VOLUME", 1_000_000.0),
+                    )
+                    if refreshed:
+                        active_symbols = refreshed
+                        state["arbitrage_symbols"] = list(active_symbols)
+                        state["arbitrage_universe"] = {
+                            "status": "DYNAMIC_TOP_52" if len(active_symbols) == 52 else "DYNAMIC_UNDER_52",
+                            "source": "BINANCE_24H_QUOTE_VOLUME",
+                            "target_count": 52,
+                            "actual_count": len(active_symbols),
+                            "last_refreshed_at": cycle_started.isoformat(),
+                            "error": None,
+                        }
+                    last_universe_refresh = cycle_started
                 except Exception as exc:
-                    state["last_error"] = type(exc).__name__
-            state["last_cycle_at"] = cycle_started
+                    state["arbitrage_universe"]["error"] = type(exc).__name__
+                    state["arbitrage_universe"]["status"] = "REFRESH_FAILED_USING_LAST_UNIVERSE"
+            try:
+                scan = monitor.poll_many_once(active_symbols)
+                state["arbitrage_scanner"] = {
+                    "status": scan.get("status", "UNKNOWN"),
+                    "reason": scan.get("reason"),
+                    "symbol": "MULTI_MARKET",
+                    "symbols_scanned": scan.get("symbols_requested", len(active_symbols)),
+                    "symbols_with_quotes": scan.get("symbols_with_quotes", 0),
+                    "symbols_with_two_venues": scan.get("symbols_with_two_venues", 0),
+                    "quote_count": scan.get("quote_count", 0),
+                    "quotes_by_exchange": scan.get("quotes_by_exchange", {}),
+                    "opportunities": scan.get("opportunities", []),
+                    "opportunities_count": scan.get("opportunities_count", 0),
+                    "available_exchanges": scan.get("available_exchanges", []),
+                    "venue_errors": scan.get("venue_errors", {}),
+                    "collection_duration_ms": scan.get("collection_duration_ms"),
+                    "last_cycle_at": scan.get("recorded_at"),
+                    "mode": "PAPER_ONLY",
+                    "orders_enabled": False,
+                }
+                state["last_error"] = None
+            except Exception as exc:
+                state["last_error"] = type(exc).__name__
+            state["last_cycle_at"] = cycle_started.isoformat()
             stop_event.wait(interval)
         state["engine"] = "stopped"
 
