@@ -123,6 +123,7 @@ export function evaluateConfluence(
   profile: StrategyProfile,
   now = new Date(),
   scoreThreshold = 6,
+  useSessionFilter = false,
 ): TradeSetup | null {
   const timeframes = TIMEFRAME_PROFILES[profile];
   if (!timeframes) throw new Error("INVALID_STRATEGY_PROFILE");
@@ -136,6 +137,7 @@ export function evaluateConfluence(
   validateCandles(context, symbol, timeframes.context);
   if (context.some((candle) => candle.market !== market)) throw new Error("MARKET_MISMATCH");
 
+  if (useSessionFilter && !inMajorSession(now)) return null;
   const last = execution[execution.length - 1];
   const closes = execution.map((candle) => candle.close);
   const contextCloses = context.map((candle) => candle.close);
