@@ -316,6 +316,12 @@ function CryptoMonitorPanel() {
   const gmgnTokens = Array.isArray(gmgnFeed?.tokens)
     ? gmgnFeed.tokens.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     : [];
+  const gmgnSniper = status?.gmgn_sniper && typeof status.gmgn_sniper === "object"
+    ? status.gmgn_sniper as Record<string, unknown>
+    : null;
+  const gmgnSniperCandidates = Array.isArray(gmgnSniper?.candidates)
+    ? gmgnSniper.candidates.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -399,6 +405,20 @@ function CryptoMonitorPanel() {
       {gmgnFeed?.trenches_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trenches_preview)}</pre> : null}
       {gmgnFeed?.trending_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trending_preview)}</pre> : null}
       {gmgnFeed?.security_preview ? <pre className="gmgn-preview">{String(gmgnFeed.security_preview)}</pre> : null}
+    </div>
+    <div className="agent-runtime-list">
+      <div className="decision-list-head"><b>GMGN SNIPER · PAPER REVIEW ONLY</b><span>{String(gmgnSniper?.status || "WAITING")}</span></div>
+      <div className="panel-foot">{String(gmgnSniper?.detail || "Candidates require current liquidity and complete GMGN security evidence. No orders are enabled.")}</div>
+      <div className="crypto-summary">
+        <div><small>QUALIFIED CANDIDATES</small><b>{String(gmgnSniper?.candidate_count ?? 0)}</b></div>
+        <div><small>BLOCKED TOKENS</small><b>{String(gmgnSniper?.blocked_count ?? 0)}</b></div>
+        <div><small>EXECUTION</small><b>DISABLED</b></div>
+      </div>
+      {gmgnSniperCandidates.map((item, index) => <div className="decision-row" key={String(item.token_address || index)}>
+        <div><b>{String(item.symbol || "—")}</b><small>{String(item.chain || "sol")} · Liquidity ${Number(item.liquidity_usd ?? 0).toLocaleString()}</small></div>
+        <span>Rug ratio {String(item.rug_ratio ?? "—")}</span>
+        <small>{String(item.token_address || "")}</small>
+      </div>)}
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 9)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
