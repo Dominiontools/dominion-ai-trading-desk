@@ -254,7 +254,7 @@ public class TradingEngineService extends Service {
             }
             PyObject module = Python.getInstance().getModule("engine.crypto_service");
             CredentialVault vault = new CredentialVault(getApplicationContext());
-            String binanceRecoveryJson = "{\\"status\\":\\"SKIPPED\\",\\"halted\\":true,\\"orders_enabled\\":false}";
+            String binanceRecoveryJson = "{\"status\":\"SKIPPED\",\"halted\":true,\"orders_enabled\":false}";
             String[] binanceCredentials = null;
             boolean binanceOrdersEnabled = false;
             if (vault.hasCredentials()) {
