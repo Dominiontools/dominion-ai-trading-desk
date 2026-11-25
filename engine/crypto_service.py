@@ -255,22 +255,26 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                         seen_security_addresses.add(address)
                         unique_candidates.append((token, gmgn_chain, address))
                     if unique_candidates:
-                        token, gmgn_chain, address = unique_candidates[gmgn_security_cursor % len(unique_candidates)]
-                        gmgn_security_cursor += 1
-                        try:
-                            evidence = gmgn_client.token_security(gmgn_chain, address)
-                            assessment = summarize_security_evidence(evidence, gmgn_chain)
-                            gmgn_security_results.append({
-                                "symbol": token.get("symbol"), "chain": gmgn_chain,
-                                "token_address": address, "assessment": assessment,
-                                "checked_at": datetime.now(timezone.utc).isoformat(),
-                            })
-                        except Exception as exc:
-                            gmgn_security_errors += 1
-                            gmgn_security_results.append({
-                                "symbol": token.get("symbol"), "chain": gmgn_chain,
-                                "status": "GMGN_SECURITY_ERROR", "error": type(exc).__name__,
-                            })
+                        batch_size = min(4, len(unique_candidates))
+                        for offset in range(batch_size):
+                            token, gmgn_chain, address = unique_candidates[
+                                (gmgn_security_cursor + offset) % len(unique_candidates)
+                            ]
+                            try:
+                                evidence = gmgn_client.token_security(gmgn_chain, address)
+                                assessment = summarize_security_evidence(evidence, gmgn_chain)
+                                gmgn_security_results.append({
+                                    "symbol": token.get("symbol"), "chain": gmgn_chain,
+                                    "token_address": address, "assessment": assessment,
+                                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                                })
+                            except Exception as exc:
+                                gmgn_security_errors += 1
+                                gmgn_security_results.append({
+                                    "symbol": token.get("symbol"), "chain": gmgn_chain,
+                                    "status": "GMGN_SECURITY_ERROR", "error": type(exc).__name__,
+                                })
+                        gmgn_security_cursor = (gmgn_security_cursor + batch_size) % len(unique_candidates)
                 previous_security_checks = state.get("gmgn_feed", {}).get("security_checks", [])
                 security_by_address = {
                     str(item.get("token_address", "")).lower(): item
