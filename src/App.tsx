@@ -343,6 +343,12 @@ function CryptoMonitorPanel() {
   const readinessTasks = Array.isArray(readiness?.tasks)
     ? readiness.tasks.filter((task): task is Record<string, unknown> => !!task && typeof task === "object")
     : [];
+  const binanceRiskContext = status?.binance_testnet_risk_context && typeof status.binance_testnet_risk_context === "object"
+    ? status.binance_testnet_risk_context as Record<string, unknown>
+    : null;
+  const binanceRecovery = status?.binance_testnet_recovery && typeof status.binance_testnet_recovery === "object"
+    ? status.binance_testnet_recovery as Record<string, unknown>
+    : null;
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -402,6 +408,18 @@ function CryptoMonitorPanel() {
       <div><small>MARKET UNIVERSE</small><b>{String(arbitrageUniverse?.status || "Waiting")}</b></div>
       <div><small>SCAN TARGET</small><b>{String(status?.poll_interval_seconds ?? "1")}s · batch REST</b></div>
       <div><small>STRATEGY PROFILE</small><b>{String(strategyEngine?.profile || "Intraday")} · {String(strategyEngine?.execution_timeframe || "15m")}/{String(strategyEngine?.context_timeframe || "4h")}</b></div>
+    </div>
+    <div className="agent-runtime-list">
+      <div className="decision-list-head"><b>BINANCE TESTNET · SHARED RISK SNAPSHOT</b><span>{String(binanceRiskContext?.status || binanceRecovery?.status || "NOT CHECKED")}</span></div>
+      <div className="crypto-summary">
+        <div><small>RISK CONTEXT</small><b>{binanceRiskContext?.verified === true ? "VERIFIED" : "BLOCKED / NOT CHECKED"}</b></div>
+        <div><small>USDT EQUITY</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.equity_quote) : "—"}</b></div>
+        <div><small>AVAILABLE USDT</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.available_quote) : "—"}</b></div>
+        <div><small>DAILY LOSS BUDGET USED</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.daily_loss_quote) : "—"}</b></div>
+        <div><small>OPEN / UNMANAGED POSITIONS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.open_positions) : "—"}</b></div>
+        <div><small>JOURNALED ORDER LISTS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.journaled_order_lists) : "—"}</b></div>
+      </div>
+      <div className="panel-foot">Read-only Testnet account and recovery check. This snapshot does not enable orders. Any non-zero non-USDT Spot holding counts toward the one-position limit. Unknown account, recovery or daily-loss state blocks execution.</div>
     </div>
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>GMGN TOKEN DISCOVERY</b><span>{String(gmgnFeed?.status || "NOT CONFIGURED")}</span></div>
