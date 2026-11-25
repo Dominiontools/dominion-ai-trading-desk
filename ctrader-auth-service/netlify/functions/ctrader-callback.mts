@@ -107,7 +107,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       authorize.search = new URLSearchParams({
         client_id: clientId,
         redirect_uri: REDIRECT_URI,
-        scope: "trading",
+        scope: "accounts",
         product: "web",
       }).toString();
 
