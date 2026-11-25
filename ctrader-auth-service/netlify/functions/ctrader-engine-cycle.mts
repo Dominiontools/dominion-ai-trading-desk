@@ -17,7 +17,6 @@ import {
   MAX_RISK_PER_TRADE,
 } from "../../lib/ctrader-risk.mjs";
 
-const MAX_DAILY_LOSS = 0.02;
 const MAX_SPREAD_BPS = 20;
 const MAX_SLIPPAGE_BPS = 15;
 const MAX_QUOTE_AGE_SECONDS = 10;
@@ -113,6 +112,7 @@ async function manageBotPosition(
   scoreThreshold: number,
   useSessionFilter: boolean,
   daily: { startingEquity: number; dailyNetPnl: number; dailyLossFraction: number },
+  dailyLossLimitFraction: number,
   now: Date,
 ): Promise<RecordData> {
   const positionId = number(position.positionId);
@@ -147,7 +147,7 @@ async function manageBotPosition(
     (volume / 100) - number(activePosition.estimatedRoundTripCommission ?? 0);
   const markToMarketDailyPnl = daily.dailyNetPnl + unrealizedPnl;
   const markToMarketLossFraction = Math.max(0, -markToMarketDailyPnl / daily.startingEquity);
-  if (markToMarketLossFraction >= MAX_DAILY_LOSS) {
+  if (markToMarketLossFraction >= dailyLossLimitFraction) {
     await session.closePosition(positionId, volume);
     await store.delete("account/active-position");
     const dailyClose = {
@@ -297,6 +297,16 @@ async function executeCycle(): Promise<RecordData> {
   }
   const scoreThreshold = number(config?.scoreThreshold ?? 6);
   const useSessionFilter = config?.useSessionFilter !== false;
+  const riskPerTradePct = number(config?.riskPerTradePct ?? 0.5);
+  const dailyLossLimitPct = number(config?.dailyLossLimitPct ?? 2);
+  if (!Number.isFinite(riskPerTradePct) || riskPerTradePct < 0.05 || riskPerTradePct > MAX_RISK_PER_TRADE * 100 ||
+      !Number.isFinite(dailyLossLimitPct) || dailyLossLimitPct < 0.5 || dailyLossLimitPct > 2) {
+    const invalidRisk = { status: "BLOCKED", reason: "INVALID_USER_RISK_SETTINGS", mode: "DEMO_ONLY" };
+    await saveStatus(store, invalidRisk);
+    return invalidRisk;
+  }
+  const riskFraction = riskPerTradePct / 100;
+  const dailyLossLimitFraction = dailyLossLimitPct / 100;
   const requestedSymbols = Array.isArray(config?.symbols)
     ? config.symbols.map(normalizeSymbol).filter(Boolean)
     : DEFAULT_SYMBOLS;
@@ -365,7 +375,7 @@ async function executeCycle(): Promise<RecordData> {
         await appendEvent(store, emergency);
         return emergency;
       }
-      if (daily.dailyLossFraction >= MAX_DAILY_LOSS && isDominionPosition) {
+      if (daily.dailyLossFraction >= dailyLossLimitFraction && isDominionPosition) {
         await session.closePosition(positionId, volume);
         await store.delete("account/active-position");
         const dailyClose = {
@@ -382,7 +392,7 @@ async function executeCycle(): Promise<RecordData> {
       if (isDominionPosition && number(activePosition?.positionId) === positionId) {
         const managed = await manageBotPosition(
           session, store, position, activePosition as RecordData,
-          symbols, profile, scoreThreshold, useSessionFilter, daily, now,
+          symbols, profile, scoreThreshold, useSessionFilter, daily, dailyLossLimitFraction, now,
         );
         await saveStatus(store, managed);
         return managed;
@@ -418,7 +428,7 @@ async function executeCycle(): Promise<RecordData> {
       await saveStatus(store, pending);
       return pending;
     }
-    if (daily.dailyLossFraction >= MAX_DAILY_LOSS) {
+    if (daily.dailyLossFraction >= dailyLossLimitFraction) {
       const stopped = {
         status: "DAILY_STOP",
         reason: "DAILY_LOSS_LIMIT_REACHED",
@@ -502,7 +512,7 @@ async function executeCycle(): Promise<RecordData> {
     }
 
     const commissionPrice = entryPrice * (1 + MAX_SLIPPAGE_BPS / 10000);
-    const sized = sizeVolume(best.symbol, commissionPrice, riskDistanceForSizing, daily.equity);
+    const sized = sizeVolume(best.symbol, commissionPrice, riskDistanceForSizing, daily.equity, riskFraction);
     const marginResponse = await session.expectedMargin(best.symbolId, sized.volume);
     const marginRow = marginResponse.margins.find((item) => number(item.volume) === sized.volume) ?? marginResponse.margins[0];
     if (!marginRow) throw new Error("EXPECTED_MARGIN_NOT_RETURNED");
@@ -513,7 +523,7 @@ async function executeCycle(): Promise<RecordData> {
       throw new Error("MARGIN_GUARD_REJECTED");
     }
     const riskPct = ((sized.riskAmount + sized.commission) / daily.equity) * 100;
-    if (riskPct > MAX_RISK_PER_TRADE * 100 + 1e-8) throw new Error("RISK_LIMIT_REJECTED");
+    if (riskPct > riskPerTradePct + 1e-8) throw new Error("RISK_LIMIT_REJECTED");
 
     const slippageInPoints = Math.max(1, Math.floor((entryPrice * MAX_SLIPPAGE_BPS / 10000) / point));
     const clientOrderId = `dominion-${randomUUID()}`;
@@ -524,6 +534,8 @@ async function executeCycle(): Promise<RecordData> {
       score: best.setup.score,
       scoreThreshold,
       profile,
+      riskPerTradePct,
+      dailyLossLimitPct,
       volume: sized.volume,
       entryPrice,
       stopLoss,
