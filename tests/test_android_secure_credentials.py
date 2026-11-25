@@ -73,5 +73,5 @@ def test_android_default_recovery_json_has_valid_java_escaping():
     line = next(line for line in script.splitlines()
                 if "String binanceRecoveryJson" in line)
     prefix = line.split("status")[0]
-    assert prefix.endswith("\\")
-    assert not prefix.endswith("\\\\")
+    assert prefix.endswith(chr(92) + '"')
+    assert not prefix.endswith(chr(92) * 2 + '"')
