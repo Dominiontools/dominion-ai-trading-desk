@@ -187,3 +187,5 @@ export default async (request: Request, context: { deploy: { context: string } }
     return html("Callback setup incomplete", safeMessage, 500, { "set-cookie": clearCookie });
   }
 };
+
+// Deployment refresh: pick up the updated production encryption key.
