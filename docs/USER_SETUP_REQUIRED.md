@@ -24,24 +24,13 @@ No GMGN wallet swaps or trading orders are currently enabled.
 
 The Android strategy loop is now wired to the protected Testnet router, but no actual Testnet order has yet been placed or verified. Automatic emergency market-flattening for an unprotected fill is not implemented; an uncertain protection state halts new entries and requires manual review.
 
-## 3. Bitget Spot Demo API
+## 3. Bitget and HTX public market data — no setup required
 
-Bitget officially supports Demo API keys. The documented flow is:
-- Switch the Bitget account to **Demo mode** first.
-- Open **Personal Center → API Key Management → Create a Demo API Key**.
-- Use that Demo key with the `paptrading: 1` request header. The REST host remains `api.bitget.com`; the Demo key and header select the simulated environment.
-- Keep withdrawals disabled. Do not use a live key with the demo header.
-- Demo API access requires KYC according to Bitget's documentation.
+Bitget and HTX are included as public market-data sources only in this release stage. Their public feeds do not require private API keys, deposits, demo-account setup, or trading permissions.
 
-Bitget's public market-data feed is already connected. The order adapter remains separate and must be completed and verified against the Demo API before the app exposes Bitget execution.
+No Bitget Demo API key or HTX Demo API key is required from the user. No Bitget or HTX execution adapter is part of the current acceptance checklist. Cross-exchange observations from these feeds are informational/paper analysis only; do not present a price spread as guaranteed net arbitrage profit. Where account-specific trading fees cannot be verified, fee-adjusted execution must remain blocked.
 
-## 4. HTX Unified Account Demo
-
-HTX announced Unified Account Demo Trading on 9 November 2026. Its demo interface supports Spot, Futures and Multi-Currency Margin with virtual funds. The older public Spot API reference still labels its legacy testnet as stopped; the new demo announcement does not document a matching REST API host or authentication flow.
-
-Use the official demo interface for manual familiarization only. Do not connect an HTX live trading key to the old live API and call it a demo test. HTX execution stays disabled until the new Unified Account Demo API route is confirmed from official documentation and can be tested safely.
-
-## 3. cTrader / Pepperstone demo
+## 4. cTrader / Pepperstone demo
 
 - The existing view-only authorization is preserved.
 - The cTrader app must have the required Spotware approval and trading scope.
@@ -52,8 +41,8 @@ Use the official demo interface for manual familiarization only. Do not connect 
 ## 5. Exchange execution costs
 
 - Binance's Testnet router fetches authenticated per-symbol commission rates directly; it does not rely on guessed fees.
-- Bitget, HTX and OKX still need verified account-tier fees before their quotes can contribute to fee-adjusted arbitrage comparisons.
-- Unknown fees keep cross-exchange arbitrage execution blocked. Do not use guessed fees to claim net profitability.
+- Bitget, HTX and OKX public quotes may be used for market comparison and paper monitoring.
+- Account-tier fees must be verified before any fee-adjusted execution claim; unknown fees keep arbitrage execution blocked. Do not use guessed fees to claim net profitability.
 
 ## 6. Final two-account Netlify connection
 
@@ -75,6 +64,6 @@ Do not silently switch backend accounts or redirect URIs. Choose that migration 
 ## Safety boundary
 
 - The Android crypto strategy is paper-only by default. Binance Spot Testnet execution is an optional BUY-only mode behind an explicit OFF-by-default Android switch.
-- Bitget and HTX public market-data feeds are connected; their execution adapters remain disabled pending implementation and demo verification.
+- Bitget and HTX public market-data feeds are the agreed scope for this stage. No private credentials or execution setup is required.
 - The cTrader engine is demo-only and requires trading-scope authorization and verified demo-order tests.
 - Live-money trading remains locked and requires a separate explicit decision after demo acceptance.
