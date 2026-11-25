@@ -113,3 +113,115 @@ class GMGNReadOnlyClient:
         if not chain or len(chain) > 32 or not address or len(address) > 128:
             raise ValueError("A valid chain and token address are required.")
         return self._request("GET", path, {"chain": chain, "address": address})
+
+
+def _find_field(value: object, field: str):
+    if isinstance(value, dict):
+        if field in value:
+            return value[field]
+        for nested in value.values():
+            found = _find_field(nested, field)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for nested in value:
+            found = _find_field(nested, field)
+            if found is not None:
+                return found
+    return None
+
+
+def summarize_security_evidence(payload: object, chain: str) -> dict:
+    """Extract documented GMGN security signals without declaring a token safe."""
+    chain = str(chain).strip().lower()
+    flags: list[str] = []
+    unknown: list[str] = []
+    observed: dict[str, object] = {}
+
+    def text_value(field: str):
+        value = _find_field(payload, field)
+        if value is None or value == "":
+            unknown.append(field)
+            return None
+        return str(value).strip().lower()
+
+    def bool_value(field: str):
+        value = _find_field(payload, field)
+        if value is None or value == "":
+            unknown.append(field)
+            return None
+        if isinstance(value, bool):
+            return value
+        normalized = str(value).strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+        unknown.append(field)
+        return None
+
+    open_source = text_value("open_source")
+    owner_renounced = text_value("owner_renounced")
+    wash_trading = bool_value("is_wash_trading")
+    rug_ratio = _find_field(payload, "rug_ratio")
+    try:
+        rug_score = float(rug_ratio)
+        if not 0 <= rug_score <= 1:
+            raise ValueError
+        observed["rug_ratio"] = rug_score
+        if rug_score > 0.3:
+            flags.append("GMGN_HIGH_RUG_RATIO")
+    except (TypeError, ValueError):
+        unknown.append("rug_ratio")
+
+    if open_source == "no":
+        flags.append("GMGN_SOURCE_NOT_VERIFIED")
+    elif open_source not in {"yes", "unknown"}:
+        unknown.append("open_source")
+
+    if owner_renounced == "no":
+        flags.append("GMGN_OWNER_NOT_RENOUNCED")
+    elif owner_renounced not in {"yes", "unknown"}:
+        unknown.append("owner_renounced")
+
+    if wash_trading is True:
+        flags.append("GMGN_WASH_TRADING_DETECTED")
+
+    if chain in {"bsc", "base"}:
+        honeypot = text_value("is_honeypot")
+        if honeypot == "yes":
+            flags.append("GMGN_HONEYPOT_DETECTED")
+        elif honeypot not in {"no"}:
+            unknown.append("is_honeypot")
+
+    if chain == "sol":
+        mint_renounced = bool_value("renounced_mint")
+        freeze_renounced = bool_value("renounced_freeze_account")
+        if mint_renounced is False:
+            flags.append("GMGN_MINT_AUTHORITY_NOT_RENOUNCED")
+        if freeze_renounced is False:
+            flags.append("GMGN_FREEZE_AUTHORITY_NOT_RENOUNCED")
+
+    for field in ("buy_tax", "sell_tax", "top_10_holder_rate",
+                  "dev_team_hold_rate", "creator_balance_rate",
+                  "suspected_insider_hold_rate", "rat_trader_amount_rate",
+                  "bundler_trader_amount_rate", "sniper_count", "burn_status"):
+        value = _find_field(payload, field)
+        if value is not None:
+            observed[field] = value
+
+    critical_unknown = bool(unknown)
+    if flags:
+        status = "RISK_FLAGS_FOUND"
+    elif critical_unknown:
+        status = "INSUFFICIENT_EVIDENCE"
+    else:
+        status = "NO_EXPLICIT_FLAGS"
+
+    return {
+        "status": status,
+        "risk_flags": sorted(set(flags)),
+        "unknown_fields": sorted(set(unknown)),
+        "observed": observed,
+        "disclaimer": "No explicit GMGN flag is not a safety guarantee.",
+    }
