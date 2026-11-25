@@ -178,6 +178,7 @@ class EmptyNewsFeed:
 
 
 def test_embedded_service_connects_official_gmgn_read_only_feed(tmp_path, monkeypatch):
+    monkeypatch.setattr(service.time, "monotonic", lambda: 400.0)
     monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
     monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
     monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
@@ -213,6 +214,7 @@ def test_embedded_service_connects_official_gmgn_read_only_feed(tmp_path, monkey
 
 
 def test_gmgn_security_evidence_is_used_by_rug_agent_for_solana_tokens(tmp_path, monkeypatch):
+    monkeypatch.setattr(service.time, "monotonic", lambda: 100.0)
     monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
     monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
     monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
