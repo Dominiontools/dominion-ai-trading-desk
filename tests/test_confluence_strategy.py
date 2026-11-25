@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -74,3 +75,26 @@ def test_strategy_returns_explainable_setup_or_none_for_synthetic_data():
         assert setup.score >= setup.score_threshold
         assert setup.reasons
         assert setup.mode == "SIGNAL_ONLY"
+
+def test_uptrend_breakout_generates_setup_with_two_r_and_three_r_targets():
+    strategy = MultiTimeframeConfluenceStrategy(
+        StrategyConfig(profile="intraday", score_threshold=6)
+    )
+    execution = candles("EURUSD", "FOREX", "15m", 240, 1.1, 0.0001, spread=0.0005)
+    previous = execution[-2]
+    breakout = replace(
+        execution[-1],
+        open=previous.close + 0.0002,
+        high=previous.close + 0.0012,
+        low=previous.close - 0.0003,
+        close=previous.close + 0.0007,
+    )
+    execution[-1] = breakout
+    context = candles("EURUSD", "FOREX", "4h", 240, 1.0, 0.0005, spread=0.001)
+    setup = strategy.evaluate(execution, context)
+    assert setup is not None
+    assert setup.side == "BUY"
+    assert setup.score >= 6
+    assert setup.target_2r == pytest.approx(setup.entry_price + 2 * setup.risk_distance)
+    assert setup.target_3r == pytest.approx(setup.entry_price + 3 * setup.risk_distance)
+    assert setup.entry_price > setup.stop_loss
