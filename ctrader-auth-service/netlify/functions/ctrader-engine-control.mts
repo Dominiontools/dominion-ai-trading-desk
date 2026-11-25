@@ -6,6 +6,7 @@ const DEFAULT_CONFIG = {
   enabled: false,
   profile: "intraday",
   scoreThreshold: 6,
+  useSessionFilter: true,
   symbols: ["XAUUSD", "EURUSD", "GBPUSD"],
   maxRiskPerTradePct: 0.5,
   maxDailyLossPct: 2,
@@ -75,6 +76,10 @@ export default async (request: Request) => {
   if (!Number.isInteger(scoreThreshold) || scoreThreshold < 1 || scoreThreshold > 15) {
     return response(400, { error: "INVALID_SCORE_THRESHOLD" });
   }
+  const useSessionFilter = body.useSessionFilter ?? previous?.useSessionFilter ?? DEFAULT_CONFIG.useSessionFilter;
+  if (typeof useSessionFilter !== "boolean") {
+    return response(400, { error: "INVALID_SESSION_FILTER_SETTING" });
+  }
   const rawSymbols = body.symbols ?? previous?.symbols ?? DEFAULT_CONFIG.symbols;
   if (!Array.isArray(rawSymbols) || rawSymbols.length < 1 || rawSymbols.length > 20) {
     return response(400, { error: "INVALID_SYMBOL_WATCHLIST" });
@@ -101,6 +106,7 @@ export default async (request: Request) => {
     enabled: body.enabled,
     profile,
     scoreThreshold,
+    useSessionFilter,
     symbols,
     updatedAt: new Date().toISOString(),
     updatedBy: "authenticated-new-dashboard-proxy",
@@ -112,6 +118,7 @@ export default async (request: Request) => {
     enabled: config.enabled,
     profile: config.profile,
     scoreThreshold: config.scoreThreshold,
+    useSessionFilter: config.useSessionFilter,
     symbols: config.symbols,
     environment: "demo",
     liveTradingEnabled: false,
