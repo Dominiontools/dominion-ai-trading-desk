@@ -1,4 +1,4 @@
-"""Read-only public spot order-book ticker adapters for Binance, Bitget and HTX.
+"""Read-only public spot order-book ticker adapters for Binance, Bitget, HTX and OKX.
 
 No API keys, account endpoints, wallet access, or order methods are used.
 These are REST snapshots, not exchange WebSocket streams.
@@ -88,16 +88,38 @@ class PublicCryptoFeeds:
         return ExchangeQuote("HTX", symbol, float(tick["bid"][0]), float(tick["ask"][0]),
                              stamp, float(tick["bid"][1]), float(tick["ask"][1]))
 
+    def okx(self, symbol: str) -> ExchangeQuote:
+        """Fetch one public OKX SPOT best-bid/best-ask ticker without credentials."""
+        pair, quote = _symbol_parts(symbol)
+        base = pair[:-len(quote)]
+        instrument = f"{base}-{quote}"
+        query = urlencode({"instId": instrument})
+        payload = self._get(f"https://www.okx.com/api/v5/market/ticker?{query}")
+        if not isinstance(payload, dict) or payload.get("code") != "0":
+            raise RuntimeError("OKX market-data request was not successful.")
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            raise RuntimeError("Unexpected OKX ticker response.")
+        row = next((item for item in rows if isinstance(item, dict)
+                    and item.get("instId") == instrument), None)
+        if row is None:
+            raise RuntimeError(f"OKX did not return {instrument}.")
+        stamp = datetime.fromtimestamp(int(row["ts"]) / 1000, timezone.utc)
+        return ExchangeQuote(
+            "OKX", pair, float(row["bidPx"]), float(row["askPx"]), stamp,
+            float(row.get("bidSz", 0)), float(row.get("askSz", 0)),
+        )
+
     def snapshot_with_diagnostics(self, symbol: str) -> tuple[list[ExchangeQuote], dict[str, str]]:
         """Fetch venues concurrently and retain successful quotes independently.
 
         A single slow venue must not hide healthy venues. The caller decides
         whether enough independent, fresh venues remain for a comparison.
         """
-        methods = (self.binance, self.bitget, self.htx)
+        methods = (self.binance, self.bitget, self.htx, self.okx)
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [(method.__name__, pool.submit(method, symbol)) for method in methods]
             for venue, future in futures:
                 try:
@@ -207,7 +229,7 @@ class PublicCryptoFeeds:
         }
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {name: pool.submit(method, requested) for name, method in methods.items()}
             for venue, future in futures.items():
                 try:
