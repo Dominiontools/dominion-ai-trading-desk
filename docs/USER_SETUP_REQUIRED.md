@@ -45,6 +45,14 @@ Before the single coordinated deployment:
 - Configure the old backend CORS allowlist for the new dashboard origin only.
 - Deploy both projects together once, after all final checks and explicit user approval.
 
+## Netlify deployment credit issue
+
+The existing cTrader backend team's latest deployment attempts were skipped because that account exceeded its available Netlify credits. The new dashboard project currently has no deployment. No deployment has been started from this development branch.
+
+Before the single final release, confirm that the old backend team has enough credits for one production deployment. If the credits cannot be restored, the alternative is to host the active cTrader backend on the new Netlify account and update the cTrader application's registered redirect URI to the new callback URL. That alternative requires a fresh cTrader authorization; the existing encrypted view-only authorization in the old account will remain preserved and untouched.
+
+Do not silently switch backend accounts or redirect URIs. Choose that migration only after reviewing the effect and obtaining the user's approval.
+
 ## Safety boundary
 
 - The Android crypto strategy and arbitrage scanner are paper-only today.
