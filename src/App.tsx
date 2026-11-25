@@ -390,6 +390,7 @@ function CryptoMonitorPanel() {
       <div className="panel-foot">{String(gmgnFeed?.detail || "Configure the official GMGN API key in the Android app to enable this feed.")}</div>
       {gmgnFeed?.trenches_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trenches_preview)}</pre> : null}
       {gmgnFeed?.trending_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trending_preview)}</pre> : null}
+      {gmgnFeed?.security_preview ? <pre className="gmgn-preview">{String(gmgnFeed.security_preview)}</pre> : null}
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 9)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
