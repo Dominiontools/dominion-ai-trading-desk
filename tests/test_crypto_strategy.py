@@ -146,8 +146,8 @@ def test_confluence_strategy_routes_valid_setup_through_testnet_router():
 
     class FakeProvider:
         def snapshot(self, *, now=None):
-            return SimpleNamespace(context=object(), account_snapshot_verified=True,
-                                   daily_loss_verified=True)
+            return SimpleNamespace(context=SimpleNamespace(open_positions=0),
+                                   account_snapshot_verified=True, daily_loss_verified=True)
 
     class FakeRouter:
         def __init__(self):
@@ -227,7 +227,7 @@ def test_testnet_strategy_reports_protection_failure_as_blocked():
 
     class FakeProvider:
         def snapshot(self, *, now=None):
-            return object()
+            return SimpleNamespace(context=SimpleNamespace(open_positions=0))
 
     class FakeRouter:
         def submit_verified_setup(self, *args, **kwargs):
