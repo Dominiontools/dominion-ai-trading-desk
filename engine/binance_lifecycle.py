@@ -45,6 +45,7 @@ class BinanceProtectedLifecycle:
         self._lock = RLock()
         self._journal_path = Path(journal_path) if journal_path is not None else None
         self._submitted_ids: set[str] = set()
+        self._submitted_symbols: dict[str, str] = {}
         self._halted = False
         self._last_result: dict[str, Any] | None = None
         self._restore_state()
@@ -59,12 +60,16 @@ class BinanceProtectedLifecycle:
             submitted = payload.get("submitted_ids")
             halted = payload.get("halted")
             last_result = payload.get("last_result")
+            submitted_symbols = payload.get("submitted_symbols", {})
             if (not isinstance(submitted, list)
                     or any(not isinstance(item, str) or not item or len(item) > 20 for item in submitted)
                     or not isinstance(halted, bool)
+                    or not isinstance(submitted_symbols, dict)
+                    or any(not isinstance(k, str) or not isinstance(v, str) or not v for k, v in submitted_symbols.items())
                     or (last_result is not None and not isinstance(last_result, dict))):
                 raise ValueError("Invalid lifecycle journal fields.")
             self._submitted_ids = set(submitted)
+            self._submitted_symbols = dict(submitted_symbols)
             self._halted = halted
             self._last_result = last_result
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
@@ -84,6 +89,7 @@ class BinanceProtectedLifecycle:
         payload = {
             "version": self.JOURNAL_VERSION,
             "submitted_ids": sorted(self._submitted_ids),
+            "submitted_symbols": self._submitted_symbols,
             "halted": self._halted,
             "last_result": self._last_result,
         }
@@ -131,10 +137,12 @@ class BinanceProtectedLifecycle:
             # Write-ahead record: if the process dies after this point, a new
             # process will reject the same ID instead of sending it twice.
             self._submitted_ids.add(list_client_order_id)
+            self._submitted_symbols[list_client_order_id] = plan.symbol
             try:
                 self._persist_state()
             except Exception:
                 self._submitted_ids.discard(list_client_order_id)
+                self._submitted_symbols.pop(list_client_order_id, None)
                 raise
 
             try:
@@ -222,5 +230,56 @@ class BinanceProtectedLifecycle:
             self._halted = not protected
             self._last_result = result
             self._submitted_ids.add(list_client_order_id)
+            self._submitted_symbols[list_client_order_id] = symbol.strip().upper()
+            self._persist_state()
+            return dict(result)
+
+    def reconcile_after_restart(self) -> dict[str, Any]:
+        """Reconcile every journaled order; never submit or silently clear unknown state."""
+        with self._lock:
+            if not self._submitted_ids:
+                self._halted = False
+                result = {"status": "NO_JOURNALED_ORDERS", "halted": False,
+                          "reconciled": 0, "unresolved": []}
+                self._last_result = result
+                self._persist_state()
+                return dict(result)
+
+            reconcile = getattr(self._client, "reconcile_protected_buy_otoco", None)
+            if not callable(reconcile):
+                self._halted = True
+                raise RuntimeError("Client cannot reconcile journaled order lists.")
+
+            results = []
+            unresolved = []
+            safe_states = {"PROTECTED", "NO_POSITION",
+                           "EXITED_TAKE_PROFIT", "EXITED_STOP_LOSS"}
+            for order_id in sorted(self._submitted_ids):
+                symbol = self._submitted_symbols.get(order_id)
+                if not symbol:
+                    unresolved.append({"order_list_id": order_id,
+                                       "reason": "SYMBOL_MISSING_FROM_LEGACY_JOURNAL"})
+                    continue
+                state = reconcile(symbol=symbol, list_client_order_id=order_id)
+                if not isinstance(state, dict):
+                    unresolved.append({"order_list_id": order_id,
+                                       "reason": "INVALID_EXCHANGE_RECONCILIATION"})
+                    continue
+                state_name = state.get("state")
+                safe = (state_name in safe_states and state.get("action_required") is False
+                        and (state_name != "PROTECTED" or state.get("protected") is True))
+                results.append({"order_list_id": order_id, "symbol": symbol,
+                                "state": state_name, "safe": safe})
+                if not safe:
+                    unresolved.append({"order_list_id": order_id,
+                                       "reason": "EXCHANGE_STATE_REQUIRES_REVIEW",
+                                       "state": state_name})
+
+            self._halted = bool(unresolved)
+            result = {"status": "RECONCILED" if not unresolved else "RECONCILIATION_REQUIRED",
+                      "halted": self._halted, "reconciled": len(results),
+                      "orders": results, "unresolved": unresolved,
+                      "operator_action_required": bool(unresolved)}
+            self._last_result = result
             self._persist_state()
             return dict(result)
