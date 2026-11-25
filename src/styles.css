@@ -58,3 +58,13 @@
 .readiness-state.verified,.readiness-state.approved,.readiness-state.authorized,.readiness-state.orders_verified,.readiness-state.locked{color:#8bd8ac}
 .readiness-state.blocked_external_approval,.readiness-state.not_connected,.readiness-state.not_tested,.readiness-state.incomplete,.readiness-state.awaiting_user_test,.readiness-state.blocked_approval_and_user_auth,.readiness-state.blocked_until_demo_execution{color:#e8bd76}
 @media(max-width:700px){.readiness-row{grid-template-columns:1fr}.readiness-state{text-align:left;max-width:none}}
+
+
+.ctrader-connection{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #34445c;border-radius:7px;background:#0d1929;max-width:100%}
+.ctrader-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#d6a04e}
+.ctrader-connection.is-connected{border-color:#285b4c}
+.ctrader-connection.is-connected .ctrader-dot{background:#70caa7}
+.ctrader-label{font-size:9px;letter-spacing:.7px;color:#cbd6e6;white-space:nowrap}
+.ctrader-reconnect{font-size:10px;color:#f0c879;text-decoration:none;border-left:1px solid #34445c;padding-left:8px;white-space:nowrap}
+.ctrader-reconnect:hover{text-decoration:underline}
+@media(max-width:700px){.top-actions{flex-wrap:wrap;justify-content:flex-start}.ctrader-connection{flex-wrap:wrap}.ctrader-label{white-space:normal}}
