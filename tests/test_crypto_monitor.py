@@ -177,3 +177,17 @@ def test_multi_market_scan_requires_fee_configuration_for_seen_venues(tmp_path):
     assert result["status"] == "BLOCKED"
     assert result["reason"] == "FEE_CONFIG_MISSING"
     assert result["missing_fee_exchanges"] == ["Bitget", "HTX"]
+
+
+def test_decision_log_rotates_to_keep_android_storage_bounded(tmp_path):
+    log = tmp_path / "decisions.jsonl"
+    log.write_bytes(b"x" * (5 * 1024 * 1024))
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(), decision_log=log,
+        costs_by_exchange=FEES,
+    )
+    monitor._write({"status": "ROTATION_TEST"})
+    backup = tmp_path / "decisions.jsonl.1"
+    assert backup.exists()
+    assert log.stat().st_size < 1024
+    assert read_records(log)[0]["status"] == "ROTATION_TEST"
