@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import {
   CTraderDemoSession,
   loadTradingCredentials,
@@ -739,8 +739,6 @@ export async function executeCycle(): Promise<RecordData> {
     await session.close();
   }
 }
-
-import { createHmac, randomUUID } from "node:crypto";
 
 const WORKER_URL = "https://dominion-ai-trading-desk-p7cp.netlify.app/.netlify/functions/ctrader-engine-worker";
 
