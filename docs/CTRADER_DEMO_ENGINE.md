@@ -1,3 +1,9 @@
+## Scheduled execution runtime
+
+The one-minute scheduled function only signs and submits an internal trigger. The actual cTrader WebSocket execution cycle runs in an authenticated Netlify Background Function (up to the platform's 15-minute background limit), with an HMAC-verified trigger, replay protection, and a durable single-worker lock. This avoids doing broker scans and order reconciliation inside the scheduled function's 30-second execution window.
+
+The background worker remains disabled for new entries until the user separately authorizes cTrader trading scope and explicitly enables demo automation. Live-money execution is not implemented.
+
 # cTrader demo execution service
 
 ## Architecture
