@@ -8,6 +8,8 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "saveBinanceTestnetCredentials" in script
     assert "binanceTestnetCredentialStatus" in script
     assert "clearBinanceTestnetCredentials" in script
+    assert "binanceTestnetOrdersEnabled" in script
+    assert "setBinanceTestnetOrdersEnabled" in script
     assert "getBinanceTestnetAccount" in script
     assert "loadForNativeUse" in script
     assert "saveGmgnApiKey" in script
@@ -46,6 +48,8 @@ def test_android_service_passes_restart_recovery_into_safe_status_provider():
     assert 'String binanceRecoveryJson' in script
     assert 'binanceRecoveryJson);' in script
     assert 'callAttr("account_risk_snapshot"' in script
+    assert 'vault.binanceTestnetOrdersEnabled()' in script
+    assert 'binanceApiKey, binanceApiSecret, binanceOrdersEnabled' in script
 
 
 def test_android_python_bundle_includes_verified_context_signal_router():
