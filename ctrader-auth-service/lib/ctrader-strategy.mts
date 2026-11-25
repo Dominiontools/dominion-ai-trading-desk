@@ -1,3 +1,5 @@
+import { inMajorSession } from "./ctrader-session.mjs";
+
 export type Market = "FOREX" | "GOLD";
 export type Side = "BUY" | "SELL";
 export type Candle = {
@@ -93,12 +95,6 @@ function macdDirection(closes: number[]): Side | null {
   if (currentMacd > currentSignal) return "BUY";
   if (currentMacd < currentSignal) return "SELL";
   return null;
-}
-
-function inMajorSession(now: Date): boolean {
-  const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return (minutes >= 7 * 60 && minutes < 11 * 60) ||
-    (minutes >= 12 * 60 && minutes < 16 * 60);
 }
 
 function validateCandles(candles: Candle[], symbol: string, timeframe: string): void {
