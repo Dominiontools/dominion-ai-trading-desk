@@ -32,6 +32,7 @@ class BinanceProtectedLifecycle:
         reconcile_interval_seconds: float = 0.25,
         wait: Callable[[float], None] = sleep,
         journal_path: str | Path | None = None,
+        daily_loss_ledger: Any | None = None,
     ):
         if reconcile_attempts < 1 or reconcile_attempts > 10:
             raise ValueError("Reconciliation attempts must be between 1 and 10.")
@@ -44,7 +45,9 @@ class BinanceProtectedLifecycle:
         self._wait = wait
         self._lock = RLock()
         self._journal_path = Path(journal_path) if journal_path is not None else None
+        self._daily_loss_ledger = daily_loss_ledger
         self._submitted_ids: set[str] = set()
+        self._submitted_risk_quote: dict[str, str] = {}
         self._submitted_symbols: dict[str, str] = {}
         self._journal_invalid = False
         self._halted = False
@@ -62,15 +65,19 @@ class BinanceProtectedLifecycle:
             halted = payload.get("halted")
             last_result = payload.get("last_result")
             submitted_symbols = payload.get("submitted_symbols", {})
+            submitted_risk_quote = payload.get("submitted_risk_quote", {})
             if (not isinstance(submitted, list)
                     or any(not isinstance(item, str) or not item or len(item) > 20 for item in submitted)
                     or not isinstance(halted, bool)
                     or not isinstance(submitted_symbols, dict)
                     or any(not isinstance(k, str) or not isinstance(v, str) or not v for k, v in submitted_symbols.items())
+                    or not isinstance(submitted_risk_quote, dict)
+                    or any(not isinstance(k, str) or not isinstance(v, str) or not v for k, v in submitted_risk_quote.items())
                     or (last_result is not None and not isinstance(last_result, dict))):
                 raise ValueError("Invalid lifecycle journal fields.")
             self._submitted_ids = set(submitted)
             self._submitted_symbols = dict(submitted_symbols)
+            self._submitted_risk_quote = dict(submitted_risk_quote)
             self._halted = halted
             self._last_result = last_result
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
@@ -92,6 +99,7 @@ class BinanceProtectedLifecycle:
             "version": self.JOURNAL_VERSION,
             "submitted_ids": sorted(self._submitted_ids),
             "submitted_symbols": self._submitted_symbols,
+            "submitted_risk_quote": self._submitted_risk_quote,
             "halted": self._halted,
             "last_result": self._last_result,
         }
@@ -140,11 +148,13 @@ class BinanceProtectedLifecycle:
             # process will reject the same ID instead of sending it twice.
             self._submitted_ids.add(list_client_order_id)
             self._submitted_symbols[list_client_order_id] = plan.symbol
+            self._submitted_risk_quote[list_client_order_id] = str(plan.max_planned_loss_quote)
             try:
                 self._persist_state()
             except Exception:
                 self._submitted_ids.discard(list_client_order_id)
                 self._submitted_symbols.pop(list_client_order_id, None)
+                self._submitted_risk_quote.pop(list_client_order_id, None)
                 raise
 
             try:
@@ -281,7 +291,30 @@ class BinanceProtectedLifecycle:
                         and (state_name != "PROTECTED" or state.get("protected") is True))
                 results.append({"order_list_id": order_id, "symbol": symbol,
                                 "state": state_name, "safe": safe})
-                if not safe:
+                if state_name == "EXITED_STOP_LOSS":
+                    planned_loss = self._submitted_risk_quote.get(order_id)
+                    if not planned_loss:
+                        safe = False
+                        unresolved.append({"order_list_id": order_id,
+                                           "reason": "STOP_LOSS_RISK_BASIS_MISSING"})
+                    elif self._daily_loss_ledger is None:
+                        safe = False
+                        unresolved.append({"order_list_id": order_id,
+                                           "reason": "DAILY_LOSS_LEDGER_UNAVAILABLE"})
+                    else:
+                        try:
+                            self._daily_loss_ledger.record_stop_loss(
+                                order_list_id=order_id, symbol=symbol,
+                                planned_loss_quote=planned_loss,
+                            )
+                        except Exception as exc:
+                            safe = False
+                            unresolved.append({"order_list_id": order_id,
+                                               "reason": "DAILY_LOSS_LEDGER_WRITE_FAILED",
+                                               "error_type": type(exc).__name__})
+                if not safe and not any(
+                    item.get("order_list_id") == order_id for item in unresolved
+                ):
                     unresolved.append({"order_list_id": order_id,
                                        "reason": "EXCHANGE_STATE_REQUIRES_REVIEW",
                                        "state": state_name})
