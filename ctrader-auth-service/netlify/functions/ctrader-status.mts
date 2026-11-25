@@ -1,15 +1,25 @@
 import { getStore } from "@netlify/blobs";
 import { createDecipheriv, randomBytes } from "node:crypto";
 
-function corsHeaders() {
-  return {
-    "access-control-allow-origin": "*",
+const ALLOWED_DASHBOARD_ORIGINS = new Set([
+  "https://dominion-ai-trading-desk-new.netlify.app",
+  "https://dominion-ai-trading-desk-r30v.netlify.app",
+]);
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  const headers: Record<string, string> = {
     "access-control-allow-methods": "GET, OPTIONS",
     "access-control-max-age": "600",
     "cache-control": "no-store",
     "content-type": "application/json; charset=utf-8",
+    "vary": "Origin",
     "x-content-type-options": "nosniff",
   };
+  if (ALLOWED_DASHBOARD_ORIGINS.has(origin)) {
+    headers["access-control-allow-origin"] = origin;
+  }
+  return headers;
 }
 
 function decryptTokens(encrypted: {
@@ -111,7 +121,7 @@ async function verifyDemoAccounts(accessToken: string, clientId: string, clientS
 }
 
 export default async (request: Request) => {
-  const headers = corsHeaders();
+  const headers = corsHeaders(request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
   if (request.method !== "GET") return Response.json({ error: "METHOD_NOT_ALLOWED" }, { status: 405, headers });
 
