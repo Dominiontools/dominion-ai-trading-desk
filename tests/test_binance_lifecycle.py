@@ -139,3 +139,68 @@ def test_pending_exit_legs_are_rechecked_before_failing_closed(plan):
     assert result["protected"] is True
     assert client.reconciliations == 2
     assert waits == [0.2]
+
+
+def test_submitted_order_id_survives_process_restart(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    first.submit_and_verify(plan, list_client_order_id="dominion123")
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    with pytest.raises(PermissionError, match="Duplicate"):
+        restarted.submit_and_verify(plan, list_client_order_id="dominion123")
+    assert client.submissions == 1
+    assert restarted.halted is False
+
+
+def test_uncertain_submission_halt_survives_process_restart(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+
+    class BrokenClient(FakeClient):
+        def reconcile_protected_buy_otoco(self, **kwargs):
+            raise TimeoutError("network timeout")
+
+    client = BrokenClient({})
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    with pytest.raises(TimeoutError):
+        first.submit_and_verify(plan, list_client_order_id="dominion123")
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    assert restarted.halted is True
+    assert restarted.last_result["status"] == "SUBMISSION_OR_RECONCILIATION_UNKNOWN"
+    with pytest.raises(PermissionError, match="halted"):
+        restarted.submit_and_verify(plan, list_client_order_id="dominion124")
+    assert client.submissions == 1
+
+
+def test_corrupt_lifecycle_journal_fails_closed(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text("{not-json", encoding="utf-8")
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    assert lifecycle.halted is True
+    assert lifecycle.last_result["status"] == "LIFECYCLE_JOURNAL_INVALID"
+    with pytest.raises(PermissionError, match="halted"):
+        lifecycle.submit_and_verify(plan, list_client_order_id="dominion124")
+    assert client.submissions == 0
+
+
+def test_reconcile_existing_persists_order_id_and_protection_state(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    first.reconcile_existing(symbol=plan.symbol, list_client_order_id="dominion123")
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    assert restarted.halted is False
+    with pytest.raises(PermissionError, match="Duplicate"):
+        restarted.submit_and_verify(plan, list_client_order_id="dominion123")
+    assert client.submissions == 0
