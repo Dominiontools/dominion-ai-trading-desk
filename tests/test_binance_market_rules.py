@@ -54,3 +54,52 @@ def test_rejects_missing_duplicate_and_invalid_filters():
     data["symbols"][0]["filters"][0]["tickSize"] = "0"
     with pytest.raises(ValueError, match="tick size"):
         parse_symbol_rules(data, "BTCUSDT")
+
+
+
+def commission_payload(symbol="BTCUSDT"):
+    return {
+        "symbol": symbol,
+        "standardCommission": {
+            "maker": "0.0008", "taker": "0.0010",
+            "buyer": "0.0012", "seller": "0.0011",
+        },
+        "specialCommission": {
+            "maker": "0", "taker": "0.0001",
+            "buyer": "0", "seller": "0",
+        },
+        "taxCommission": {
+            "maker": "0.000001", "taker": "0.000002",
+            "buyer": "0.000003", "seller": "0.000002",
+        },
+        "discount": {
+            "enabledForAccount": True, "enabledForSymbol": True,
+            "discountAsset": "BNB", "discount": "0.75",
+        },
+    }
+
+
+def test_account_commission_parser_uses_conservative_verified_rates():
+    from engine.binance_market_rules import parse_account_commission
+    fees = parse_account_commission(commission_payload(), "BTCUSDT")
+    assert fees.verified is True
+    # max(12 bps) + max(1 bps) + max(0.03 bps); BNB discount is ignored.
+    assert fees.taker_fee_bps == D("13.03")
+
+
+def test_account_commission_parser_rejects_symbol_mismatch_and_missing_groups():
+    from engine.binance_market_rules import parse_account_commission
+    with pytest.raises(ValueError, match="does not match"):
+        parse_account_commission(commission_payload(), "ETHUSDT")
+    data = commission_payload()
+    del data["taxCommission"]
+    with pytest.raises(ValueError, match="taxCommission"):
+        parse_account_commission(data, "BTCUSDT")
+
+
+def test_account_commission_parser_rejects_invalid_or_negative_rates():
+    from engine.binance_market_rules import parse_account_commission
+    data = commission_payload()
+    data["standardCommission"]["taker"] = "NaN"
+    with pytest.raises(ValueError, match="taker rate"):
+        parse_account_commission(data, "BTCUSDT")
