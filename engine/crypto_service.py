@@ -236,13 +236,16 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
                 checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
+                gmgn_security_success_count = sum("evidence" in item for item in gmgn_security_results)
+                total_security_checks = checked_count + gmgn_security_success_count
+                total_security_errors = error_count + gmgn_security_errors
                 if not discovered:
                     rug_status = "WAITING_FOR_TOKENS"
-                elif not supported_candidates:
+                elif total_security_checks == 0 and not supported_candidates:
                     rug_status = "UNSUPPORTED_TOKENS"
-                elif error_count and checked_count:
+                elif total_security_errors and total_security_checks:
                     rug_status = "PARTIAL"
-                elif error_count:
+                elif total_security_errors:
                     rug_status = "FEED_ERROR"
                 else:
                     rug_status = "CONNECTED"
@@ -251,7 +254,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     "detail": (f"Discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
                                f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
                                f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
-                               f"GMGN official security endpoint returned {len(gmgn_security_results) - gmgn_security_errors}/"
+                               f"GMGN official security endpoint returned {gmgn_security_success_count}/"
                                f"{len(gmgn_security_results)} supported token checks. "
                                "No result is a safety guarantee; missing fields remain unknown."),
                     "checked_tokens": security_results[:5],
