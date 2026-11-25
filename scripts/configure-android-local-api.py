@@ -253,6 +253,25 @@ public class TradingEngineService extends Service {
                 Python.start(new AndroidPlatform(getApplicationContext()));
             }
             PyObject module = Python.getInstance().getModule("engine.crypto_service");
+            CredentialVault vault = new CredentialVault(getApplicationContext());
+            if (vault.hasCredentials()) {
+                String[] credentials = null;
+                try {
+                    credentials = vault.loadForNativeUse();
+                    PyObject recovery = Python.getInstance().getModule("engine.binance_android");
+                    String recoveryJson = recovery.callAttr("reconcile_saved_orders",
+                        credentials[0], credentials[1],
+                        getFilesDir().getAbsolutePath() + "/binance-lifecycle.json").toString();
+                    Log.i(TAG, "Binance Testnet restart recovery: " + recoveryJson);
+                } catch (Exception recoveryError) {
+                    Log.w(TAG, "Binance Testnet recovery remains blocked; manual review required.");
+                } finally {
+                    if (credentials != null) {
+                        credentials[0] = null;
+                        credentials[1] = null;
+                    }
+                }
+            }
             String gmgnApiKey = "";
             try {
                 gmgnApiKey = new CredentialVault(getApplicationContext()).loadGmgnApiKeyForNativeUse();
