@@ -105,7 +105,7 @@ class BinanceTestnetSignalRouter:
             take_profit=target,
             context=context,
             rules=rules,
-            fees=fees,
+            fees=verified_fees,
             quote_age_seconds=age,
             spread_bps=spread_bps,
             estimated_slippage_bps=self.estimated_slippage_bps,
