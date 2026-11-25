@@ -17,3 +17,12 @@ halt state, reconciled count, unresolved count, and operator-action flag. It
 does not expose API credentials, order-list IDs, symbols, signed requests, or
 exchange payloads. The local API remains read-only and always reports
 `orders_enabled: false`.
+
+
+At foreground-service startup the native bridge also requests a read-only
+Binance account/risk snapshot. It requires `canTrade=true`, reconciles every
+journaled order, reads the durable UTC daily-loss ledger, and treats non-USDT
+Spot balances as unmanaged holdings for the one-position rule. The dashboard
+receives only a sanitized USDT equity/available-balance, daily-loss, open-
+position and journal-count summary. The snapshot client is constructed with
+`allow_orders=False`; this startup check cannot place, cancel or amend orders.
