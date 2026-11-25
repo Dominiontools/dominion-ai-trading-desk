@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, ShieldCheck, Wallet, Waves } from "lucide-react";
+import CTraderEngineControls from "./CTraderEngineControls";
 interface TradingEngineBridge {
   start(): Promise<{ accepted: boolean }>;
   stop(): Promise<{ stopped: boolean }>;
@@ -30,7 +31,8 @@ const watch = [
   { symbol: "EURUSD", name: "Euro / US Dollar", price: "Not connected", change: "—", group: "Forex & Gold", tone: "up" },
   { symbol: "GBPUSD", name: "Pound / US Dollar", price: "Not connected", change: "—", group: "Forex & Gold", tone: "down" },
   { symbol: "BTCUSDT", name: "Bitcoin / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "up" },
-  { symbol: "ETHUSDT", name: "Ethereum / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "down" }
+  { symbol: "ETHUSDT", name: "Ethereum / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "down" },
+  { symbol: "PAXGUSDT", name: "PAX Gold / Tether", price: "Not connected", change: "—", group: "Crypto", tone: "up" }
 ];
 
 export default function App() {
@@ -52,10 +54,12 @@ export default function App() {
     <section className="content">
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / OVERVIEW</div><h1>Trading command center</h1></div>
-        <div className="top-actions"><span className="demo-pill"><span/> PAPER MODE ONLY</span><span className="muted">On-device engine controls below</span></div>
+        <div className="top-actions"><span className="demo-pill"><span/> DEMO + PAPER ONLY</span><span className="muted">cTrader scheduled engine · Crypto phone monitor</span></div>
       </header>
 
-      <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live orders are disabled. All future order routing must pass the Risk Agent and remain in demo/paper mode until separately approved.</span></div></div>
+      <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live-money orders are disabled. cTrader demo orders require separate trading authorization and explicit automation enablement; crypto remains paper/testnet only.</span></div></div>
+
+      <CTraderEngineControls />
 
       <div className="metric-grid">
         <Metric icon={<CircleDollarSign/>} label="Starting capital" value="$20.00" note="Planned balance · not an account connection"/>
@@ -323,9 +327,9 @@ function CryptoMonitorPanel() {
         <div><small>OPEN POSITION</small><b>{paperPosition ? String(paperPosition.symbol) + " " + String(paperPosition.side) : "None"}</b></div>
         <div><small>STRATEGY</small><b>{String(strategyEngine?.status || "Waiting")}</b></div>
       </div>
-      <div className="panel-foot">Directional strategy: 10/30 SMA crossover on public Binance 1-minute candles. Paper ledger only; cross-exchange price gaps are not treated as directional entry signals.</div>
+      <div className="panel-foot">Directional strategy: multi-timeframe confluence using EMA50/200 and EMA20/50, MACD, RSI, BOS/CHoCH, liquidity sweeps, order blocks, FVG and Fibonacci zones. Current crypto execution is paper-only; cross-exchange price gaps are not treated as directional entry signals.</div>
       <div className="decision-list-head"><b>RECENT PAPER EVENTS</b><span>{paperTrades.length} records</span></div>
-      {paperTrades.length === 0 ? <div className="decision-empty"><div><b>No paper trades yet</b><span>Entries and exits will be recorded here after a validated SMA signal.</span></div></div> :
+      {paperTrades.length === 0 ? <div className="decision-empty"><div><b>No paper trades yet</b><span>Entries and exits will be recorded here after a validated multi-timeframe confluence signal.</span></div></div> :
         paperTrades.map((trade, index) => <div className="decision-row" key={String(trade.timestamp || index)}>
           <div><b>{String(trade.event || "PAPER EVENT")} · {String(trade.symbol || trade.position && (trade.position as Record<string, unknown>).symbol || "—")}</b>
             <small>{String(trade.exit_reason || trade.reason || trade.signal_reason || "Paper decision")}</small></div>
