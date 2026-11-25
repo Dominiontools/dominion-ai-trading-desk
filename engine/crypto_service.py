@@ -68,6 +68,13 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     )
     if not symbols or any(not item.isalnum() for item in symbols):
         raise RuntimeError("DOMINION_CRYPTO_SYMBOLS must contain valid pairs such as BTCUSDT.")
+    arbitrage_symbols = tuple(
+        item.strip().upper().replace("/", "")
+        for item in os.getenv("DOMINION_ARBITRAGE_SYMBOLS", "BTCUSDT").split(",")
+        if item.strip()
+    )
+    if not arbitrage_symbols or any(not item.isalnum() for item in arbitrage_symbols):
+        raise RuntimeError("DOMINION_ARBITRAGE_SYMBOLS must contain valid pairs such as BTCUSDT.")
     interval = _positive_float("DOMINION_CRYPTO_INTERVAL_SECONDS", 1.0)
     if interval < 1.0:
         raise RuntimeError("Polling interval cannot be below one second.")
@@ -100,6 +107,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "mode": "PAPER_ONLY",
         "orders_enabled": False,
         "symbols": list(symbols),
+        "arbitrage_symbols": list(arbitrage_symbols),
         "exchanges": ["Binance", "Bitget", "HTX"],
         "poll_interval_seconds": interval,
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
@@ -206,7 +214,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         state["engine"] = "running"
         while not stop_event.is_set():
             cycle_started = datetime.now(timezone.utc).isoformat()
-            for symbol in symbols:
+            for symbol in arbitrage_symbols:
                 if stop_event.is_set():
                     break
                 try:
@@ -267,7 +275,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
                            host="127.0.0.1", port=api_port)
-    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, interval
+    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval
 
 
 def start_embedded(data_dir: str, port: int = 8766) -> dict:
@@ -277,7 +285,7 @@ def start_embedded(data_dir: str, port: int = 8766) -> dict:
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, interval = _runtime_config(data_dir, port)
+        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(data_dir, port)
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
         agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
         strategy_worker = threading.Thread(target=strategy_loop, name="dominion-paper-strategy", daemon=True)
@@ -291,6 +299,7 @@ def start_embedded(data_dir: str, port: int = 8766) -> dict:
         api_thread.start()
         return {"started": True, "already_running": False,
                 "port": server.server_address[1], "symbols": list(symbols),
+                "arbitrage_symbols": list(arbitrage_symbols),
                 "interval_seconds": interval, "orders_enabled": False}
 
 
@@ -320,7 +329,7 @@ def main() -> None:
     data_dir = os.getenv("DOMINION_DATA_DIR", "data")
     result = start_embedded(data_dir)
     print(f"Dominion paper API listening on http://127.0.0.1:{result['port']}")
-    print(f"Symbols: {', '.join(result['symbols'])} | interval: {result['interval_seconds']}s | orders: disabled")
+    print(f"Strategy symbols: {', '.join(result['symbols'])} | BTC/market scan: {', '.join(result['arbitrage_symbols'])} | interval: {result['interval_seconds']}s | orders: disabled")
     stop_event = _runtime_stop
     if stop_event is None:
         return
