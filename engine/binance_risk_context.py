@@ -61,6 +61,19 @@ class BinanceRiskContextProvider:
         equity = free + locked
         if equity <= 0:
             raise PermissionError("Quote-asset equity is not positive.")
+        unmanaged_assets = []
+        for item in balances:
+            if not isinstance(item, dict) or item.get("asset") == self.quote_asset:
+                continue
+            asset = str(item.get("asset", "")).strip().upper()
+            if not asset:
+                raise ValueError("A Binance balance has no asset symbol.")
+            asset_total = (
+                self._amount(item.get("free"), f"{asset} free balance")
+                + self._amount(item.get("locked"), f"{asset} locked balance")
+            )
+            if asset_total > 0:
+                unmanaged_assets.append(asset)
 
         recovery = self.lifecycle.reconcile_after_restart()
         if (not isinstance(recovery, dict) or recovery.get("halted") is not False
@@ -75,8 +88,12 @@ class BinanceRiskContextProvider:
                 raise PermissionError("An existing Binance order is not safely reconciled.")
             if item.get("state") == "PROTECTED":
                 open_positions += 1
+        # Any non-quote holding is treated as an unmanaged open position.
+        # This prevents the bot from ignoring manual or externally opened Spot
+        # holdings when enforcing its one-position policy.
+        open_positions += 1 if unmanaged_assets else 0
         if open_positions > 1:
-            raise PermissionError("More than one protected position is present.")
+            raise PermissionError("More than one managed or unmanaged Spot holding is present.")
 
         daily_loss = self.daily_loss_ledger.loss_for_day(now=now)
         if not isinstance(daily_loss, Decimal) or not daily_loss.is_finite() or daily_loss < 0:
