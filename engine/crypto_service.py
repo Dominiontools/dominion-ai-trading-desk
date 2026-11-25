@@ -615,10 +615,14 @@ def start_embedded(
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
-            data_dir, port, gmgn_api_key, binance_api_key,
-            binance_api_secret, binance_testnet_orders_enabled,
-        )
+        try:
+            stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
+                data_dir, port, gmgn_api_key, binance_api_key,
+                binance_api_secret, binance_testnet_orders_enabled,
+            )
+        except Exception:
+            os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] = "NO"
+            raise
         try:
             recovery = json.loads(binance_recovery_json) if binance_recovery_json else {}
             if not isinstance(recovery, dict):
@@ -684,6 +688,7 @@ def stop_embedded() -> dict:
     with _runtime_lock:
         stop_event, server, threads = _runtime_stop, _runtime_server, list(_runtime_threads)
         if stop_event is None:
+            os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] = "NO"
             return {"stopped": True, "already_stopped": True}
         stop_event.set()
     if server is not None:
