@@ -204,3 +204,61 @@ def test_reconcile_existing_persists_order_id_and_protection_state(plan, tmp_pat
     with pytest.raises(PermissionError, match="Duplicate"):
         restarted.submit_and_verify(plan, list_client_order_id="dominion123")
     assert client.submissions == 0
+
+
+
+def test_restart_reconciliation_uses_persisted_symbols_and_never_submits(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    first.submit_and_verify(plan, list_client_order_id="dominion123")
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILED"
+    assert result["halted"] is False
+    assert result["orders"] == [{
+        "order_list_id": "dominion123", "symbol": "BTCUSDT",
+        "state": "PROTECTED", "safe": True,
+    }]
+    assert client.submissions == 1
+
+
+def test_restart_reconciliation_keeps_halt_if_any_order_is_unresolved(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({
+        "state": "PROTECTION_UNCONFIRMED", "protected": False,
+        "action_required": True,
+    })
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    first.submit_and_verify(plan, list_client_order_id="dominion123")
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["halted"] is True
+    assert result["operator_action_required"] is True
+    assert client.submissions == 1
+
+
+def test_legacy_journal_without_symbols_fails_closed_on_restart_reconciliation(plan, tmp_path):
+    import json
+
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text(json.dumps({
+        "version": 1, "submitted_ids": ["dominion123"],
+        "halted": True, "last_result": None,
+    }), encoding="utf-8")
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["halted"] is True
+    assert result["unresolved"][0]["reason"] == "SYMBOL_MISSING_FROM_LEGACY_JOURNAL"
+    assert client.reconciliations == 0
+    assert client.submissions == 0
