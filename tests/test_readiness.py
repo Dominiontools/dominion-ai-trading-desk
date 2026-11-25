@@ -26,6 +26,16 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         crypto_testnet_orders_verified=True,
         verified_fee_exchanges=("Binance", "Bitget", "HTX"),
         agent_workflow_verified=True,
+        gmgn_read_only_status="CONNECTED",
     )
     assert result["overall_status"] == "READY_FOR_FINAL_REVIEW"
     assert result["live_trading_enabled"] is False
+
+
+def test_gmgn_readiness_requires_a_successful_official_read_only_connection():
+    missing = build_readiness()
+    failed = build_readiness(gmgn_read_only_status="API_ERROR")
+    connected = build_readiness(gmgn_read_only_status="CONNECTED")
+    assert next(x for x in missing["tasks"] if x["id"] == "gmgn_read_only")["status"] == "NEEDS_API_KEY"
+    assert next(x for x in failed["tasks"] if x["id"] == "gmgn_read_only")["status"] == "API_ERROR"
+    assert next(x for x in connected["tasks"] if x["id"] == "gmgn_read_only")["status"] == "VERIFIED"
