@@ -99,3 +99,20 @@ The parser requires standard, special and tax commission groups, uses the
 highest taker/buyer/seller rate in each group, and ignores optional BNB
 discounts so order sizing remains conservative. Missing or malformed rates
 block order planning; no fee is guessed.
+
+
+## Android Testnet automation switch
+
+The strategy loop can now route a validated BUY setup through the protected
+Testnet router when the user explicitly enables **Binance Testnet automation**
+inside the Android app. The switch is OFF by default, requires saved Testnet
+credentials, and is stored in Android private preferences. Disabling it stops
+new entries after the foreground service restarts; existing exchange-hosted
+protective orders remain at Binance. The runtime passes decrypted credentials
+to the on-device Python process only while this Testnet mode is enabled. No
+credentials are sent to Netlify, and the adapter remains pinned to
+`testnet.binance.vision`.
+
+This integration is code-complete but not yet end-to-end verified against a
+real Binance Spot Testnet account. The first actual demo order must be
+explicitly enabled by the user in the Android app.
