@@ -6,8 +6,8 @@ class RiskConfig:
     live_trading_enabled: bool = False
     max_risk_per_trade_pct: float = 0.5
     max_daily_loss_pct: float = 2.0
-    max_open_positions: int = 3
-    max_slippage_pct: float = 0.25
+    max_open_positions: int = 1
+    max_slippage_pct: float = 0.15
 
 
 def assert_demo_only(config: RiskConfig) -> None:
