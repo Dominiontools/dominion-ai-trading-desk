@@ -617,10 +617,11 @@ async function executeCycle(): Promise<RecordData> {
             clientOrderId,
             mode: "DEMO_ONLY",
           };
+          const partialEntryPrice = number(partialPosition.price ?? entryPrice);
           await store.setJSON("account/active-position", {
             positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
-            side: best.setup.side, entryPrice: number(partialPosition.price ?? entryPrice),
-            initialRiskDistance: riskDistanceForSizing, initialStopLoss: stopLoss,
+            side: best.setup.side, entryPrice: partialEntryPrice,
+            initialRiskDistance: Math.abs(partialEntryPrice - stopLoss), initialStopLoss: stopLoss,
             target2R, target3R: takeProfit, partialTaken: false, breakEvenSet: false,
             minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
             estimatedRoundTripCommission: sized.commission,
@@ -675,13 +676,14 @@ async function executeCycle(): Promise<RecordData> {
       brokerConfirmed: true,
       mode: "DEMO_ONLY",
     };
+    const confirmedEntryPrice = number(position.price ?? entryPrice);
     await store.setJSON("account/active-position", {
       positionId,
       symbol: best.symbolName,
       symbolId: best.symbolId,
       side: best.setup.side,
-      entryPrice: number(position.price ?? entryPrice),
-      initialRiskDistance: riskDistanceForSizing,
+      entryPrice: confirmedEntryPrice,
+      initialRiskDistance: Math.abs(confirmedEntryPrice - stopLoss),
       initialStopLoss: stopLoss,
       target2R: preview.target2R,
       target3R: preview.target3R,
