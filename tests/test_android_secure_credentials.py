@@ -11,6 +11,8 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "binanceTestnetOrdersEnabled" in script
     assert "setBinanceTestnetOrdersEnabled" in script
     assert "BINANCE_ORDERS_ENABLED" in script
+    assert 'prefs.getBoolean(BINANCE_ORDERS_ENABLED, false)' in script
+    assert "if (enabled && !hasCredentials())" in script
     assert ".remove(BINANCE_ORDERS_ENABLED)" in script
     assert "getBinanceTestnetAccount" in script
     assert "loadForNativeUse" in script
