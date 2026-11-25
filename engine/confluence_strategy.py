@@ -36,7 +36,7 @@ class StrategyConfig:
             raise ValueError("Score threshold must be between 1 and 12.")
         if self.atr_period < 2 or self.swing_lookback < 5:
             raise ValueError("ATR period and swing lookback are too small.")
-        if not 0 < self.min_stop_atr <= self.max_stop_atr <= 2.5:
+        if not 0.8 <= self.min_stop_atr <= self.max_stop_atr <= 2.5:
             raise ValueError("Stop ATR range must be positive and no wider than 2.5 ATR.")
         if self.min_reward_risk < 2.0:
             raise ValueError("Minimum reward-to-risk cannot be below 2R.")
@@ -132,7 +132,8 @@ def _macd_direction(closes: Sequence[float]) -> str | None:
     signal = ema(macd_line, 9)
     if len(signal) < 2:
         return None
-    previous_macd, current_macd = macd_line[-2], macd_line[-1]
+    aligned_macd = macd_line[-len(signal):]
+    previous_macd, current_macd = aligned_macd[-2], aligned_macd[-1]
     previous_signal, current_signal = signal[-2], signal[-1]
     if previous_macd <= previous_signal and current_macd > current_signal:
         return "BUY"
