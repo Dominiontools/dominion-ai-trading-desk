@@ -17,6 +17,7 @@ def build_readiness(
     crypto_testnet_orders_verified: bool = False,
     verified_fee_exchanges: tuple[str, ...] = (),
     agent_workflow_verified: bool = False,
+    gmgn_read_only_status: str = "NOT_CONFIGURED",
 ) -> dict:
     """Return the next actionable integration tasks without claiming completion."""
     tasks = [
@@ -55,8 +56,17 @@ def build_readiness(
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
                       else "BINANCE_RISK_GATE_READY_PROTECTION_PENDING",
-            "detail": "A Binance Spot Testnet adapter, default-deny 0.5%/2% risk planner and protected OTOCO request path are built. The router submits only a FOK BUY entry with server-held take-profit and stop-loss legs, behind both explicit testnet gates. A separate lifecycle classifier refuses to mark protection active until the entry is FILLED and both exit orders are confirmed NEW. The classifier is not yet wired into the phone service; verified filters/fees, secure credential storage, automatic reconciliation, emergency handling and an authorized end-to-end testnet lifecycle test remain outstanding. Bitget and HTX order adapters are not built.",
+            "detail": "A Binance Spot Testnet adapter, default-deny 0.5%/2% risk planner and protected OTOCO request path are built. The router submits only a FOK BUY entry with server-held take-profit and stop-loss legs, behind both explicit testnet gates. A separate lifecycle classifier refuses to mark protection active until the entry is FILLED and both exit orders are confirmed NEW. The protected-order lifecycle is not yet wired into the phone service; verified exchange filters/fees, automatic reconciliation, emergency handling and an authorized end-to-end testnet lifecycle test remain outstanding. Android Keystore credential storage and read-only Testnet account checks are implemented. Bitget and HTX order adapters are not built.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
+        },
+        {
+            "id": "gmgn_read_only",
+            "title": "Connect official GMGN token discovery and trending data",
+            "status": "VERIFIED" if gmgn_read_only_status == "CONNECTED"
+                      else "API_ERROR" if gmgn_read_only_status == "API_ERROR"
+                      else "NEEDS_API_KEY",
+            "detail": "GMGN's official read-only Solana Trenches and trending connector is implemented. It requires a GMGN API key and a successful read-only response. GMGN wallet signing, swaps and live orders are not enabled.",
+            "owner": "USER_CONFIGURATION_AND_DEVELOPMENT",
         },
         {
             "id": "fees",
