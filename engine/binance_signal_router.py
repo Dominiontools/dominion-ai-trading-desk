@@ -53,6 +53,8 @@ class BinanceTestnetSignalRouter:
         now: datetime | None = None,
     ) -> dict:
         """Validate context, size the order and submit one protected Testnet bracket."""
+        if not getattr(self.client, "allow_orders", False):
+            raise PermissionError("Binance Spot Testnet order gate is disabled.")
         if not account_snapshot_verified or not daily_loss_verified:
             raise PermissionError(
                 "Verified account balance and daily realized-loss context are required."
