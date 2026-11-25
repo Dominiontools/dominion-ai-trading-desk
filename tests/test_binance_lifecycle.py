@@ -334,3 +334,63 @@ def test_restart_reconciliation_records_exchange_query_failures_and_stays_halted
     assert result["halted"] is True
     assert result["unresolved"][0]["reason"] == "EXCHANGE_QUERY_FAILED"
     assert result["unresolved"][0]["error_type"] == "TimeoutError"
+
+
+def test_confirmed_stop_loss_is_recorded_once_in_daily_loss_ledger(plan, tmp_path):
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from engine.binance_daily_loss import BinanceDailyLossLedger
+
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    ledger = BinanceDailyLossLedger(tmp_path / "private" / "daily-loss.jsonl")
+
+    class SequenceClient(FakeClient):
+        def __init__(self):
+            super().__init__({})
+            self.states = [
+                {"state": "PROTECTED", "protected": True, "action_required": False},
+                {"state": "EXITED_STOP_LOSS", "protected": False, "action_required": False},
+            ]
+
+        def reconcile_protected_buy_otoco(self, **kwargs):
+            self.reconciliations += 1
+            return self.states.pop(0)
+
+    client = SequenceClient()
+    first = BinanceProtectedLifecycle(
+        FakeGate(), client, journal_path=journal, daily_loss_ledger=ledger
+    )
+    first.submit_and_verify(plan, list_client_order_id="dominion123")
+    restarted = BinanceProtectedLifecycle(
+        FakeGate(), client, journal_path=journal, daily_loss_ledger=ledger
+    )
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILED"
+    assert result["halted"] is False
+    assert ledger.loss_for_day() == Decimal(plan.max_planned_loss_quote)
+    repeated = restarted.reconcile_after_restart()
+    assert repeated["status"] == "RECONCILED"
+    assert ledger.loss_for_day() == Decimal(plan.max_planned_loss_quote)
+
+
+def test_stop_loss_without_saved_risk_basis_stays_halted(plan, tmp_path):
+    import json
+
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text(json.dumps({
+        "version": 1,
+        "submitted_ids": ["dominion123"],
+        "submitted_symbols": {"dominion123": "BTCUSDT"},
+        "halted": True,
+        "last_result": None,
+    }), encoding="utf-8")
+
+    client = FakeClient({
+        "state": "EXITED_STOP_LOSS", "protected": False, "action_required": False,
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = lifecycle.reconcile_after_restart()
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["halted"] is True
+    assert result["unresolved"][0]["reason"] == "STOP_LOSS_RISK_BASIS_MISSING"
