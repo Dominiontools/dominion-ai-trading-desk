@@ -301,8 +301,10 @@ async function executeCycle(): Promise<RecordData> {
   const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
   const config = await store.get("account/engine-config", { type: "json" }) as RecordData | null;
   const enabled = config?.enabled === true;
-  if (!enabled) {
-    const paused = { status: "PAUSED", reason: "DEMO_AUTOMATION_DISABLED", mode: "DEMO_ONLY" };
+  const manageOnly = !enabled;
+  const activePosition = await store.get("account/active-position", { type: "json" }) as RecordData | null;
+  if (manageOnly && !activePosition) {
+    const paused = { status: "PAUSED", reason: "DEMO_AUTOMATION_DISABLED_NO_OPEN_BOT_POSITION", mode: "DEMO_ONLY" };
     await saveStatus(store, paused);
     return paused;
   }
@@ -364,7 +366,6 @@ async function executeCycle(): Promise<RecordData> {
     ]);
     if (deals.hasMore) throw new Error("DAILY_DEAL_HISTORY_INCOMPLETE");
     const daily = calculateDailyRisk(balance, moneyDigits, deals.deals, cashFlows);
-    const activePosition = await store.get("account/active-position", { type: "json" }) as RecordData | null;
 
     if (accountState.positions.length > 0) {
       const position = accountState.positions[0];
@@ -445,6 +446,15 @@ async function executeCycle(): Promise<RecordData> {
       const pending = { status: "PENDING_ORDER_BLOCK", reason: "EXISTING_PENDING_ORDER", pendingOrders: accountState.orders.length, mode: "DEMO_ONLY" };
       await saveStatus(store, pending);
       return pending;
+    }
+    if (manageOnly) {
+      const paused = {
+        status: "PAUSED",
+        reason: "NEW_ENTRIES_DISABLED_EXISTING_BOT_POSITION_MANAGEMENT_COMPLETED",
+        mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, paused);
+      return paused;
     }
     if (daily.dailyLossFraction >= dailyLossLimitFraction) {
       const stopped = {
