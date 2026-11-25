@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from engine.crypto_arbitrage import ExchangeQuote
-from engine.crypto_strategy import BinancePublicCandleFeed, SmaPaperStrategy
+from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy, SmaPaperStrategy
 from engine.market_data import Candle
 from engine.paper_workflow import PaperTradingDesk
 
@@ -64,3 +64,58 @@ def test_strategy_rejects_mismatched_quote_symbol():
     result = SmaPaperStrategy().run_once(sample_candles(), quote, desk)
     assert result["status"] == "BLOCKED"
     assert result["reason"] == "QUOTE_SYMBOL_MISMATCH"
+
+
+def mtf_sample_candles(symbol, timeframe, count, start, step, spread, interval, end_age):
+    now = datetime.now(timezone.utc)
+    first = now - timedelta(seconds=end_age) - timedelta(seconds=interval * (count - 1))
+    result = []
+    for i in range(count):
+        close = start + i * step
+        result.append(Candle(
+            symbol, "CRYPTO", timeframe, first + timedelta(seconds=interval * i),
+            close - step / 3, close + spread, close - spread, close, 100 + i,
+        ))
+    previous = result[-2]
+    result[-1] = Candle(
+        symbol, "CRYPTO", timeframe, result[-1].timestamp,
+        previous.close + 0.0002, previous.close + 0.0012,
+        previous.close - 0.0003, previous.close + 0.0007, 500,
+    )
+    return result
+
+
+def test_confluence_strategy_opens_risk_limited_paper_entry():
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243, now, 10, 10)
+    desk = PaperTradingDesk(starting_equity=20)
+    result = ConfluencePaperStrategy().run_once(execution, context, quote, desk, now=now)
+    assert result["event"] == "PAPER_ENTRY"
+    assert result["strategy"] == "MTF_CONFLUENCE_SMC"
+    assert result["risk_amount"] <= 0.1 + 1e-9
+    assert result["position"]["quantity"] * result["position"]["entry_price"] <= 8.0 + 1e-6
+    assert result["target_3r"] > result["position"]["entry_price"]
+    assert desk.snapshot()["orders_enabled"] is False
+
+
+def test_confluence_strategy_blocks_stale_quote_before_position_management():
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243,
+                          now - timedelta(seconds=5), 10, 10)
+    result = ConfluencePaperStrategy().run_once(
+        execution, context, quote, PaperTradingDesk(), now=now
+    )
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "STALE_QUOTE_DATA"
