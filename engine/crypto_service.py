@@ -523,6 +523,7 @@ def _runtime_config(
             for symbol in symbols:
                 if stop_event.is_set():
                     break
+                event = "FEED_ERROR"
                 try:
                     execution_tf, context_tf = TIMEFRAME_PROFILES[strategy_profile]
                     execution_candles = candle_feed.candles(symbol, timeframe=execution_tf, limit=220)
