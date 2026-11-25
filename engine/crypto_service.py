@@ -181,7 +181,12 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
         while not stop_event.is_set():
             try:
                 discovered = discovery_feed.discover(limit=8)
-                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume. The independent dynamic top-52 cross-exchange REST scan targets a one-second cycle."}
+                prior_gmgn_tokens = state.get("gmgn_feed", {}).get("tokens", [])
+                gmgn_token_count = len(prior_gmgn_tokens) if isinstance(prior_gmgn_tokens, list) else 0
+                state["agents"]["SCANNER"] = {
+                    "status": "CONNECTED" if discovered or gmgn_token_count else "CONNECTED_NO_NEW_TOKENS",
+                    "detail": f"DEX Screener enriched {len(discovered)} recent pools; official GMGN Trenches supplied {gmgn_token_count} parsed Solana tokens. The independent dynamic top-52 cross-exchange REST scan targets a one-second cycle."
+                }
                 whale_trades = []
                 whale_errors = 0
                 for token in discovered[:5]:
