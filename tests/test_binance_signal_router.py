@@ -25,6 +25,23 @@ class FakeRulesClient:
             ],
         }]}
 
+    def account_commission(self, symbol):
+        return {
+            "symbol": symbol,
+            "standardCommission": {
+                "maker": "0.0008", "taker": "0.0010",
+                "buyer": "0.0012", "seller": "0.0011",
+            },
+            "specialCommission": {
+                "maker": "0", "taker": "0.0001",
+                "buyer": "0", "seller": "0",
+            },
+            "taxCommission": {
+                "maker": "0.000001", "taker": "0.000002",
+                "buyer": "0.000003", "seller": "0.000002",
+            },
+        }
+
 
 class FakeLifecycle:
     def __init__(self, protected=True):
@@ -177,3 +194,15 @@ def test_router_accepts_only_verified_snapshot_object():
     )
     assert result["protected"] is True
     assert lifecycle.calls[0][1] == "dominion321"
+
+
+
+def test_router_fetches_authenticated_symbol_fees_when_not_supplied():
+    router, client, lifecycle, setup, quote, context, _fees, now = fixtures()
+    result = router.submit_setup(
+        setup, quote, context=context, fees=None,
+        account_snapshot_verified=True, daily_loss_verified=True,
+        list_client_order_id="dominion654", now=now,
+    )
+    assert result["protected"] is True
+    assert lifecycle.calls[0][0].estimated_round_trip_fee_quote
