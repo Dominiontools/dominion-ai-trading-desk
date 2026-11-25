@@ -209,6 +209,30 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     except Exception as exc:
                         security_results.append({"status":"FEED_ERROR", "error":type(exc).__name__,
                                                  "symbol":token.get("symbol"), "chain":token.get("chain_id")})
+                gmgn_security_results = []
+                gmgn_security_errors = 0
+                if gmgn_client is not None:
+                    gmgn_chain_map = {
+                        "solana": "sol", "ethereum": "eth", "bsc": "bsc",
+                        "base": "base", "arbitrum": "arbitrum", "avalanche": "avalanche",
+                    }
+                    for token in discovered[:5]:
+                        gmgn_chain = gmgn_chain_map.get(str(token.get("chain_id", "")).lower())
+                        address = str(token.get("token_address", "")).strip()
+                        if not gmgn_chain or not address:
+                            continue
+                        try:
+                            evidence = gmgn_client.token_security(gmgn_chain, address)
+                            gmgn_security_results.append({
+                                "symbol": token.get("symbol"), "chain": gmgn_chain,
+                                "token_address": address, "evidence": evidence,
+                            })
+                        except Exception as exc:
+                            gmgn_security_errors += 1
+                            gmgn_security_results.append({
+                                "symbol": token.get("symbol"), "chain": gmgn_chain,
+                                "status": "GMGN_SECURITY_ERROR", "error": type(exc).__name__,
+                            })
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
                 checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
@@ -227,8 +251,11 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     "detail": (f"Discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
                                f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
                                f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
+                               f"GMGN official security endpoint returned {len(gmgn_security_results) - gmgn_security_errors}/"
+                               f"{len(gmgn_security_results)} supported token checks. "
                                "No result is a safety guarantee; missing fields remain unknown."),
                     "checked_tokens": security_results[:5],
+                    "gmgn_security_checks": gmgn_security_results[:5],
                     "risk_flags": [item for item in security_results if item.get("risks")][:5],
                     "unsupported_tokens": unsupported_count,
                     "errors": error_count,
@@ -243,6 +270,8 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             "last_checked_at": datetime.now(timezone.utc).isoformat(),
                             "trenches_preview": __import__("json").dumps(trenches, ensure_ascii=False)[:5000],
                             "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000],
+                            "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000],
+                            "security_errors": gmgn_security_errors,
                         }
                     except Exception as exc:
                         state["gmgn_feed"] = {
@@ -252,6 +281,8 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             "error": str(exc)[:120],
                             "trenches_preview": None,
                             "trending_preview": None,
+                            "security_preview": None,
+                            "security_errors": gmgn_security_errors,
                         }
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
