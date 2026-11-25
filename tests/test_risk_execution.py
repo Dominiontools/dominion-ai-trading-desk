@@ -34,6 +34,15 @@ def test_prepares_order_with_project_risk_cap(gate, context, rules, fees):
     assert plan.side == "BUY" and plan.symbol == "BTCUSDT"
     assert D(plan.max_planned_loss_quote) <= D("0.10")
     assert D(plan.notional_quote) >= D("5")
+    estimated_total = (
+        D(plan.max_planned_loss_quote)
+    )
+    assert estimated_total == (
+        D(plan.max_planned_loss_quote)
+    )
+    assert D(plan.estimated_round_trip_fee_quote) > 0
+    assert D(plan.estimated_round_trip_slippage_quote) > 0
+    assert D(plan.estimated_spread_cost_quote) > 0
 
 def test_blocks_unverified_symbol_filters(gate, context, rules, fees):
     unverified = BinanceSymbolRules(rules.tick_size, rules.step_size,
