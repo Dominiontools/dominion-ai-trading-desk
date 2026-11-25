@@ -33,4 +33,4 @@ GoPlus documents free API access with a limit of 30 calls per minute. The Token 
 - GoPlus flags are not a guarantee that a token is safe. Missing fields remain unknown; no clean safety result is inferred from missing data.
 - Solana and other unsupported GoPlus chain cases remain unassessed by this EVM adapter.
 - Provider failures are surfaced as feed errors; missing data must never be interpreted as a pass.
-- No automated entry or exit orders are enabled. cTrader position management remains blocked until Spotware approves the cTrader app and the user authorizes the Pepperstone demo account.
+- Specialist feeds remain read-only and do not submit orders. The separate Binance Spot Testnet strategy router is opt-in behind the Android OFF-by-default switch; cTrader position management remains blocked until Spotware approves the app and the user authorizes the Pepperstone demo account.
