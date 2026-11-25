@@ -24,7 +24,7 @@ export default async (request: Request) => {
   const nonce = request.headers.get("x-dominion-nonce") ?? "";
   const suppliedSignature = request.headers.get("x-dominion-signature") ?? "";
   const timestamp = Number(timestampText);
-  if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 60_000 ||
+  if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 45_000 ||
       !/^[0-9a-f-]{36}$/i.test(nonce) || !/^[0-9a-f]{64}$/i.test(suppliedSignature)) {
     return response(401, { error: "INVALID_WORKER_AUTHENTICATION" });
   }
@@ -50,10 +50,16 @@ export default async (request: Request) => {
   }
 
   const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
+  const nonceKey = "account/worker-nonce";
+  const previousNonce = await store.get(nonceKey, { type: "json" }) as RecordData | null;
+  if (previousNonce && Date.now() - number(previousNonce.acceptedAt) <= 45_000) {
+    return response(409, { error: "WORKER_REQUEST_REPLAYED" });
+  }
+  if (previousNonce) await store.delete(nonceKey);
   try {
-    await store.setJSON(`account/worker-nonces/${nonce}`, {
+    await store.setJSON(nonceKey, {
+      nonce,
       acceptedAt: Date.now(),
-      expiresAt: Date.now() + 120_000,
     }, { onlyIfNew: true });
   } catch {
     return response(409, { error: "WORKER_REQUEST_REPLAYED" });
