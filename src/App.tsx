@@ -254,6 +254,9 @@ function CryptoMonitorPanel() {
   const strategyEngine = status?.strategy_engine && typeof status.strategy_engine === "object"
     ? status.strategy_engine as Record<string, unknown>
     : null;
+  const arbitrageScanner = status?.arbitrage_scanner && typeof status.arbitrage_scanner === "object"
+    ? status.arbitrage_scanner as Record<string, unknown>
+    : null;
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -307,6 +310,9 @@ function CryptoMonitorPanel() {
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
+      <div><small>BTC CROSS-EXCHANGE SCAN</small><b>{String(arbitrageScanner?.status || "Waiting")}</b></div>
+      <div><small>SCAN TARGET</small><b>{String(status?.poll_interval_seconds ?? "1")}s · REST</b></div>
+      <div><small>STRATEGY PROFILE</small><b>{String(strategyEngine?.profile || "Intraday")} · {String(strategyEngine?.execution_timeframe || "15m")}/{String(strategyEngine?.context_timeframe || "4h")}</b></div>
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 8)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
@@ -315,7 +321,7 @@ function CryptoMonitorPanel() {
         <span className={"readiness-state " + String(task.status || "UNKNOWN").toLowerCase()}>{String(task.status || "UNKNOWN").replaceAll("_", " ")}</span>
       </div>)}
       {readinessTasks.length === 0 && <div className="decision-empty"><div><b>Integration checklist unavailable</b><span>Start the phone engine to load the outstanding work and external approval gates.</span></div></div>}
-      <div className="panel-foot">This checklist separates code work from external approvals and tests. Live-money trading remains locked, even after demo checks pass.</div>
+      <div className="panel-foot">The BTC cross-exchange monitor uses public REST snapshots with a one-second target, not a persistent WebSocket stream; actual cycles depend on venue response times and rate limits. This checklist separates code work from external approvals and tests. Live-money trading remains locked, even after demo checks pass.</div>
     </div>
     <div className="agent-runtime-list paper-book-panel">
       <div className="decision-list-head"><b>PAPER TRADING ACCOUNT</b><span>{paperTrading ? "CONNECTED TO LOCAL ENGINE" : "WAITING FOR ENGINE"}</span></div>
@@ -325,7 +331,7 @@ function CryptoMonitorPanel() {
         <div><small>REALIZED P/L</small><b>${String(paperTrading?.realized_pnl ?? "—")}</b></div>
         <div><small>DAILY LOSS</small><b>{paperTrading ? (Number(paperTrading.daily_loss_pct ?? 0) * 100).toFixed(2) + "%" : "—"}</b></div>
         <div><small>OPEN POSITION</small><b>{paperPosition ? String(paperPosition.symbol) + " " + String(paperPosition.side) : "None"}</b></div>
-        <div><small>STRATEGY</small><b>{String(strategyEngine?.status || "Waiting")}</b></div>
+        <div><small>STRATEGY</small><b>{String(strategyEngine?.status || "Waiting")} · {String(strategyEngine?.score ?? "—")}/{String(strategyEngine?.score_threshold ?? 6)}</b></div>
       </div>
       <div className="panel-foot">Directional strategy: multi-timeframe confluence using EMA50/200 and EMA20/50, MACD, RSI, BOS/CHoCH, liquidity sweeps, order blocks, FVG and Fibonacci zones. Current crypto execution is paper-only; cross-exchange price gaps are not treated as directional entry signals.</div>
       <div className="decision-list-head"><b>RECENT PAPER EVENTS</b><span>{paperTrades.length} records</span></div>
