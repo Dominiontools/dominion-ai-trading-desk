@@ -560,7 +560,7 @@ def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "", bina
                     "available_quote": str(risk_context.get("available_quote", "0"))[:32],
                     "daily_loss_quote": str(risk_context.get("daily_loss_quote", "0"))[:32],
                     "open_positions": max(0, min(100, int(risk_context.get("open_positions", 0) or 0))),
-                    "open_order_lists": max(0, min(100, int(risk_context.get("open_order_lists", 0) or 0))),
+                    "journaled_order_lists": max(0, min(100, int(risk_context.get("journaled_order_lists", 0) or 0))),
                     "orders_enabled": False,
                     "environment": "BINANCE_SPOT_TESTNET",
                 }
