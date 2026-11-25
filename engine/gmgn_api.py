@@ -228,3 +228,47 @@ def summarize_security_evidence(payload: object, chain: str) -> dict:
         "observed": observed,
         "disclaimer": "No explicit GMGN flag is not a safety guarantee.",
     }
+
+
+def extract_trenches_tokens(payload: object, chain: str = "sol", *, limit: int = 50) -> list[dict]:
+    """Extract only token-shaped records from the documented Trenches categories."""
+    chain = str(chain).strip().lower()
+    if not 1 <= limit <= 80:
+        raise ValueError("Token extraction limit must be between 1 and 80.")
+    found: list[dict] = []
+    seen: set[str] = set()
+
+    def visit(value: object) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(value, dict):
+            address = next((value.get(key) for key in
+                            ("token_address", "address", "contract_address")
+                            if isinstance(value.get(key), str) and value.get(key).strip()), None)
+            symbol = value.get("symbol") or value.get("ticker")
+            if isinstance(address, str) and isinstance(symbol, str):
+                normalized_address = address.strip()
+                if 20 <= len(normalized_address) <= 128 and normalized_address not in seen:
+                    seen.add(normalized_address)
+                    found.append({
+                        "chain": chain,
+                        "token_address": normalized_address,
+                        "symbol": symbol.strip()[:32],
+                        "name": str(value.get("name") or symbol).strip()[:80],
+                        "price": value.get("price"),
+                        "liquidity": value.get("liquidity"),
+                        "rug_ratio": value.get("rug_ratio"),
+                        "launchpad": value.get("launchpad") or value.get("launchpad_platform"),
+                        "created_timestamp": value.get("created_timestamp") or value.get("creation_timestamp"),
+                    })
+            for key in ("new_creation", "near_completion", "completed", "list", "tokens", "items", "data"):
+                if key in value:
+                    visit(value[key])
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+                if len(found) >= limit:
+                    break
+
+    visit(payload)
+    return found
