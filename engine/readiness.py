@@ -64,6 +64,8 @@ def build_readiness(
             "title": "Connect official GMGN token discovery and trending data",
             "status": "VERIFIED" if gmgn_read_only_status == "CONNECTED"
                       else "API_ERROR" if gmgn_read_only_status == "API_ERROR"
+                      else "RATE_LIMITED" if gmgn_read_only_status == "RATE_LIMITED"
+                      else "PLAN_UPGRADE_REQUIRED" if gmgn_read_only_status == "PLAN_UPGRADE_REQUIRED"
                       else "VERIFYING" if gmgn_read_only_status == "READY_TO_CONNECT"
                       else "NEEDS_API_KEY",
             "detail": "GMGN's official read-only Solana Trenches and trending connector is implemented. It requires a GMGN API key and a successful read-only response. GMGN wallet signing, swaps and live orders are not enabled.",
