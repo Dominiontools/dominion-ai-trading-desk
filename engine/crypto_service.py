@@ -1,7 +1,8 @@
-"""Phone-embedded public-crypto paper monitor and loopback read-only API.
+"""Phone-embedded crypto monitor with paper-first, opt-in Binance Spot Testnet routing.
 
-No exchange account credentials, wallet access, or order-placement capability.
-The embedded start/stop functions are called by the Android foreground service.
+Testnet order routing is disabled by default and requires an explicit Android
+setting plus credentials stored in the native Keystore. Live exchange hosts and
+wallet signing are not supported by this service.
 """
 from __future__ import annotations
 
@@ -25,6 +26,12 @@ from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
 from engine.confluence_strategy import TIMEFRAME_PROFILES
 from engine.readiness import build_readiness
+from engine.binance_testnet import BinanceSpotTestnetClient
+from engine.binance_lifecycle import BinanceProtectedLifecycle
+from engine.binance_daily_loss import BinanceDailyLossLedger
+from engine.binance_risk_context import BinanceRiskContextProvider
+from engine.binance_signal_router import BinanceTestnetSignalRouter
+from engine.risk_execution import BinanceTestnetRiskGate
 
 _runtime_lock = threading.RLock()
 _runtime_stop: threading.Event | None = None
@@ -66,7 +73,11 @@ def _fee_config() -> dict[str, tuple[float, float]]:
     return fees
 
 
-def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key: str = ""):
+def _runtime_config(
+    data_dir: str | Path, port: int | None = None, gmgn_api_key: str = "",
+    binance_api_key: str = "", binance_api_secret: str = "",
+    binance_testnet_orders_enabled: bool = False,
+):
     symbols = tuple(
         item.strip().upper().replace("/", "")
         for item in os.getenv("DOMINION_CRYPTO_SYMBOLS", "BTCUSDT,ETHUSDT,PAXGUSDT").split(",")
@@ -127,10 +138,41 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
         score_threshold=score_threshold,
         max_notional_fraction=0.40,
     )
+    testnet_execution_enabled = bool(
+        binance_testnet_orders_enabled and binance_api_key and binance_api_secret
+    )
+    os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] = (
+        "YES" if testnet_execution_enabled else "NO"
+    )
+    testnet_router = None
+    testnet_risk_context = None
+    if testnet_execution_enabled:
+        testnet_client = BinanceSpotTestnetClient(
+            binance_api_key, binance_api_secret, allow_orders=True
+        )
+        daily_loss_ledger = BinanceDailyLossLedger(Path(data_dir) / "binance-daily-loss.jsonl")
+        testnet_lifecycle = BinanceProtectedLifecycle(
+            BinanceTestnetRiskGate(), testnet_client,
+            journal_path=Path(data_dir) / "binance-lifecycle.json",
+            daily_loss_ledger=daily_loss_ledger,
+        )
+        testnet_risk_context = BinanceRiskContextProvider(
+            testnet_client, testnet_lifecycle, daily_loss_ledger, quote_asset="USDT"
+        )
+        testnet_router = BinanceTestnetSignalRouter(
+            testnet_client, testnet_lifecycle, BinanceTestnetRiskGate()
+        )
     state = {
         "engine": "starting",
-        "mode": "PAPER_ONLY",
-        "orders_enabled": False,
+        "mode": "BINANCE_SPOT_TESTNET" if testnet_execution_enabled else "PAPER_ONLY",
+        "orders_enabled": testnet_execution_enabled,
+        "binance_testnet_execution": {
+            "enabled": testnet_execution_enabled,
+            "status": "ENABLED_TESTNET" if testnet_execution_enabled
+                      else "DISABLED_OR_CREDENTIALS_MISSING",
+            "orders_enabled": testnet_execution_enabled,
+            "environment": "BINANCE_SPOT_TESTNET",
+        },
         "symbols": list(symbols),
         "arbitrage_symbols": list(arbitrage_symbols),
         "arbitrage_universe": {
