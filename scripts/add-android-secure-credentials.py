@@ -28,6 +28,7 @@ final class CredentialVault {
     private static final String STORE = "dominion_exchange_vault";
     private static final String KEY_ALIAS = "dominion_exchange_aes_gcm_v1";
     private static final String CIPHERTEXT = "credentials_v1";
+    private static final String BINANCE_ORDERS_ENABLED = "binance_testnet_orders_enabled";
     private static final String IV = "iv_v1";
     private static final String GMGN_CIPHERTEXT = "gmgn_api_key_v1";
     private static final String GMGN_IV = "gmgn_api_iv_v1";
@@ -58,6 +59,19 @@ final class CredentialVault {
 
     synchronized boolean hasCredentials() {
         return prefs.contains(IV) && prefs.contains(CIPHERTEXT);
+    }
+
+    synchronized boolean binanceTestnetOrdersEnabled() {
+        return hasCredentials() && prefs.getBoolean(BINANCE_ORDERS_ENABLED, false);
+    }
+
+    synchronized void setBinanceTestnetOrdersEnabled(boolean enabled) throws Exception {
+        if (enabled && !hasCredentials()) {
+            throw new IllegalStateException("Save Binance Testnet credentials before enabling orders.");
+        }
+        if (!prefs.edit().putBoolean(BINANCE_ORDERS_ENABLED, enabled).commit()) {
+            throw new IllegalStateException("Could not save the Testnet execution setting.");
+        }
     }
 
     synchronized void saveGmgnApiKey(String apiKey) throws Exception {
@@ -126,7 +140,7 @@ final class CredentialVault {
     }
 
     synchronized void clear() throws Exception {
-        if (!prefs.edit().remove(IV).remove(CIPHERTEXT).commit()) {
+        if (!prefs.edit().remove(IV).remove(CIPHERTEXT).remove(BINANCE_ORDERS_ENABLED).commit()) {
             throw new IllegalStateException("Could not clear stored Binance Testnet credentials.");
         }
         deleteEncryptionKeyIfUnused();
@@ -226,6 +240,36 @@ def main():
             call.resolve(result);
         } catch (Exception error) {
             call.reject("Could not clear the saved Testnet credentials.");
+        }
+    }
+''');
+
+    if "binanceTestnetOrdersEnabled" not in text:
+        append_methods(r'''
+    @PluginMethod
+    public void binanceTestnetOrdersEnabled(PluginCall call) {
+        JSObject result = new JSObject();
+        CredentialVault vault = new CredentialVault(getContext());
+        result.put("enabled", vault.binanceTestnetOrdersEnabled());
+        result.put("storage", "ANDROID_PRIVATE_PREFERENCES");
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void setBinanceTestnetOrdersEnabled(PluginCall call) {
+        Boolean enabled = call.getBoolean("enabled");
+        if (enabled == null) {
+            call.reject("A Testnet execution setting is required.");
+            return;
+        }
+        try {
+            CredentialVault vault = new CredentialVault(getContext());
+            vault.setBinanceTestnetOrdersEnabled(enabled);
+            JSObject result = new JSObject();
+            result.put("enabled", vault.binanceTestnetOrdersEnabled());
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Could not change the Binance Testnet execution setting.");
         }
     }
 ''');
