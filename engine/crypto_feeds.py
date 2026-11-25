@@ -61,19 +61,21 @@ class PublicCryptoFeeds:
 
     def bitget(self, symbol: str) -> ExchangeQuote:
         pair, _ = _symbol_parts(symbol)
-        query = urlencode({"symbol": pair})
-        payload = self._get(f"https://api.bitget.com/api/v2/spot/market/tickers?{query}")
+        query = urlencode({"category": "SPOT", "symbol": pair})
+        payload = self._get(f"https://api.bitget.com/api/v3/market/tickers?{query}")
         if not isinstance(payload, dict) or payload.get("code") != "00000":
             raise RuntimeError("Bitget market-data request was not successful.")
         rows = payload.get("data")
         if not isinstance(rows, list):
             raise RuntimeError("Unexpected Bitget ticker response.")
-        row = next((item for item in rows if item.get("symbol") == pair), None)
+        row = next((item for item in rows if isinstance(item, dict)
+                    and item.get("symbol") == pair
+                    and item.get("category", "SPOT") == "SPOT"), None)
         if row is None:
             raise RuntimeError(f"Bitget did not return {pair}.")
         stamp = datetime.fromtimestamp(int(row["ts"]) / 1000, timezone.utc)
-        return ExchangeQuote("Bitget", symbol, float(row["bidPr"]), float(row["askPr"]),
-                             stamp, float(row["bidSz"]), float(row["askSz"]))
+        return ExchangeQuote("Bitget", symbol, float(row["bid1Price"]), float(row["ask1Price"]),
+                             stamp, float(row["bid1Size"]), float(row["ask1Size"]))
 
     def htx(self, symbol: str) -> ExchangeQuote:
         pair, _ = _symbol_parts(symbol)
@@ -169,7 +171,7 @@ class PublicCryptoFeeds:
         return quotes
 
     def _bitget_many(self, requested: dict[str, str]) -> list[ExchangeQuote]:
-        payload = self._get("https://api.bitget.com/api/v2/spot/market/tickers")
+        payload = self._get("https://api.bitget.com/api/v3/market/tickers?category=SPOT")
         if not isinstance(payload, dict) or payload.get("code") != "00000":
             raise RuntimeError("Bitget all-tickers request was not successful.")
         rows = payload.get("data")
@@ -178,14 +180,16 @@ class PublicCryptoFeeds:
         wanted = set(requested)
         quotes = []
         for row in rows:
-            if not isinstance(row, dict) or str(row.get("symbol", "")).upper() not in wanted:
+            if (not isinstance(row, dict)
+                    or str(row.get("symbol", "")).upper() not in wanted
+                    or row.get("category", "SPOT") != "SPOT"):
                 continue
             try:
                 stamp = datetime.fromtimestamp(int(row["ts"]) / 1000, timezone.utc)
                 quotes.append(ExchangeQuote(
                     "Bitget", str(row["symbol"]).upper(),
-                    float(row["bidPr"]), float(row["askPr"]), stamp,
-                    float(row.get("bidSz", 0)), float(row.get("askSz", 0)),
+                    float(row["bid1Price"]), float(row["ask1Price"]),
+                    stamp, float(row.get("bid1Size", 0)), float(row.get("ask1Size", 0)),
                 ))
             except (KeyError, TypeError, ValueError, OverflowError):
                 continue
