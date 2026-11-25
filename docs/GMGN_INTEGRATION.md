@@ -13,6 +13,10 @@ Official documentation:
 
 The official Agent API describes token information/security, market candles, trending lists, wallet portfolio/activity and swap workflows. GMGN directs users to create an API key through its official AI page. Its Q&A separately says the general data-crawling API is not openly available and requires a partner IP-whitelist application. These are distinct access routes and must not be confused.
 
+## Request-rate protection
+
+The current connector is paced for GMGN's documented Free-plan bucket: Trenches (weight 2) and trending (weight 3) refresh together every five minutes; between refreshes, at most one token-security request (weight 1) is sent per agent cycle. API errors trigger a cooldown, and a plan-upgrade-required response disables further requests until the service is restarted after access is changed. Do not increase these request rates without checking the user's actual GMGN plan.
+
 ## What is not connected yet
 
 - No GMGN API key or approved data access has been supplied/configured for Dominion.
