@@ -254,6 +254,7 @@ public class TradingEngineService extends Service {
             }
             PyObject module = Python.getInstance().getModule("engine.crypto_service");
             CredentialVault vault = new CredentialVault(getApplicationContext());
+            String binanceRecoveryJson = "{\\"status\\":\\"SKIPPED\\",\\"halted\\":true,\\"orders_enabled\\":false}";
             if (vault.hasCredentials()) {
                 String[] credentials = null;
                 try {
@@ -262,7 +263,7 @@ public class TradingEngineService extends Service {
                     String recoveryJson = recovery.callAttr("reconcile_saved_orders",
                         credentials[0], credentials[1],
                         getFilesDir().getAbsolutePath() + "/binance-lifecycle.json").toString();
-                    Log.i(TAG, "Binance Testnet restart recovery: " + recoveryJson);
+                    binanceRecoveryJson = recoveryJson;
                 } catch (Exception recoveryError) {
                     Log.w(TAG, "Binance Testnet recovery remains blocked; manual review required.");
                 } finally {
@@ -279,7 +280,7 @@ public class TradingEngineService extends Service {
                 // GMGN is optional; the rest of the paper engine must still start.
             }
             PyObject result = module.callAttr("start_embedded",
-                getFilesDir().getAbsolutePath(), 8766, gmgnApiKey);
+                getFilesDir().getAbsolutePath(), 8766, gmgnApiKey, binanceRecoveryJson);
             running = true;
             lastError = "";
             Log.i(TAG, "Embedded paper engine started: " + result.toString());
