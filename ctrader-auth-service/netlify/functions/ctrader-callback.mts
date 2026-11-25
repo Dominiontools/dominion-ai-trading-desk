@@ -2,7 +2,7 @@ import { getDeployStore, getStore } from "@netlify/blobs";
 import { createCipheriv, randomBytes } from "node:crypto";
 
 const REDIRECT_URI =
-  "https://dominion-ctrader-auth.netlify.app/.netlify/functions/ctrader-callback";
+  "https://dominion-ai-trading-desk-p7cp.netlify.app/.netlify/functions/ctrader-callback";
 const AUTHORIZE_URL =
   "https://id.ctrader.com/my/settings/openapi/grantingaccess/";
 const TOKEN_URL = "https://openapi.ctrader.com/apps/token";
