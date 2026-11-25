@@ -92,8 +92,18 @@ final class CredentialVault {
             StandardCharsets.UTF_8);
     }
 
-    synchronized void clearGmgnApiKey() {
-        prefs.edit().remove(GMGN_IV).remove(GMGN_CIPHERTEXT).commit();
+    synchronized void clearGmgnApiKey() throws Exception {
+        if (!prefs.edit().remove(GMGN_IV).remove(GMGN_CIPHERTEXT).commit()) {
+            throw new IllegalStateException("Could not clear the GMGN API key.");
+        }
+        if (!hasCredentials()) deleteEncryptionKeyIfUnused();
+    }
+
+    private void deleteEncryptionKeyIfUnused() throws Exception {
+        if (hasCredentials() || hasGmgnApiKey()) return;
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        if (store.containsAlias(KEY_ALIAS)) store.deleteEntry(KEY_ALIAS);
     }
 
     /** Decrypt only for native in-process exchange use; never bridge this result to JS. */
@@ -116,12 +126,10 @@ final class CredentialVault {
     }
 
     synchronized void clear() throws Exception {
-        if (!prefs.edit().clear().commit()) {
-            throw new IllegalStateException("Could not clear stored credentials.");
+        if (!prefs.edit().remove(IV).remove(CIPHERTEXT).commit()) {
+            throw new IllegalStateException("Could not clear stored Binance Testnet credentials.");
         }
-        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
-        store.load(null);
-        if (store.containsAlias(KEY_ALIAS)) store.deleteEntry(KEY_ALIAS);
+        deleteEncryptionKeyIfUnused();
     }
 
     private SecretKey getOrCreateKey() throws Exception {
