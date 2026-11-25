@@ -63,13 +63,18 @@ class GMGNReadOnlyClient:
             # Surface only a numeric HTTP status, never headers, URL, or credential values.
             status_code = getattr(exc, "code", None)
             if isinstance(status_code, int):
-                raise RuntimeError(f"GMGN_HTTP_ERROR:{status_code}") from None
+                headers_obj = getattr(exc, "headers", None)
+                reset_at = headers_obj.get("X-RateLimit-Reset") if headers_obj else None
+                reset_suffix = f":RESET_AT:{reset_at}" if reset_at else ""
+                raise RuntimeError(f"GMGN_HTTP_ERROR:{status_code}{reset_suffix}") from None
             raise RuntimeError(f"GMGN_READ_REQUEST_FAILED:{type(exc).__name__}") from None
         if isinstance(payload, dict):
             code = payload.get("code")
             if code not in (None, 0, "0", 200, "200", "success", "SUCCESS"):
                 reason = str(payload.get("error") or payload.get("message") or "")[:80]
-                raise RuntimeError(f"GMGN_API_REJECTED:{str(code)[:32]}:{reason}")
+                reset_at = payload.get("reset_at")
+                reset_suffix = f":RESET_AT:{reset_at}" if reset_at is not None else ""
+                raise RuntimeError(f"GMGN_API_REJECTED:{str(code)[:32]}:{reason}{reset_suffix}")
             if payload.get("success") is False:
                 raise RuntimeError("GMGN_API_REJECTED")
         return payload
