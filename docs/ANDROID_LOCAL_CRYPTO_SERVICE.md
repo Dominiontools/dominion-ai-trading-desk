@@ -16,9 +16,11 @@ not required for this embedded build.
    exchange quote snapshots and scanner decisions.
 6. Tap **Stop** when you want the monitor to stop.
 
-The default pairs are BTCUSDT and ETHUSDT. The monitor polls public REST
-endpoints from Binance, Bitget and HTX approximately every five seconds. This
-is not WebSocket streaming or high-frequency trading.
+The default strategy watchlist is BTCUSDT, ETHUSDT and PAXGUSDT. The cross-exchange
+price-gap monitor separately targets BTCUSDT on Binance, Bitget and HTX with a
+one-second REST polling target. Actual cycles can be slower due to venue
+response times, mobile connectivity and rate limits. This is not WebSocket
+streaming or high-frequency trading.
 
 ## Samsung background settings
 
@@ -51,27 +53,34 @@ cost and is not sufficient for live execution.
   is missing, the snapshot is incomplete, or the data is invalid/stale.
 - The local API binds only to `127.0.0.1`, exposes read-only GET routes, and
   must never be exposed to the public internet.
-- cTrader/Pepperstone is not connected to this Android service yet.
+- cTrader/Pepperstone demo execution is a separate scheduled cloud service on the old Netlify account; it is not connected to the Android phone engine.
+- The cTrader trading-scope OAuth flow and scheduled demo order cycle exist in the development branch only; they are not deployed or live-tested. The engine defaults to disabled.
+- No crypto exchange testnet orders are placed by the phone service.
 
 ## Directional crypto paper strategy and persistent paper book
 
-The embedded Android service also runs a 10/30 SMA crossover strategy using
-completed Binance Spot 1-minute candles. It requests 80 klines and discards the
-currently forming candle; signals are blocked if the latest completed candle
-is older than two minutes or if the quote is stale. A candidate is sized from
-the configured $20 paper equity and 0.5% maximum risk, with a 1% initial stop,
-2:1 target, $20 notional cap, spread/slippage gates, and one open position.
+The embedded Android service now runs a multi-timeframe confluence paper
+strategy using completed Binance candles. The default intraday profile uses
+15-minute execution candles and 4-hour context candles, with EMA50/200 and
+EMA20/50, MACD, RSI, BOS/CHoCH, liquidity sweeps, order blocks, fair-value gaps,
+and Fibonacci retracement confluence. It discards the currently forming candle
+and blocks stale quotes or stale candle data. A candidate is sized from the
+configured $20 paper equity and 0.5% maximum risk, with a 2R paper target,
+40% maximum notional allocation, spread/slippage gates, and one open position.
+The separate BTC cross-exchange scan is analysis-only and does not create
+directional entries.
 
 The paper book writes entry, hold, blocked-entry and exit events to
 `paper_trades.jsonl`. On engine restart it restores realized P/L and any
 unclosed paper position from that journal, so the EXIT agent can continue
 monitoring it. The dashboard exposes paper equity, realized P/L, daily loss,
-open-position status and SMA strategy status.
+open-position status and multi-timeframe strategy status.
 
-This is still PAPER_ONLY. The directional strategy is a baseline example, not
-a claim of profitability or a full implementation of every strategy in the
-user's strategy guide. It uses public REST candles and a single Binance quote,
-not a WebSocket stream. The separate arbitrage monitor remains analysis-only;
+This is still PAPER_ONLY. The directional strategy is a paper implementation, not a claim of
+profitability or a full implementation of every strategy in the user's
+strategy guide. It uses public REST candles and a single Binance quote, not a
+WebSocket stream. The current default strategy watchlist has three pairs; the
+requested 52-market dynamic universe scan is still outstanding. The separate arbitrage monitor remains analysis-only;
 an arbitrage price gap is never converted into a one-sided directional trade.
 
 ## Remaining integration checklist
