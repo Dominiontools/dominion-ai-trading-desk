@@ -50,7 +50,7 @@ def test_android_python_bundle_includes_restart_safe_binance_lifecycle_module():
 def test_android_service_passes_restart_recovery_into_safe_status_provider():
     script = Path("scripts/configure-android-local-api.py").read_text()
     assert 'String binanceRecoveryJson' in script
-    assert 'binanceRecoveryJson);' in script
+    assert 'binanceApiKey, binanceApiSecret, binanceOrdersEnabled);' in script
     assert 'callAttr("account_risk_snapshot"' in script
     assert 'binanceOrdersEnabled = vault.binanceTestnetOrdersEnabled()' in script
     assert 'binanceOrdersEnabled && binanceCredentials != null' in script
