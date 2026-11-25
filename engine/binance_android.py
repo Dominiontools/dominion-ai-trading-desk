@@ -130,7 +130,7 @@ def account_risk_snapshot(
                 "available_quote": format(snapshot.context.available_quote, "f"),
                 "daily_loss_quote": format(snapshot.context.daily_loss_quote, "f"),
                 "open_positions": snapshot.context.open_positions,
-                "open_order_lists": snapshot.open_order_lists,
+                "journaled_order_lists": snapshot.journaled_order_lists,
                 "status": "VERIFIED",
             },
         }, separators=(",", ":"))
