@@ -387,6 +387,9 @@ function CryptoMonitorPanel() {
   const binanceRecovery = status?.binance_testnet_recovery && typeof status.binance_testnet_recovery === "object"
     ? status.binance_testnet_recovery as Record<string, unknown>
     : null;
+  const binanceExecution = status?.binance_testnet_execution && typeof status.binance_testnet_execution === "object"
+    ? status.binance_testnet_execution as Record<string, unknown>
+    : null;
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -457,8 +460,9 @@ function CryptoMonitorPanel() {
       <div><small>STRATEGY PROFILE</small><b>{String(strategyEngine?.profile || "Intraday")} · {String(strategyEngine?.execution_timeframe || "15m")}/{String(strategyEngine?.context_timeframe || "4h")}</b></div>
     </div>
     <div className="agent-runtime-list">
-      <div className="decision-list-head"><b>BINANCE TESTNET · SHARED RISK SNAPSHOT</b><span>{String(binanceRiskContext?.status || binanceRecovery?.status || "NOT CHECKED")}</span></div>
+      <div className="decision-list-head"><b>BINANCE TESTNET · SHARED RISK SNAPSHOT</b><span>{String(binanceExecution?.status || binanceRiskContext?.status || binanceRecovery?.status || "NOT CHECKED")}</span></div>
       <div className="crypto-summary">
+        <div><small>AUTOMATION</small><b>{binanceExecution?.enabled === true ? "ENABLED" : "OFF"}</b></div>
         <div><small>RISK CONTEXT</small><b>{binanceRiskContext?.verified === true ? "VERIFIED" : "BLOCKED / NOT CHECKED"}</b></div>
         <div><small>USDT EQUITY</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.equity_quote) : "—"}</b></div>
         <div><small>AVAILABLE USDT</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.available_quote) : "—"}</b></div>
