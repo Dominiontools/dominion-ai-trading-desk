@@ -89,3 +89,13 @@ The risk-context provider also treats any non-zero non-USDT Spot balance as
 an unmanaged open holding. That is intentionally conservative: manual holdings
 are not silently ignored by the one-position rule. Such a balance must be
 reviewed or explicitly handled before the bot can open another position.
+
+
+## Account-tier trading fees
+
+The Testnet adapter now queries the authenticated per-symbol commission
+schedule using Binance's signed `GET /api/v3/account/commission` endpoint.
+The parser requires standard, special and tax commission groups, uses the
+highest taker/buyer/seller rate in each group, and ignores optional BNB
+discounts so order sizing remains conservative. Missing or malformed rates
+block order planning; no fee is guessed.
