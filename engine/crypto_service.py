@@ -63,7 +63,7 @@ def _fee_config() -> dict[str, tuple[float, float]]:
 def _runtime_config(data_dir: str | Path, port: int | None = None):
     symbols = tuple(
         item.strip().upper().replace("/", "")
-        for item in os.getenv("DOMINION_CRYPTO_SYMBOLS", "BTCUSDT,ETHUSDT").split(",")
+        for item in os.getenv("DOMINION_CRYPTO_SYMBOLS", "BTCUSDT,ETHUSDT,PAXGUSDT").split(",")
         if item.strip()
     )
     if not symbols or any(not item.isalnum() for item in symbols):
