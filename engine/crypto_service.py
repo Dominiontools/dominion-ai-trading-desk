@@ -183,6 +183,8 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
     def agent_feed_loop() -> None:
+        nonlocal gmgn_last_trenches_refresh, gmgn_last_trending_refresh
+        nonlocal gmgn_retry_after, gmgn_security_cursor
         while not stop_event.is_set():
             try:
                 discovered = discovery_feed.discover(limit=8)
