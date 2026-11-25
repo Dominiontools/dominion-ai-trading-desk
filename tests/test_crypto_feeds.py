@@ -77,9 +77,9 @@ def test_snapshot_reports_each_failed_venue_without_returning_partial_quotes():
     assert [quote.exchange for quote in quotes] == ["Binance"]
     assert "TimeoutError" in failures["Bitget"]
     assert "connection timed out" in failures["Bitget"]
-    assert "OSError" in failures["Htx"]
+    assert "OSError" in failures["HTX"]
     assert "TLS handshake failed" in failures["Htx"]
-    assert "OSError" in failures["Okx"]
+    assert "OSError" in failures["OKX"]
 
 
 def test_batch_snapshot_fetches_all_requested_pairs_from_four_exchanges():
