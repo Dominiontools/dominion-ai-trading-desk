@@ -263,6 +263,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             gmgn_security_results.append({
                                 "symbol": token.get("symbol"), "chain": gmgn_chain,
                                 "token_address": address, "assessment": assessment,
+                                "checked_at": datetime.now(timezone.utc).isoformat(),
                             })
                         except Exception as exc:
                             gmgn_security_errors += 1
