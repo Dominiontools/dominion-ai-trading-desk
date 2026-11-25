@@ -26,3 +26,17 @@ Spot balances as unmanaged holdings for the one-position rule. The dashboard
 receives only a sanitized USDT equity/available-balance, daily-loss, open-
 position and journal-count summary. The snapshot client is constructed with
 `allow_orders=False`; this startup check cannot place, cancel or amend orders.
+
+
+## Explicit Testnet automation permission
+
+The Android app includes a separate Binance Spot Testnet automation switch.
+It is OFF by default and cannot be enabled until Testnet credentials are
+saved. The preference is stored locally and is not a secret. When enabled,
+the foreground service decrypts the saved credentials from Android Keystore
+and passes them only to the on-device Python Testnet client. The client is
+pinned to the Binance Spot Testnet host and still requires its independent
+constructor/environment gates. The switch never enables production/live
+trading. Turning it off and restarting the service prevents new entries;
+already submitted exchange-hosted stop-loss/take-profit orders remain on
+Binance until their exit condition is reached.
