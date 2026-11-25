@@ -7,6 +7,7 @@ withdrawal/network risk controls, and separate exchange adapters.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import permutations
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -22,11 +23,19 @@ class ExchangeQuote:
     def __post_init__(self):
         if not self.exchange.strip() or not self.symbol.strip():
             raise ValueError("Exchange and symbol are required.")
+        try:
+            finite_values = all(isfinite(float(value)) for value in (
+                self.bid, self.ask, self.bid_size, self.ask_size,
+            ))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("Quote prices and sizes must be finite numbers.") from exc
+        if not finite_values:
+            raise ValueError("Quote prices and sizes must be finite numbers.")
         if self.bid <= 0 or self.ask <= 0 or self.ask < self.bid:
             raise ValueError("Quote prices must be positive and ask must be >= bid.")
         if self.bid_size < 0 or self.ask_size < 0:
             raise ValueError("Quote sizes cannot be negative.")
-        if self.timestamp.tzinfo is None:
+        if not isinstance(self.timestamp, datetime) or self.timestamp.utcoffset() is None:
             raise ValueError("Quote timestamp must be timezone-aware.")
 
 
@@ -68,7 +77,14 @@ def scan_arbitrage(
     costs_by_exchange maps exchange -> (maker/taker fee bps); the taker fee is
     used conservatively for both sides. A caller must supply current fee estimates.
     """
-    if max_quote_age_seconds <= 0 or min_net_edge_bps < 0 or max_notional <= 0:
+    try:
+        valid_limits = all(isfinite(float(value)) for value in (
+            max_quote_age_seconds, min_net_edge_bps, max_notional,
+        ))
+    except (TypeError, ValueError, OverflowError):
+        valid_limits = False
+    if (not valid_limits or max_quote_age_seconds <= 0
+            or min_net_edge_bps < 0 or max_notional <= 0):
         raise ValueError("Scanner limits are invalid.")
     current = now or datetime.now(timezone.utc)
     fresh = []
@@ -94,7 +110,11 @@ def scan_arbitrage(
             continue
         buy_fee = buy_costs[1]
         sell_fee = sell_costs[1]
-        if buy_fee < 0 or sell_fee < 0:
+        try:
+            if (not isfinite(float(buy_fee)) or not isfinite(float(sell_fee))
+                    or buy_fee < 0 or sell_fee < 0):
+                continue
+        except (TypeError, ValueError, OverflowError):
             continue
         gross = (sell.bid - buy.ask) / buy.ask * 10_000
         # Conservative placeholder until order-book depth/slippage models are connected.
