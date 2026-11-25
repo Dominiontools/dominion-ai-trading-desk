@@ -44,3 +44,14 @@ def test_market_universe_returns_empty_when_no_eligible_liquid_pairs():
     ]
     symbols = BinanceMarketUniverse(fetch_json=lambda url, timeout: rows).top_usdt_symbols()
     assert symbols == ()
+
+
+def test_default_market_universe_returns_up_to_52_liquid_pairs():
+    rows = [
+        {"symbol": f"COIN{index}USDT", "quoteVolume": str(100_000_000 - index)}
+        for index in range(60)
+    ]
+    symbols = BinanceMarketUniverse(fetch_json=lambda url, timeout: rows).top_usdt_symbols()
+    assert len(symbols) == 52
+    assert symbols[0] == "COIN0USDT"
+    assert symbols[-1] == "COIN51USDT"
