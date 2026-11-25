@@ -49,7 +49,7 @@ class BinanceTestnetSignalRouter:
         return self.submit_setup(
             setup, quote,
             context=snapshot.context,
-            fees=verified_fees,
+            fees=fees,
             account_snapshot_verified=snapshot.account_snapshot_verified,
             daily_loss_verified=snapshot.daily_loss_verified,
             list_client_order_id=list_client_order_id,
