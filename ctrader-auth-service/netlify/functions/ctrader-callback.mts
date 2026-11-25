@@ -41,7 +41,7 @@ function readCookie(request: Request, name: string): string | null {
 }
 
 function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
+  const value = Netlify.env.get(name)?.trim();
   if (!value) throw new Error(`Missing required Netlify environment variable: ${name}`);
   return value;
 }
@@ -128,12 +128,13 @@ async function verifyDemoAccounts(accessToken: string, clientId: string, clientS
             finish(undefined, { permissionScope: Number(payload.permissionScope), accounts: [] });
             return;
           }
-          const firstId = String(demoAccounts[0].ctidTraderAccountId ?? "");
-          if (!firstId) {
-            finish(new Error("cTrader returned a demo account without an account ID."));
+          const firstId = Number(demoAccounts[0].ctidTraderAccountId);
+          if (!Number.isSafeInteger(firstId) || firstId <= 0) {
+            finish(new Error("cTrader returned a demo account with an invalid account ID."));
             return;
           }
           stage = "account-auth";
+          // ProtoOAAccountAuthReq.ctidTraderAccountId is int64; send a JSON number, not a quoted string.
           send(2102, { ctidTraderAccountId: firstId, accessToken });
           (socket as WebSocket & { __demoAccounts?: Record<string, unknown>[]; __scope?: number }).__demoAccounts = demoAccounts;
           (socket as WebSocket & { __scope?: number }).__scope = Number(payload.permissionScope);
@@ -280,8 +281,8 @@ export default async (request: Request, context: { deploy: { context: string } }
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("cTrader callback failed", { stage, error: detail });
     const safeDiagnostic = detail
-      .replace(/(accessToken|refreshToken|clientSecret|clientId|authorization code)\\s*[:=]\\s*[^,\\s}]+/gi, "$1=[hidden]")
-      .replace(/[\\r\\n<>]/g, " ")
+      .replace(/(accessToken|refreshToken|clientSecret|clientId|authorization code)\s*[:=]\s*[^,\s}]+/gi, "$1=[hidden]")
+      .replace(/[\r\n<>]/g, " ")
       .slice(0, 180);
     const safeMessage = error instanceof Error && error.message.startsWith("Missing required Netlify environment variable:")
       ? error.message
@@ -292,4 +293,4 @@ export default async (request: Request, context: { deploy: { context: string } }
   }
 };
 
-// Deployment refresh: pick up the updated production encryption key.
+// Deployment refresh: cTrader account ID JSON integer format correction.
