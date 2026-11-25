@@ -16,7 +16,7 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
-from engine.gmgn_api import GMGNReadOnlyClient
+from engine.gmgn_api import GMGNReadOnlyClient, summarize_security_evidence
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -223,9 +223,10 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             continue
                         try:
                             evidence = gmgn_client.token_security(gmgn_chain, address)
+                            assessment = summarize_security_evidence(evidence, gmgn_chain)
                             gmgn_security_results.append({
                                 "symbol": token.get("symbol"), "chain": gmgn_chain,
-                                "token_address": address, "evidence": evidence,
+                                "token_address": address, "assessment": assessment,
                             })
                         except Exception as exc:
                             gmgn_security_errors += 1
@@ -236,7 +237,15 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
                 checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
-                gmgn_security_success_count = sum("evidence" in item for item in gmgn_security_results)
+                gmgn_security_success_count = sum("assessment" in item for item in gmgn_security_results)
+                gmgn_security_flag_count = sum(
+                    len(item.get("assessment", {}).get("risk_flags", []))
+                    for item in gmgn_security_results
+                )
+                gmgn_security_unknown_count = sum(
+                    item.get("assessment", {}).get("status") == "INSUFFICIENT_EVIDENCE"
+                    for item in gmgn_security_results
+                )
                 total_security_checks = checked_count + gmgn_security_success_count
                 total_security_errors = error_count + gmgn_security_errors
                 if not discovered:
@@ -254,12 +263,19 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     "detail": (f"Discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
                                f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
                                f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
-                               f"GMGN official security endpoint returned {gmgn_security_success_count}/"
-                               f"{len(gmgn_security_results)} supported token checks. "
+                               f"GMGN returned {gmgn_security_success_count}/"
+                               f"{len(gmgn_security_results)} security responses, with {gmgn_security_flag_count} explicit risk flags and "
+                               f"{gmgn_security_unknown_count} insufficient-evidence assessments. "
                                "No result is a safety guarantee; missing fields remain unknown."),
                     "checked_tokens": security_results[:5],
                     "gmgn_security_checks": gmgn_security_results[:5],
                     "risk_flags": [item for item in security_results if item.get("risks")][:5],
+                    "gmgn_risk_flags": [
+                        {"symbol": item.get("symbol"), "chain": item.get("chain"),
+                         "risk_flags": item.get("assessment", {}).get("risk_flags", [])}
+                        for item in gmgn_security_results
+                        if item.get("assessment", {}).get("risk_flags")
+                    ][:5],
                     "unsupported_tokens": unsupported_count,
                     "errors": error_count,
                 }
