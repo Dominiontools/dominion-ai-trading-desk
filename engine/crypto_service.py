@@ -299,10 +299,15 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                 )
                 total_security_checks = checked_count + gmgn_security_success_count
                 total_security_errors = error_count + gmgn_security_errors
-                if not discovered:
+                gmgn_tokens_for_rug = state.get("gmgn_feed", {}).get("tokens", [])
+                gmgn_token_count_for_rug = len(gmgn_tokens_for_rug) if isinstance(gmgn_tokens_for_rug, list) else 0
+                total_discovered_for_rug = len(discovered) + gmgn_token_count_for_rug
+                if total_discovered_for_rug == 0:
                     rug_status = "WAITING_FOR_TOKENS"
-                elif total_security_checks == 0 and not supported_candidates:
+                elif total_security_checks == 0 and not supported_candidates and gmgn_token_count_for_rug == 0:
                     rug_status = "UNSUPPORTED_TOKENS"
+                elif total_security_checks == 0:
+                    rug_status = "WAITING_FOR_SECURITY_CHECKS"
                 elif (total_security_errors or gmgn_security_unknown_count) and total_security_checks:
                     rug_status = "PARTIAL"
                 elif total_security_errors:
@@ -311,7 +316,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     rug_status = "CONNECTED"
                 state["agents"]["RUG"] = {
                     "status": rug_status,
-                    "detail": (f"Discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
+                    "detail": (f"DEX Screener discovered {len(discovered)} tokens and GMGN has {gmgn_token_count_for_rug} Trenches tokens: {len(supported_candidates)} DEX tokens have a supported EVM chain and valid contract address; "
                                f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
                                f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
                                f"GMGN returned {gmgn_security_success_count}/"
