@@ -206,7 +206,8 @@ def test_embedded_service_connects_official_gmgn_read_only_feed(tmp_path, monkey
                 time.sleep(0.05)
             time.sleep(0.05)
         assert status is not None
-        assert status["gmgn_feed"]["status"] == "CONNECTED"
+        assert status["gmgn_feed"]["status"] == "CONNECTED", status
+        assert status.get("agent_feed_error") is None, status
         assert "gmgn-test-key" not in json.dumps(status)
         assert status["orders_enabled"] is False
     finally:
