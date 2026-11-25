@@ -95,3 +95,50 @@
 
 
 .gmgn-preview{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px;color:var(--muted);font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+
+
+/* Explicit account-mode control: Live is intentionally unavailable in this build. */
+.execution-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line, #263244);
+  border-radius: 12px;
+  background: var(--panel, #111a27);
+}
+.execution-mode-label {
+  padding: 0 7px;
+  color: var(--muted, #94a3b8);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .09em;
+}
+.execution-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.execution-mode-option.is-active {
+  color: #b8f4d4;
+  border-color: rgba(52, 211, 153, .28);
+  background: rgba(16, 185, 129, .12);
+}
+.execution-mode-option.is-locked {
+  color: #8b96a8;
+  background: rgba(148, 163, 184, .06);
+  cursor: not-allowed;
+  opacity: .72;
+}
+@media (max-width: 760px) {
+  .execution-mode-label { display: none; }
+  .execution-mode-option { padding: 0 7px; font-size: 9px; }
+}
