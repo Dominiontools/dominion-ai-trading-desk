@@ -37,7 +37,11 @@ def test_gmgn_readiness_requires_a_successful_official_read_only_connection():
     failed = build_readiness(gmgn_read_only_status="API_ERROR")
     connected = build_readiness(gmgn_read_only_status="CONNECTED")
     verifying = build_readiness(gmgn_read_only_status="READY_TO_CONNECT")
+    limited = build_readiness(gmgn_read_only_status="RATE_LIMITED")
+    plan_blocked = build_readiness(gmgn_read_only_status="PLAN_UPGRADE_REQUIRED")
     assert next(x for x in missing["tasks"] if x["id"] == "gmgn_read_only")["status"] == "NEEDS_API_KEY"
+    assert next(x for x in limited["tasks"] if x["id"] == "gmgn_read_only")["status"] == "RATE_LIMITED"
+    assert next(x for x in plan_blocked["tasks"] if x["id"] == "gmgn_read_only")["status"] == "PLAN_UPGRADE_REQUIRED"
     assert next(x for x in verifying["tasks"] if x["id"] == "gmgn_read_only")["status"] == "VERIFYING"
     assert next(x for x in failed["tasks"] if x["id"] == "gmgn_read_only")["status"] == "API_ERROR"
     assert next(x for x in connected["tasks"] if x["id"] == "gmgn_read_only")["status"] == "VERIFIED"
