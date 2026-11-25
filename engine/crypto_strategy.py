@@ -282,6 +282,13 @@ class ConfluencePaperStrategy:
         if setup is None:
             return {"event": "NO_SIGNAL", "symbol": symbol,
                     "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        if getattr(setup, "market", None) != "CRYPTO" or getattr(setup, "side", None) != "BUY":
+            return {
+                "event": "TESTNET_BLOCKED", "mode": "BINANCE_SPOT_TESTNET",
+                "orders_enabled": False, "symbol": symbol,
+                "reason": "UNSUPPORTED_SPOT_SIDE_OR_MARKET",
+                "operator_action_required": False,
+            }
         try:
             snapshot = risk_context_provider.snapshot(now=current)
             if snapshot.context.open_positions > 0:
