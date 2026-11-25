@@ -268,6 +268,19 @@ export default async (request: Request, context: { deploy: { context: string } }
     stage = "saving encrypted cTrader tokens";
     await storesForDeploy.tokens.setJSON("account/tokens", encrypted);
 
+    const demoAccountVerified = accountCheck.accounts.length > 0 &&
+      accountCheck.permissionScope === 0 &&
+      Boolean(accountCheck.authorizedAccountId);
+    await storesForDeploy.tokens.setJSON("account/status", {
+      connected: demoAccountVerified,
+      broker: "Pepperstone",
+      environment: "demo",
+      access: "view-only",
+      permissionScope: accountCheck.permissionScope ?? null,
+      demoAccountCount: accountCheck.accounts.length,
+      verifiedAt: new Date().toISOString(),
+    });
+
     const accountSummary = accountCheck.accounts.length
       ? ` Verified ${accountCheck.accounts.length} demo account(s); the first demo account was authenticated in read-only mode.`
       : " Authorization succeeded, but no demo account was included in the approved account list.";
