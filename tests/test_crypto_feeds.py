@@ -14,8 +14,8 @@ def fake_fetch(url, timeout):
         return {"symbol": "BTCUSDT", "bidPrice": "100", "bidQty": "1.2",
                 "askPrice": "101", "askQty": "2.3"}
     if "bitget" in host:
-        return {"code": "00000", "data": [{"symbol": "BTCUSDT", "bidPr": "99",
-                "askPr": "100", "bidSz": "3", "askSz": "4", "ts": STAMP}]}
+        return {"code": "00000", "data": [{"symbol": "BTCUSDT", "category": "SPOT", "bid1Price": "99",
+                "ask1Price": "100", "bid1Size": "3", "ask1Size": "4", "ts": STAMP}]}
     if "huobi" in host:
         return {"status": "ok", "ts": int(STAMP), "tick": {
                 "bid": [98, 5], "ask": [99, 6]}}
@@ -94,8 +94,8 @@ def test_batch_snapshot_fetches_all_requested_pairs_from_four_exchanges():
             ]
         if "bitget" in url:
             return {"code": "00000", "data": [
-                {"symbol": "BTCUSDT", "bidPr": "102", "askPr": "103", "bidSz": "2", "askSz": "3", "ts": STAMP},
-                {"symbol": "ETHUSDT", "bidPr": "202", "askPr": "203", "bidSz": "4", "askSz": "5", "ts": STAMP},
+                {"symbol": "BTCUSDT", "category": "SPOT", "bid1Price": "102", "ask1Price": "103", "bid1Size": "2", "ask1Size": "3", "ts": STAMP},
+                {"symbol": "ETHUSDT", "category": "SPOT", "bid1Price": "202", "ask1Price": "203", "bid1Size": "4", "ask1Size": "5", "ts": STAMP},
             ]}
         if "huobi" in url:
             return {"status": "ok", "ts": int(STAMP), "data": [
