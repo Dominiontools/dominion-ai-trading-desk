@@ -37,7 +37,7 @@ def _symbol_parts(symbol: str) -> tuple[str, str]:
 
 
 class PublicCryptoFeeds:
-    """Fetch best-bid/best-ask snapshots from three public spot APIs."""
+    """Fetch best-bid/best-ask snapshots from four public spot APIs."""
 
     def __init__(self, fetch_json: JsonFetcher = _http_json, timeout: float = 5.0):
         if timeout <= 0:
@@ -217,6 +217,36 @@ class PublicCryptoFeeds:
                 continue
         return quotes
 
+    def _okx_many(self, requested: dict[str, str]) -> list[ExchangeQuote]:
+        """Fetch one public OKX SPOT ticker snapshot for the requested pairs."""
+        payload = self._get("https://www.okx.com/api/v5/market/tickers?instType=SPOT")
+        if not isinstance(payload, dict) or payload.get("code") != "0":
+            raise RuntimeError("OKX all-spot-tickers request was not successful.")
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            raise RuntimeError("Unexpected OKX all-spot-tickers response.")
+        wanted = set(requested)
+        quotes = []
+        for row in rows:
+            if not isinstance(row, dict) or row.get("instType") != "SPOT":
+                continue
+            instrument = str(row.get("instId", "")).upper()
+            pair = instrument.replace("-", "")
+            if pair not in wanted:
+                continue
+            try:
+                stamp = datetime.fromtimestamp(int(row["ts"]) / 1000, timezone.utc)
+                bid, ask = float(row["bidPx"]), float(row["askPx"])
+                bid_size, ask_size = float(row.get("bidSz", 0)), float(row.get("askSz", 0))
+                if min(bid, ask) <= 0 or min(bid_size, ask_size) < 0:
+                    continue
+                quotes.append(ExchangeQuote(
+                    "OKX", pair, bid, ask, stamp, bid_size, ask_size,
+                ))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+        return quotes
+
     def snapshot_many_with_diagnostics(
         self, symbols: tuple[str, ...] | list[str]
     ) -> tuple[list[ExchangeQuote], dict[str, str]]:
@@ -226,6 +256,7 @@ class PublicCryptoFeeds:
             "Binance": self._binance_many,
             "Bitget": self._bitget_many,
             "HTX": self._htx_many,
+            "OKX": self._okx_many,
         }
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
