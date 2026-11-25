@@ -284,3 +284,39 @@ def test_testnet_strategy_does_not_add_to_existing_position():
     )
     assert result["event"] == "TESTNET_POSITION_OPEN"
     assert result["open_positions"] == 1
+
+
+
+def test_testnet_strategy_skips_sell_signals_without_risk_or_order_calls():
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    execution = mtf_sample_candles(
+        "BTCUSDT", "15m", 240, 1.1, 0.0001, 0.0005, 15 * 60, 15 * 60
+    )
+    context = mtf_sample_candles(
+        "BTCUSDT", "4h", 240, 1.0, 0.0005, 0.001, 4 * 60 * 60, 4 * 60 * 60
+    )
+    quote = ExchangeQuote("Binance", "BTCUSDT", 1.1242, 1.1243, now, 10, 10)
+    setup = SimpleNamespace(market="CRYPTO", side="SELL")
+
+    class FakeStrategy:
+        def evaluate(self, *args, **kwargs):
+            return setup
+
+    class NeverProvider:
+        def snapshot(self, **kwargs):
+            pytest.fail("Unsupported Spot side must be rejected before account reads.")
+
+    class NeverRouter:
+        def submit_verified_setup(self, *args, **kwargs):
+            pytest.fail("Unsupported Spot side must never reach the order router.")
+
+    strategy = ConfluencePaperStrategy()
+    strategy.strategy = FakeStrategy()
+    result = strategy.run_testnet_once(
+        execution, context, quote, router=NeverRouter(),
+        risk_context_provider=NeverProvider(), now=now,
+    )
+    assert result["event"] == "TESTNET_BLOCKED"
+    assert result["reason"] == "UNSUPPORTED_SPOT_SIDE_OR_MARKET"
