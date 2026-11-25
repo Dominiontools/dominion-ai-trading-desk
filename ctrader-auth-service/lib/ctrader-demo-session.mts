@@ -437,6 +437,7 @@ export class CTraderDemoSession {
         const executionType = Number(payload.executionType);
         if (executionType === 7) throw new Error(String(payload.errorCode ?? "CTRADER_ORDER_REJECTED"));
         if (executionType === 11) throw new Error("CTRADER_PARTIAL_FILL_BLOCKED");
+        if ([4, 5, 6].includes(executionType)) throw new Error("CTRADER_ORDER_NOT_FILLED");
         return executionType === 3;
       },
       12000,
@@ -474,7 +475,7 @@ export class CTraderDemoSession {
       (payload) => {
         const executionType = Number(payload.executionType);
         if (executionType === 7) throw new Error(String(payload.errorCode ?? "CTRADER_CLOSE_REJECTED"));
-        return executionType === 3;
+        return executionType === 3 || executionType === 8;
       },
       12000,
     );
