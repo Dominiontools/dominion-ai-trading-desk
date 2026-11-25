@@ -604,14 +604,21 @@ def _runtime_config(
     return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval
 
 
-def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "", binance_recovery_json: str = "") -> dict:
+def start_embedded(
+    data_dir: str, port: int = 8766, gmgn_api_key: str = "",
+    binance_recovery_json: str = "", binance_api_key: str = "",
+    binance_api_secret: str = "", binance_testnet_orders_enabled: bool = False,
+) -> dict:
     """Start the Python engine for the Android foreground service; return immediately."""
     global _runtime_stop, _runtime_server, _runtime_threads, _runtime_state
     with _runtime_lock:
         if _runtime_stop is not None and not _runtime_stop.is_set():
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(data_dir, port, gmgn_api_key)
+        stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
+            data_dir, port, gmgn_api_key, binance_api_key,
+            binance_api_secret, binance_testnet_orders_enabled,
+        )
         try:
             recovery = json.loads(binance_recovery_json) if binance_recovery_json else {}
             if not isinstance(recovery, dict):
@@ -667,7 +674,8 @@ def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "", bina
         return {"started": True, "already_running": False,
                 "port": server.server_address[1], "symbols": list(symbols),
                 "arbitrage_symbols": list(arbitrage_symbols),
-                "interval_seconds": interval, "orders_enabled": False}
+                "interval_seconds": interval, "orders_enabled": state["orders_enabled"],
+                "mode": state["mode"]}
 
 
 def stop_embedded() -> dict:
@@ -689,6 +697,7 @@ def stop_embedded() -> dict:
         _runtime_server = None
         _runtime_threads = []
         _runtime_state = {}
+        os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] = "NO"
     return {"stopped": True, "orders_enabled": False}
 
 
