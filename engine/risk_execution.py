@@ -58,6 +58,8 @@ class BinanceOrderPlan:
     take_profit: str
     max_planned_loss_quote: str
     estimated_round_trip_fee_quote: str
+    estimated_round_trip_slippage_quote: str
+    estimated_spread_cost_quote: str
     notional_quote: str
 
 class BinanceTestnetRiskGate:
@@ -129,7 +131,14 @@ class BinanceTestnetRiskGate:
             raise ValueError("Taker fee is outside the accepted range.")
         risk_budget = equity * self.max_risk_fraction
         round_trip_fee_rate = (taker_bps * D("2")) / D("10000")
-        risk_per_unit = (entry - stop) + (entry * round_trip_fee_rate)
+        # Budget for the stop distance plus conservative round-trip execution
+        # costs. Slippage is charged on both entry and exit; spread is charged
+        # once as the quoted full spread. These estimates reduce size rather
+        # than being treated as a separate allowance outside the risk cap.
+        slippage_rate = (slippage * D("2")) / D("10000")
+        spread_rate = spread / D("10000")
+        execution_cost_rate = round_trip_fee_rate + slippage_rate + spread_rate
+        risk_per_unit = (entry - stop) + (entry * execution_cost_rate)
         quantity = _floor_step(risk_budget / risk_per_unit, step)
         if quantity < min_qty or quantity > max_qty:
             raise PermissionError("Risk-sized quantity violates Binance quantity filters.")
@@ -138,7 +147,9 @@ class BinanceTestnetRiskGate:
             raise PermissionError("Risk-sized order is below Binance minimum notional.")
         planned_loss = quantity * (entry - stop)
         estimated_fees = notional * round_trip_fee_rate
-        total_risk = planned_loss + estimated_fees
+        estimated_slippage = notional * slippage_rate
+        estimated_spread_cost = notional * spread_rate
+        total_risk = planned_loss + estimated_fees + estimated_slippage + estimated_spread_cost
         if total_risk > risk_budget:
             raise PermissionError("Rounded order exceeds the per-trade risk budget.")
         if notional + (notional * taker_bps / D("10000")) > available_quote:
@@ -149,6 +160,8 @@ class BinanceTestnetRiskGate:
             take_profit=format(target, "f"),
             max_planned_loss_quote=format(total_risk, "f"),
             estimated_round_trip_fee_quote=format(estimated_fees, "f"),
+            estimated_round_trip_slippage_quote=format(estimated_slippage, "f"),
+            estimated_spread_cost_quote=format(estimated_spread_cost, "f"),
             notional_quote=format(notional, "f"))
 
     def execute(self, client, plan: BinanceOrderPlan, *, list_client_order_id: str) -> dict:
