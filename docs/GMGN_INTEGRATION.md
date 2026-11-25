@@ -15,7 +15,7 @@ The official Agent API describes token information/security, market candles, tre
 
 ## Request-rate protection
 
-The current connector is paced for GMGN's documented Free-plan bucket: Trenches (weight 2) and trending (weight 3) refresh together every five minutes; between refreshes, at most one token-security request (weight 1) is sent per agent cycle. API errors trigger a cooldown, and a plan-upgrade-required response disables further requests until the service is restarted after access is changed. Do not increase these request rates without checking the user's actual GMGN plan.
+The current connector is paced for GMGN's documented Free-plan bucket: Trenches (weight 2) and trending (weight 3) refresh together every five minutes; between refreshes, at most four token-security requests (weight 1 each) are sent per agent cycle. API errors trigger a cooldown, and a plan-upgrade-required response disables further requests until the service is restarted after access is changed. Do not increase these request rates without checking the user's actual GMGN plan.
 
 ## Paper-only sniper screening
 
