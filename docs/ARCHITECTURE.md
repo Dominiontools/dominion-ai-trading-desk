@@ -3,7 +3,7 @@
 ## High-level flow
 Market data adapters -> SCANNER -> specialist analysis -> RISK -> SNIPER simulation adapter -> EXIT manager -> audit/event log. DESK MANAGER coordinates the workflow and never executes trades.
 
-## Market separation
+## Public crypto market data\n- Binance, Bitget, HTX and OKX public Spot REST endpoints provide unauthenticated bid/ask snapshots for scanning. OKX is a data source only; no OKX account key or execution route is configured.\n- Feed failures are tracked per venue. Missing or stale venues must not be treated as confirmation, and unverified exchange fees keep arbitrage estimates from being treated as executable profit.\n\n## Market separation
 - Forex/Gold adapter: cTrader market data and, later, cTrader demo execution.
 - Crypto adapter: exchange market data and, later, exchange sandbox/testnet execution.
 - Both pass through the same portfolio-level risk policy, but retain market-specific strategy and execution rules.
