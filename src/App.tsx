@@ -412,7 +412,7 @@ function CryptoMonitorPanel() {
     </div>
     <div className="agent-runtime-list credential-panel">
       <div className="decision-list-head"><b>BINANCE SPOT TESTNET CREDENTIALS</b><span>{credentialSaved ? "ENCRYPTED ON DEVICE" : "NOT CONNECTED"}</span></div>
-      <div className="panel-foot">Enter Testnet-only API credentials. They are encrypted by Android Keystore and are not sent to a server. Do not use production keys; disable withdrawals on the Testnet key.</div>
+      <div className="panel-foot">Enter Testnet-only API credentials. They are encrypted by Android Keystore and are not sent to a server. Automated demo orders require Spot trading permission on the Testnet key; keep withdrawals disabled and never use production keys.</div>
       <input aria-label="Binance Testnet API key" type="password" autoComplete="off" placeholder={isNativeApp ? "Binance Spot Testnet API key" : "Available in the Android app"} value={testnetApiKey} onChange={event => setTestnetApiKey(event.target.value)} disabled={!isNativeApp || credentialBusy} />
       <input aria-label="Binance Testnet API secret" type="password" autoComplete="off" placeholder="Binance Spot Testnet API secret" value={testnetApiSecret} onChange={event => setTestnetApiSecret(event.target.value)} disabled={!isNativeApp || credentialBusy} />
       <div className="engine-control-actions">
