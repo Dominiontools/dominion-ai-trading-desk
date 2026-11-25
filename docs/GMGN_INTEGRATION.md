@@ -17,6 +17,10 @@ The official Agent API describes token information/security, market candles, tre
 
 The current connector is paced for GMGN's documented Free-plan bucket: Trenches (weight 2) and trending (weight 3) refresh together every five minutes; between refreshes, at most one token-security request (weight 1) is sent per agent cycle. API errors trigger a cooldown, and a plan-upgrade-required response disables further requests until the service is restarted after access is changed. Do not increase these request rates without checking the user's actual GMGN plan.
 
+## Paper-only sniper screening
+
+Parsed GMGN Trenches tokens are passed to a paper-review candidate filter. A token is only surfaced as a candidate when reported liquidity is at least USD 10,000, GMGN rug_ratio is present and no higher than 0.3, the documented security assessment has no explicit risk flags, and required security fields are complete. Missing evidence, an explicit risk flag, low liquidity or a high rug_ratio blocks the candidate. This is not a safety guarantee or an order signal; execution remains disabled.
+
 ## What is not connected yet
 
 - No GMGN API key or approved data access has been supplied/configured for Dominion.
