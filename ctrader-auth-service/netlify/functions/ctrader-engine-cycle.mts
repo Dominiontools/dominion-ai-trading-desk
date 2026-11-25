@@ -481,7 +481,8 @@ async function executeCycle(): Promise<RecordData> {
             positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
             side: best.setup.side, entryPrice: number(partialPosition.price ?? entryPrice),
             initialRiskDistance: riskDistanceForSizing, initialStopLoss: stopLoss,
-            target3R: target3Distance, openedAt: new Date().toISOString(), clientOrderId,
+            target3R: best.setup.side === "BUY" ? entryPrice + target3Distance : entryPrice - target3Distance,
+            openedAt: new Date().toISOString(), clientOrderId,
           });
           await saveStatus(store, partialStatus);
           await appendEvent(store, partialStatus);
