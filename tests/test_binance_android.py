@@ -121,7 +121,7 @@ def test_android_risk_snapshot_returns_only_verified_read_only_context(monkeypat
         "verified": True, "quote_asset": "USDT",
         "equity_quote": "105.00", "available_quote": "100.00",
         "daily_loss_quote": "0", "open_positions": 0,
-        "open_order_lists": 0, "status": "VERIFIED",
+        "journaled_order_lists": 0, "status": "VERIFIED",
     }
     assert "test-secret" not in json.dumps(result)
 
