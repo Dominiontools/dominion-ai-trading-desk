@@ -1,4 +1,4 @@
-"""Public-candle SMA strategy feeding the paper-only execution desk.
+"""Public-candle multi-timeframe confluence strategy feeding the paper-only execution desk.
 
 Uses Binance public market data only. No credentials or order-placement code.
 """
