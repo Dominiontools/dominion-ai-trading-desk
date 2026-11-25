@@ -34,12 +34,13 @@ def test_prepares_order_with_project_risk_cap(gate, context, rules, fees):
     assert plan.side == "BUY" and plan.symbol == "BTCUSDT"
     assert D(plan.max_planned_loss_quote) <= D("0.10")
     assert D(plan.notional_quote) >= D("5")
-    estimated_total = (
-        D(plan.max_planned_loss_quote)
+    estimated_costs = (
+        D(plan.estimated_round_trip_fee_quote)
+        + D(plan.estimated_round_trip_slippage_quote)
+        + D(plan.estimated_spread_cost_quote)
     )
-    assert estimated_total == (
-        D(plan.max_planned_loss_quote)
-    )
+    assert estimated_costs > 0
+    assert D(plan.max_planned_loss_quote) >= estimated_costs
     assert D(plan.estimated_round_trip_fee_quote) > 0
     assert D(plan.estimated_round_trip_slippage_quote) > 0
     assert D(plan.estimated_spread_cost_quote) > 0
@@ -109,3 +110,10 @@ def test_blocks_insufficient_quote_balance(gate, context, rules, fees):
     poor_balance = SpotRiskContext(D("20"), D("1"), D("0"), 0)
     with pytest.raises(PermissionError, match="Available quote balance"):
         prepare(gate, poor_balance, rules, fees)
+
+
+def test_higher_estimated_slippage_reduces_risk_sized_quantity(gate, context, rules, fees):
+    normal = prepare(gate, context, rules, fees, estimated_slippage_bps="3")
+    stressed = prepare(gate, context, rules, fees, estimated_slippage_bps="10")
+    assert D(stressed.quantity) < D(normal.quantity)
+    assert D(stressed.estimated_round_trip_slippage_quote) > D(normal.estimated_round_trip_slippage_quote)
