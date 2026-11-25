@@ -10,6 +10,8 @@ interface TradingEngineBridge {
   binanceTestnetCredentialStatus(): Promise<{ saved: boolean; storage: string }>;
   getBinanceTestnetAccount(): Promise<{ connected: boolean; environment?: string; can_trade?: boolean; can_withdraw?: boolean; account_type?: string; balances?: { asset: string; free: string; locked: string }[]; error?: string; exchange_code?: number | null }>;
   clearBinanceTestnetCredentials(): Promise<{ cleared: boolean }>;
+  binanceTestnetOrdersEnabled(): Promise<{ enabled: boolean }>;
+  setBinanceTestnetOrdersEnabled(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
   saveGmgnApiKey(options: { apiKey: string }): Promise<{ saved: boolean; storage: string }>;
   gmgnApiKeyStatus(): Promise<{ saved: boolean; storage: string }>;
   clearGmgnApiKey(): Promise<{ cleared: boolean }>;
@@ -114,6 +116,9 @@ function CryptoMonitorPanel() {
   const [credentialBusy, setCredentialBusy] = useState(false);
   const [testnetAccount, setTestnetAccount] = useState<{ connected: boolean; environment?: string; can_trade?: boolean; can_withdraw?: boolean; account_type?: string; balances?: { asset: string; free: string; locked: string }[]; error?: string; exchange_code?: number | null } | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
+  const [testnetAutomationEnabled, setTestnetAutomationEnabled] = useState(false);
+  const [testnetAutomationBusy, setTestnetAutomationBusy] = useState(false);
+  const [testnetAutomationMessage, setTestnetAutomationMessage] = useState("Automated Testnet orders are OFF.");
   const [gmgnApiKey, setGmgnApiKey] = useState("");
   const [gmgnKeySaved, setGmgnKeySaved] = useState(false);
   const [gmgnKeyBusy, setGmgnKeyBusy] = useState(false);
@@ -127,12 +132,15 @@ function CryptoMonitorPanel() {
     if (!isNativeApp) return;
     void Promise.all([
       TradingEngine.binanceTestnetCredentialStatus(),
-      TradingEngine.gmgnApiKeyStatus()
-    ]).then(([binance, gmgn]) => {
+      TradingEngine.gmgnApiKeyStatus(),
+      TradingEngine.binanceTestnetOrdersEnabled()
+    ]).then(([binance, gmgn, automation]) => {
       setCredentialSaved(binance.saved);
       setCredentialMessage(binance.saved ? "Encrypted credentials are stored on this phone." : "Credentials not saved");
       setGmgnKeySaved(gmgn.saved);
       setGmgnKeyMessage(gmgn.saved ? "GMGN API key is encrypted on this phone." : "GMGN API key not configured");
+      setTestnetAutomationEnabled(automation.enabled);
+      setTestnetAutomationMessage(automation.enabled ? "Testnet automation is enabled. The engine must be running to act on new signals." : "Automated Testnet orders are OFF.");
     }).catch(() => {
       setCredentialMessage("Secure storage status unavailable");
       setGmgnKeyMessage("Secure storage status unavailable");
@@ -181,6 +189,8 @@ function CryptoMonitorPanel() {
     try {
       await TradingEngine.clearBinanceTestnetCredentials();
       setCredentialSaved(false);
+      setTestnetAutomationEnabled(false);
+      setTestnetAutomationMessage("Automated Testnet orders are OFF.");
       setTestnetAccount(null);
       setTestnetApiKey("");
       setTestnetApiSecret("");
@@ -242,6 +252,30 @@ function CryptoMonitorPanel() {
       setEngineControl("error");
     }
   }, [isNativeApp]);
+
+  const setTestnetAutomation = useCallback(async (enabled: boolean) => {
+    if (!isNativeApp || testnetAutomationBusy || (enabled && !credentialSaved)) return;
+    if (enabled && !window.confirm("Enable automated BUY orders on Binance Spot TESTNET only? This can submit simulated orders when a valid signal passes all risk checks. Live trading is not enabled.")) return;
+    setTestnetAutomationBusy(true);
+    setTestnetAutomationMessage(enabled ? "Enabling Testnet automation…" : "Disabling Testnet automation…");
+    try {
+      const result = await TradingEngine.setBinanceTestnetOrdersEnabled({ enabled });
+      setTestnetAutomationEnabled(result.enabled);
+      if (engineControl === "running") {
+        await TradingEngine.stop();
+        setEngineControl("stopped");
+        await TradingEngine.start();
+        setEngineControl("starting");
+      }
+      setTestnetAutomationMessage(result.enabled
+        ? "Enabled for Binance Spot Testnet. Restarting the local engine to apply."
+        : "Disabled. Restarting the local engine; exchange-hosted protective orders remain at Binance.");
+    } catch {
+      setTestnetAutomationMessage("Could not change Testnet automation. Check the saved credentials and restart the phone engine.");
+    } finally {
+      setTestnetAutomationBusy(false);
+    }
+  }, [isNativeApp, testnetAutomationBusy, credentialSaved, engineControl]);
 
   const refresh = useCallback(async () => {
     if (isNativeApp) {
@@ -380,6 +414,15 @@ function CryptoMonitorPanel() {
         <button className="engine-stop" onClick={() => void clearTestnetCredentials()} disabled={!isNativeApp || credentialBusy || !credentialSaved}>Clear credentials</button>
       </div>
       <small className="engine-control-state">{isNativeApp ? credentialMessage : "Install the Android app to use device-secure credential storage."}</small>
+      <div className="decision-list">
+        <div className="decision-list-head"><b>BINANCE TESTNET AUTOMATION</b><span>{testnetAutomationEnabled ? "ENABLED" : "OFF BY DEFAULT"}</span></div>
+        <div className="panel-foot">This switch controls simulated Binance Spot Testnet BUY orders only. When enabled, valid strategy signals may place orders with exchange-hosted stop-loss and take-profit protection after all account, fee, position and daily-risk checks. It never enables live trading.</div>
+        <div className="engine-control-actions">
+          <button className="engine-start" onClick={() => void setTestnetAutomation(true)} disabled={!isNativeApp || !credentialSaved || testnetAutomationBusy || testnetAutomationEnabled}>{testnetAutomationBusy ? "Applying…" : "Enable Testnet automation"}</button>
+          <button className="engine-stop" onClick={() => void setTestnetAutomation(false)} disabled={!isNativeApp || testnetAutomationBusy || !testnetAutomationEnabled}>Disable automation</button>
+        </div>
+        <small className="engine-control-state">{isNativeApp ? testnetAutomationMessage : "Available only in the Android app. Default is OFF."}</small>
+      </div>
       {testnetAccount && <div className="decision-list">
         <div className="decision-list-head"><b>BINANCE SPOT TESTNET ACCOUNT</b><span>{testnetAccount.connected ? "CONNECTED · READ ONLY" : "NOT CONNECTED"}</span></div>
         {testnetAccount.connected ? <>
