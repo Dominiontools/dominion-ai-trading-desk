@@ -528,10 +528,27 @@ def _runtime_config(
                     execution_candles = candle_feed.candles(symbol, timeframe=execution_tf, limit=220)
                     context_candles = candle_feed.candles(symbol, timeframe=context_tf, limit=220)
                     quote = feeds.binance(symbol)
-                    result = confluence_strategy.run_once(
-                        execution_candles, context_candles, quote, paper_desk,
-                        now=datetime.now(timezone.utc),
-                    )
+                    cycle_now = datetime.now(timezone.utc)
+                    if testnet_execution_enabled and testnet_router is not None and testnet_risk_context is not None:
+                        if paper_desk.position is not None:
+                            result = {
+                                "event": "TESTNET_BLOCKED",
+                                "reason": "PAPER_POSITION_OPEN",
+                                "mode": "BINANCE_SPOT_TESTNET",
+                                "orders_enabled": False,
+                            }
+                        else:
+                            result = confluence_strategy.run_testnet_once(
+                                execution_candles, context_candles, quote,
+                                router=testnet_router,
+                                risk_context_provider=testnet_risk_context,
+                                now=cycle_now,
+                            )
+                    else:
+                        result = confluence_strategy.run_once(
+                            execution_candles, context_candles, quote, paper_desk,
+                            now=cycle_now,
+                        )
                     event = result.get("event", result.get("status", "UNKNOWN"))
                     state["strategy_engine"] = {
                         "status": str(event), "strategy": "MTF_CONFLUENCE",
@@ -543,7 +560,21 @@ def _runtime_config(
                         "detail": str(result.get("reason") or result.get("signal_reason") or event),
                         "last_cycle_at": datetime.now(timezone.utc).isoformat(),
                     }
-                    if event == "PAPER_ENTRY":
+                    if event == "TESTNET_ORDER":
+                        state["binance_testnet_execution"]["status"] = "PROTECTED_POSITION_OPEN"
+                        state["agents"]["RISK"] = {"status": "APPROVED_TESTNET", "detail": "Binance Testnet order passed the verified 0.5% risk cap, daily-loss ledger, account balance, symbol filters and fee checks."}
+                        state["agents"]["SNIPER"] = {"status": "TESTNET_ORDER_PROTECTED", "detail": f"Binance Spot Testnet BUY order for {symbol} was confirmed with exchange-held stop-loss and take-profit legs."}
+                        state["agents"]["EXIT"] = {"status": "EXCHANGE_PROTECTED_TESTNET_POSITION", "detail": "Binance holds the protective stop-loss and take-profit orders; restart reconciliation checks their state before another entry."}
+                    elif event == "TESTNET_POSITION_OPEN":
+                        state["binance_testnet_execution"]["status"] = "PROTECTED_POSITION_OPEN"
+                        state["agents"]["RISK"] = {"status": "POSITION_LIMIT_ACTIVE", "detail": "An existing or unmanaged Spot holding is present; no additional Testnet entry is permitted."}
+                        state["agents"]["SNIPER"] = {"status": "WAITING_FOR_EXIT", "detail": "The one-position rule blocks new entries while the current holding remains open."}
+                        state["agents"]["EXIT"] = {"status": "EXCHANGE_PROTECTED_TESTNET_POSITION", "detail": "Existing exchange-held protection remains responsible for the open Testnet position."}
+                    elif event == "TESTNET_BLOCKED":
+                        state["binance_testnet_execution"]["status"] = "ENTRY_BLOCKED"
+                        state["agents"]["RISK"] = {"status": "BLOCKED", "detail": f"Testnet entry blocked: {result.get('reason', 'risk or protection gate')}."}
+                        state["agents"]["SNIPER"] = {"status": "TESTNET_ENTRY_BLOCKED", "detail": "No new Testnet order was accepted by the execution gates."}
+                    elif event == "PAPER_ENTRY":
                         side = result.get("position", {}).get("side", "")
                         state["agents"]["RISK"] = {"status": "APPROVED_PAPER", "detail": "Signal passed the 0.5% risk cap, daily stop, spread, slippage and quote-age checks."}
                         state["agents"]["SNIPER"] = {"status": "PAPER_ENTRY", "detail": f"Opened a paper-only {side} position in {symbol}; no broker order was sent."}
@@ -563,6 +594,8 @@ def _runtime_config(
                             state["agents"]["SNIPER"] = {"status": "WAITING_FOR_SIGNAL", "detail": "No entry signal passed to the paper execution desk in this cycle."}
                 except Exception as exc:
                     state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+                if testnet_execution_enabled and event in {"TESTNET_ORDER", "TESTNET_POSITION_OPEN", "TESTNET_BLOCKED"}:
+                    break
             stop_event.wait(60.0)
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
