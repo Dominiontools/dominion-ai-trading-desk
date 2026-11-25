@@ -180,7 +180,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
         while not stop_event.is_set():
             try:
                 discovered = discovery_feed.discover(limit=8)
-                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume. The independent BTC cross-exchange REST scan targets a one-second cycle."}
+                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume. The independent dynamic top-52 cross-exchange REST scan targets a one-second cycle."}
                 whale_trades = []
                 whale_errors = 0
                 for token in discovered[:5]:
