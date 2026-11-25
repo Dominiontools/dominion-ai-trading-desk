@@ -572,7 +572,13 @@ def _runtime_config(
                         state["agents"]["SNIPER"] = {"status": "WAITING_FOR_EXIT", "detail": "The one-position rule blocks new entries while the current holding remains open."}
                         state["agents"]["EXIT"] = {"status": "EXCHANGE_PROTECTED_TESTNET_POSITION", "detail": "Existing exchange-held protection remains responsible for the open Testnet position."}
                     elif event == "TESTNET_BLOCKED":
-                        state["binance_testnet_execution"]["status"] = "ENTRY_BLOCKED"
+                        if result.get("halted") is True:
+                            state["binance_testnet_execution"]["status"] = "HALTED_REQUIRES_REVIEW"
+                            state["binance_testnet_execution"]["halted"] = True
+                            state["binance_testnet_execution"]["orders_enabled"] = False
+                            state["orders_enabled"] = False
+                        else:
+                            state["binance_testnet_execution"]["status"] = "ENTRY_BLOCKED"
                         state["agents"]["RISK"] = {"status": "BLOCKED", "detail": f"Testnet entry blocked: {result.get('reason', 'risk or protection gate')}."}
                         state["agents"]["SNIPER"] = {"status": "TESTNET_ENTRY_BLOCKED", "detail": "No new Testnet order was accepted by the execution gates."}
                     elif event == "PAPER_ENTRY":
