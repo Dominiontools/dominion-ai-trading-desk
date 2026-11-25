@@ -280,3 +280,57 @@ def test_corrupt_journal_cannot_be_cleared_by_restart_reconciliation(plan, tmp_p
     assert client.submissions == 0
     with pytest.raises(PermissionError, match="halted"):
         lifecycle.submit_and_verify(plan, list_client_order_id="dominion999")
+
+
+def test_reconcile_existing_does_not_clear_another_unresolved_order(plan, tmp_path):
+    import json
+
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text(json.dumps({
+        "version": 1,
+        "submitted_ids": ["good123", "bad123"],
+        "submitted_symbols": {"good123": "BTCUSDT", "bad123": "ETHUSDT"},
+        "halted": True,
+        "last_result": None,
+    }), encoding="utf-8")
+
+    class MixedClient(FakeClient):
+        def reconcile_protected_buy_otoco(self, *, symbol, list_client_order_id):
+            self.reconciliations += 1
+            if list_client_order_id == "good123":
+                return {"state": "PROTECTED", "protected": True,
+                        "action_required": False}
+            return {"state": "PROTECTION_UNCONFIRMED", "protected": False,
+                    "action_required": True}
+
+    client = MixedClient({})
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = lifecycle.reconcile_existing(
+        symbol="BTCUSDT", list_client_order_id="good123"
+    )
+    assert result["protected"] is True
+    assert result["halted"] is True
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["unresolved"][0]["order_list_id"] == "bad123"
+    assert client.reconciliations == 2
+
+
+def test_restart_reconciliation_records_exchange_query_failures_and_stays_halted(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({})
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    first.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
+
+    class BrokenReconcileClient(FakeClient):
+        def reconcile_protected_buy_otoco(self, **kwargs):
+            raise TimeoutError("temporary network error")
+
+    restarted = BinanceProtectedLifecycle(
+        FakeGate(), BrokenReconcileClient({}), journal_path=journal
+    )
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["halted"] is True
+    assert result["unresolved"][0]["reason"] == "EXCHANGE_QUERY_FAILED"
+    assert result["unresolved"][0]["error_type"] == "TimeoutError"
