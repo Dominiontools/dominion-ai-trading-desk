@@ -53,3 +53,18 @@ can query every recorded OTOCO bracket without placing a replacement order.
 Execution remains halted if any order cannot be matched to a symbol, if an
 exchange response is uncertain, or if protection cannot be confirmed. Legacy
 journals without symbol metadata deliberately remain halted for manual review.
+
+
+## Strategy signal routing boundary
+
+`engine/binance_signal_router.py` converts a validated BUY crypto setup and
+fresh Binance quote into a risk-sized Testnet OTOCO plan. It requires explicit
+verification of both the account snapshot and daily realized-loss context,
+fresh exchange symbol filters, verified taker fees, a single-position risk
+check, and the existing durable protected-order lifecycle. It rejects SELL
+setups because the initial Spot Testnet route is BUY-only.
+
+The router is currently a tested integration component, not enabled in the
+Android strategy loop. The Android engine remains paper-only until account
+balance and daily-loss accounting are connected, Testnet order authorization
+is explicitly enabled, and end-to-end demo verification is completed.
