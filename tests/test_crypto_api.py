@@ -111,3 +111,35 @@ def test_options_preflight_for_capacitor_origin(api_server):
     with urllib.request.urlopen(request, timeout=2) as response:
         assert response.status == 204
         assert response.headers.get("Access-Control-Allow-Origin") == "https://localhost"
+
+
+
+def test_read_only_api_reports_explicit_testnet_mode_without_adding_order_routes(tmp_path):
+    log = tmp_path / "decisions.jsonl"
+    server = create_server(
+        log,
+        status_provider=lambda: {
+            "engine": "running", "mode": "BINANCE_SPOT_TESTNET",
+            "orders_enabled": True,
+        },
+        port=0,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://{server.server_address[0]}:{server.server_address[1]}"
+    try:
+        status, body = get_json(base, "/api/crypto/status")
+        assert status == 200
+        assert body["mode"] == "BINANCE_SPOT_TESTNET"
+        assert body["orders_enabled"] is True
+        health, health_body = get_json(base, "/health")
+        assert health == 200
+        assert health_body["mode"] == "BINANCE_SPOT_TESTNET"
+        assert health_body["orders_enabled"] is True
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            get_json(base, "/api/orders")
+        assert exc.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
