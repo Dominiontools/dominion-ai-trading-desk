@@ -111,3 +111,31 @@ def test_reconcile_existing_never_submits_an_order(plan):
     assert result["protected"] is True
     assert client.submissions == 0
     assert client.reconciliations == 1
+
+
+def test_pending_exit_legs_are_rechecked_before_failing_closed(plan):
+    class SequenceClient(FakeClient):
+        def __init__(self):
+            super().__init__({})
+            self.states = [
+                {"state": "PROTECTION_UNCONFIRMED", "protected": False,
+                 "action_required": True, "take_profit_status": "PENDING_NEW",
+                 "stop_loss_status": "PENDING_NEW"},
+                {"state": "PROTECTED", "protected": True, "action_required": False,
+                 "take_profit_status": "NEW", "stop_loss_status": "NEW"},
+            ]
+
+        def reconcile_protected_buy_otoco(self, **kwargs):
+            self.reconciliations += 1
+            return self.states.pop(0)
+
+    waits = []
+    client = SequenceClient()
+    lifecycle = BinanceProtectedLifecycle(
+        FakeGate(), client, reconcile_attempts=3,
+        reconcile_interval_seconds=0.2, wait=waits.append,
+    )
+    result = lifecycle.submit_and_verify(plan, list_client_order_id="dominion123")
+    assert result["protected"] is True
+    assert client.reconciliations == 2
+    assert waits == [0.2]
