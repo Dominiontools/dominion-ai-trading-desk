@@ -223,3 +223,90 @@ class ConfluencePaperStrategy:
             "max_notional_fraction": self.max_notional_fraction,
         })
         return result
+
+    def run_testnet_once(
+        self,
+        execution_candles: list[Candle],
+        context_candles: list[Candle],
+        quote: ExchangeQuote,
+        *,
+        router,
+        risk_context_provider,
+        now: datetime | None = None,
+    ) -> dict:
+        """Evaluate one setup and route it only through the explicitly enabled Testnet router."""
+        from .confluence_strategy import TIMEFRAME_PROFILES
+
+        if not execution_candles or not context_candles:
+            return {"event": "TESTNET_BLOCKED", "reason": "NO_CANDLES",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        symbol = execution_candles[-1].symbol.upper()
+        execution_tf, context_tf = TIMEFRAME_PROFILES[self.profile]
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None or current.utcoffset() is None:
+            return {"event": "TESTNET_BLOCKED", "reason": "NAIVE_EVALUATION_TIME",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        if any(c.symbol.upper() != symbol for c in context_candles):
+            return {"event": "TESTNET_BLOCKED", "reason": "CONTEXT_SYMBOL_MISMATCH",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        if quote.symbol.replace("/", "").replace("-", "").upper() != symbol:
+            return {"event": "TESTNET_BLOCKED", "reason": "QUOTE_SYMBOL_MISMATCH",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        if quote.exchange.lower() != "binance":
+            return {"event": "TESTNET_BLOCKED", "reason": "BINANCE_QUOTE_REQUIRED",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        try:
+            age = quote_age_seconds(quote, now=current)
+        except ValueError:
+            return {"event": "TESTNET_BLOCKED", "reason": "INVALID_QUOTE_TIMESTAMP",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        if age > 2.0:
+            return {"event": "TESTNET_BLOCKED", "reason": "STALE_QUOTE_DATA",
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+
+        for series, timeframe, label in (
+            (execution_candles, execution_tf, "EXECUTION"),
+            (context_candles, context_tf, "CONTEXT"),
+        ):
+            stamp = series[-1].timestamp
+            if stamp.tzinfo is None or stamp.utcoffset() is None:
+                return {"event": "TESTNET_BLOCKED", "reason": f"NAIVE_{label}_CANDLE_TIMESTAMP",
+                        "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+            candle_age = (current - stamp.astimezone(timezone.utc)).total_seconds()
+            allowed_age = self._TIMEFRAME_SECONDS[timeframe] * 2 + 30
+            if candle_age < 0 or candle_age > allowed_age:
+                return {"event": "TESTNET_BLOCKED", "reason": f"STALE_{label}_CANDLE_DATA",
+                        "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+
+        setup = self.strategy.evaluate(execution_candles, context_candles, now=current)
+        if setup is None:
+            return {"event": "NO_SIGNAL", "symbol": symbol,
+                    "mode": "BINANCE_SPOT_TESTNET", "orders_enabled": False}
+        try:
+            snapshot = risk_context_provider.snapshot(now=current)
+            routed = router.submit_verified_setup(
+                setup, quote, snapshot=snapshot, fees=None, now=current,
+            )
+            return {
+                "event": "TESTNET_ORDER" if routed.get("protected") is True else "TESTNET_BLOCKED",
+                "mode": "BINANCE_SPOT_TESTNET",
+                "orders_enabled": bool(routed.get("orders_enabled")),
+                "symbol": symbol, "side": setup.side, "score": setup.score,
+                "score_threshold": setup.score_threshold,
+                "strategy": setup.strategy,
+                "execution_timeframe": setup.execution_timeframe,
+                "context_timeframe": setup.context_timeframe,
+                "protected": routed.get("protected") is True,
+                "halted": routed.get("halted") is True,
+                "operator_action_required": routed.get("operator_action_required") is True,
+                "plan": routed.get("plan"),
+                "reason": routed.get("status"),
+            }
+        except Exception as exc:
+            return {
+                "event": "TESTNET_BLOCKED", "mode": "BINANCE_SPOT_TESTNET",
+                "orders_enabled": False, "symbol": symbol,
+                "reason": type(exc).__name__,
+                "operator_action_required": True,
+            }
+
