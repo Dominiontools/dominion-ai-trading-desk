@@ -137,11 +137,11 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
             "last_refreshed_at": datetime.now(timezone.utc).isoformat(),
             "error": universe_error,
         },
-        "exchanges": ["Binance", "Bitget", "HTX"],
+        "exchanges": ["Binance", "Bitget", "HTX", "OKX"],
         "poll_interval_seconds": interval,
         "market_data_mode": "PUBLIC_REST_SNAPSHOT_LOCAL_RECEIPT_TIME",
         "market_data_note": "Dynamic top-52 liquid USDT cross-exchange scan uses one batched REST snapshot per venue; one-second polling is a target, not a guaranteed execution time.",
-        "fee_configuration": "complete" if len(fees) == 3 else "missing",
+        "fee_configuration": "complete" if len(fees) == 4 else "missing",
         "arbitrage_scanner": {
             "status": "STARTING", "symbol": arbitrage_symbols[0],
             "symbols_scanned": len(arbitrage_symbols),
