@@ -33,6 +33,20 @@ background work under severe resource pressure; force-stopping the app, turning
 off the phone, or losing internet will stop useful monitoring. After a reboot
 or force-stop, open the app and start the engine again.
 
+## GMGN official read-only connection
+
+The Android app includes an optional official GMGN OpenAPI read-only connector.
+
+1. Create a GMGN API key through the official GMGN AI page: https://gmgn.ai/ai
+2. In the Android app, open **GMGN Official API · Read Only**.
+3. Enter the API key and save it. Android Keystore encrypts the key on the device.
+4. Stop and restart the phone engine so the native service loads the saved key.
+5. Check the **GMGN Token Discovery** panel. It reports the latest connection state and bounded response previews for Solana Trenches and 1-hour trending data.
+
+The connector uses GMGN's official OpenAPI exist-auth requests. It does not use browser scraping or unofficial endpoints. Only read-only token-discovery and trending requests are wired. No GMGN wallet private key, swap, sniper order, copy trade, withdrawal or live transaction is enabled. Never paste API secrets or wallet private keys into chat.
+
+A GMGN key is an external prerequisite: without one, the panel correctly reports `NOT_CONFIGURED`. A successful API response is evidence that read-only access works; it is not evidence that tokens are safe or profitable.
+
 ## Fee configuration
 
 The scanner intentionally does not guess exchange fees. Until you verify your
