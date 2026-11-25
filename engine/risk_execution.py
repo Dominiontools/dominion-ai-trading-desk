@@ -1,8 +1,9 @@
-"""Risk-gated Binance Spot Testnet order planning.
+"""Risk-gated Binance Spot Testnet order planning and guarded OTOCO submission.
 
-This module validates a complete entry plan before any exchange call. It does
-not submit orders: the current adapter cannot attach and verify protective
-stop-loss/take-profit orders after a fill, so sending an entry alone is blocked.
+This module validates a complete BUY plan before order submission and can
+submit it through the adapter's exchange-held OTOCO bracket. The caller must
+reconcile the entry and both protective exit legs before reporting protection
+as active. The lifecycle is not yet connected to the Android strategy loop.
 """
 from __future__ import annotations
 from dataclasses import dataclass
