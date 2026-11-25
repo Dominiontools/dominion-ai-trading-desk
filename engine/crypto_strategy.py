@@ -124,3 +124,97 @@ class SmaPaperStrategy:
         result["strategy"] = signal.strategy
         result["signal_reason"] = signal.reason
         return result
+
+
+class ConfluencePaperStrategy:
+    """Multi-timeframe EMA/MACD/RSI/SMC paper strategy with shared risk sizing."""
+
+    _TIMEFRAME_SECONDS = {
+        "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400,
+    }
+
+    def __init__(self, profile: str = "intraday", score_threshold: int = 6,
+                 max_notional_fraction: float = 0.40,
+                 estimated_slippage_bps: float = 5.0):
+        from .confluence_strategy import MultiTimeframeConfluenceStrategy, StrategyConfig
+        if not 0 < max_notional_fraction <= 0.40:
+            raise ValueError("Maximum crypto notional allocation must be between 0 and 40% of equity.")
+        if estimated_slippage_bps < 0:
+            raise ValueError("Estimated slippage cannot be negative.")
+        self.strategy = MultiTimeframeConfluenceStrategy(
+            StrategyConfig(profile=profile, score_threshold=score_threshold)
+        )
+        self.profile = profile
+        self.max_notional_fraction = max_notional_fraction
+        self.estimated_slippage_bps = estimated_slippage_bps
+
+    def run_once(self, execution_candles: list[Candle], context_candles: list[Candle],
+                 quote: ExchangeQuote, desk: PaperTradingDesk,
+                 *, now: datetime | None = None) -> dict:
+        from .confluence_strategy import TIMEFRAME_PROFILES
+
+        if not execution_candles or not context_candles:
+            return {"status": "BLOCKED", "reason": "NO_CANDLES", "mode": "PAPER_ONLY"}
+        symbol = execution_candles[-1].symbol.upper()
+        execution_tf, context_tf = TIMEFRAME_PROFILES[self.profile]
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None or current.utcoffset() is None:
+            return {"status": "BLOCKED", "reason": "NAIVE_EVALUATION_TIME", "mode": "PAPER_ONLY"}
+        if any(c.symbol.upper() != symbol for c in context_candles):
+            return {"status": "BLOCKED", "reason": "CONTEXT_SYMBOL_MISMATCH", "mode": "PAPER_ONLY"}
+        if quote.symbol.replace("/", "").replace("-", "").upper() != symbol:
+            return {"status": "BLOCKED", "reason": "QUOTE_SYMBOL_MISMATCH", "mode": "PAPER_ONLY"}
+        if desk.position is not None:
+            if desk.position.symbol != symbol:
+                return {"status": "WAITING", "reason": "ONE_POSITION_LIMIT", "mode": "PAPER_ONLY"}
+            exit_price = quote.bid if desk.position.side == "BUY" else quote.ask
+            return desk.update_price(symbol, exit_price)
+
+        age = quote_age_seconds(quote, now=current)
+        for series, timeframe, label in (
+            (execution_candles, execution_tf, "EXECUTION"),
+            (context_candles, context_tf, "CONTEXT"),
+        ):
+            stamp = series[-1].timestamp
+            if stamp.tzinfo is None or stamp.utcoffset() is None:
+                return {"status": "BLOCKED", "reason": f"NAIVE_{label}_CANDLE_TIMESTAMP", "mode": "PAPER_ONLY"}
+            candle_age = (current - stamp.astimezone(timezone.utc)).total_seconds()
+            allowed_age = self._TIMEFRAME_SECONDS[timeframe] * 2 + 30
+            if candle_age < 0 or candle_age > allowed_age:
+                return {"status": "BLOCKED", "reason": f"STALE_{label}_CANDLE_DATA", "mode": "PAPER_ONLY"}
+
+        setup = self.strategy.evaluate(execution_candles, context_candles, now=current)
+        if setup is None:
+            return {"status": "NO_SIGNAL", "symbol": symbol, "mode": "PAPER_ONLY"}
+
+        entry = quote.ask if setup.side == "BUY" else quote.bid
+        distance = setup.risk_distance
+        risk_budget = desk.equity * desk.limits.max_risk_per_trade_pct
+        notional_cap = desk.equity * self.max_notional_fraction
+        quantity = min(risk_budget / distance, notional_cap / entry)
+        if quantity <= 0:
+            return {"status": "BLOCKED", "reason": "INVALID_POSITION_SIZE", "mode": "PAPER_ONLY"}
+        stop = entry - distance if setup.side == "BUY" else entry + distance
+        target = entry + 2.0 * distance if setup.side == "BUY" else entry - 2.0 * distance
+        mid = (quote.bid + quote.ask) / 2
+        spread_bps = (quote.ask - quote.bid) / mid * 10_000
+        paper_signal = PaperSignal(
+            symbol=symbol, market=setup.market, side=setup.side,
+            entry_price=entry, stop_loss=stop, take_profit=target,
+            quantity=quantity, spread_bps=spread_bps,
+            estimated_slippage_bps=self.estimated_slippage_bps,
+            quote_age_seconds=age, trailing_distance=distance,
+        )
+        result = desk.open_from_signal(paper_signal)
+        result.update({
+            "strategy": setup.strategy,
+            "score": setup.score,
+            "score_threshold": setup.score_threshold,
+            "signal_reason": " ".join(setup.reasons),
+            "target_3r": entry + 3.0 * distance if setup.side == "BUY" else entry - 3.0 * distance,
+            "liquidity_reference": setup.liquidity_target,
+            "execution_timeframe": setup.execution_timeframe,
+            "context_timeframe": setup.context_timeframe,
+            "max_notional_fraction": self.max_notional_fraction,
+        })
+        return result
