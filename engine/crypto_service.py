@@ -252,7 +252,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     rug_status = "WAITING_FOR_TOKENS"
                 elif total_security_checks == 0 and not supported_candidates:
                     rug_status = "UNSUPPORTED_TOKENS"
-                elif total_security_errors and total_security_checks:
+                elif (total_security_errors or gmgn_security_unknown_count) and total_security_checks:
                     rug_status = "PARTIAL"
                 elif total_security_errors:
                     rug_status = "FEED_ERROR"
