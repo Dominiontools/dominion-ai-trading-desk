@@ -22,6 +22,8 @@ jobs:
           npx esbuild ctrader-auth-service/netlify/functions/*.mts netlify/functions/*.mts
           --bundle --platform=node --target=node22 --format=esm
           --external:@netlify/blobs --outdir=/tmp/dominion-function-check
+      - name: cTrader risk unit tests
+        run: node --test ctrader-auth-service/tests/*.test.mjs
 
   python-safety:
     runs-on: ubuntu-latest
