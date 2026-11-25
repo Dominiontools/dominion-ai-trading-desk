@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import signal
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -166,6 +167,10 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
     security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
     news_feed = PublicNewsRSS(timeout=8.0)
     gmgn_client = GMGNReadOnlyClient(gmgn_api_key, timeout=8.0) if gmgn_api_key.strip() else None
+    gmgn_last_trenches_refresh = 0.0
+    gmgn_last_trending_refresh = 0.0
+    gmgn_retry_after = 0.0
+    gmgn_security_cursor = 0
     state["gmgn_feed"] = {
         "status": "READY_TO_CONNECT" if gmgn_client else "NOT_CONFIGURED",
         "detail": "Official GMGN read-only API key is stored in Android Keystore." if gmgn_client
@@ -217,7 +222,12 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                                                  "symbol":token.get("symbol"), "chain":token.get("chain_id")})
                 gmgn_security_results = []
                 gmgn_security_errors = 0
-                if gmgn_client is not None:
+                gmgn_now = time.monotonic()
+                gmgn_trenches_due = gmgn_client is not None and gmgn_now - gmgn_last_trenches_refresh >= 300
+                gmgn_trending_due = gmgn_client is not None and gmgn_now - gmgn_last_trending_refresh >= 300
+                gmgn_market_refresh_due = gmgn_trenches_due or gmgn_trending_due
+                gmgn_rate_limited = gmgn_now < gmgn_retry_after
+                if gmgn_client is not None and not gmgn_market_refresh_due and not gmgn_rate_limited:
                     gmgn_chain_map = {
                         "solana": "sol", "ethereum": "eth", "bsc": "bsc",
                         "base": "base", "arbitrum": "arbitrum", "avalanche": "avalanche",
@@ -226,17 +236,18 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     security_candidates = list(discovered)
                     if isinstance(previous_gmgn_tokens, list):
                         security_candidates.extend(previous_gmgn_tokens)
+                    unique_candidates = []
                     seen_security_addresses = set()
                     for token in security_candidates:
                         gmgn_chain = str(token.get("chain") or "").lower() or gmgn_chain_map.get(str(token.get("chain_id", "")).lower())
                         address = str(token.get("token_address", "")).strip()
-                        if address in seen_security_addresses:
+                        if not gmgn_chain or not address or address in seen_security_addresses:
                             continue
                         seen_security_addresses.add(address)
-                        if len(gmgn_security_results) >= 5:
-                            break
-                        if not gmgn_chain or not address:
-                            continue
+                        unique_candidates.append((token, gmgn_chain, address))
+                    if unique_candidates:
+                        token, gmgn_chain, address = unique_candidates[gmgn_security_cursor % len(unique_candidates)]
+                        gmgn_security_cursor += 1
                         try:
                             evidence = gmgn_client.token_security(gmgn_chain, address)
                             assessment = summarize_security_evidence(evidence, gmgn_chain)
@@ -296,32 +307,51 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     "errors": error_count,
                 }
                 if gmgn_client is not None:
-                    try:
-                        trenches = gmgn_client.trenches("sol", limit=30)
-                        trending = gmgn_client.trending("sol", "1h", limit=20)
-                        gmgn_tokens = extract_trenches_tokens(trenches, "sol", limit=30)
-                        state["gmgn_feed"] = {
-                            "status": "CONNECTED",
-                            "detail": "Official GMGN Agent API read-only requests succeeded for Solana new-token discovery and 1-hour trending.",
-                            "last_checked_at": datetime.now(timezone.utc).isoformat(),
-                            "trenches_preview": __import__("json").dumps(trenches, ensure_ascii=False)[:5000],
-                            "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000],
-                            "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000],
-                            "security_errors": gmgn_security_errors,
-                            "tokens": gmgn_tokens,
-                        }
-                    except Exception as exc:
-                        state["gmgn_feed"] = {
-                            "status": "API_ERROR",
-                            "detail": "Official GMGN read-only request failed; no trade was attempted.",
-                            "last_checked_at": datetime.now(timezone.utc).isoformat(),
-                            "error": str(exc)[:120],
-                            "trenches_preview": None,
-                            "trending_preview": None,
-                            "security_preview": None,
-                            "security_errors": gmgn_security_errors,
-                            "tokens": state.get("gmgn_feed", {}).get("tokens", []),
-                        }
+                    if gmgn_rate_limited:
+                        state["gmgn_feed"]["status"] = "RATE_LIMITED"
+                        state["gmgn_feed"]["detail"] = "GMGN requests are paused during the rate-limit cooldown; no retries are sent during this window."
+                    elif gmgn_market_refresh_due:
+                        try:
+                            previous_feed = state.get("gmgn_feed", {})
+                            trenches = gmgn_client.trenches("sol", limit=30) if gmgn_trenches_due else None
+                            trending = gmgn_client.trending("sol", "1h", limit=20) if gmgn_trending_due else None
+                            gmgn_tokens = extract_trenches_tokens(trenches, "sol", limit=30) if trenches is not None else previous_feed.get("tokens", [])
+                            if gmgn_trenches_due:
+                                gmgn_last_trenches_refresh = time.monotonic()
+                            if gmgn_trending_due:
+                                gmgn_last_trending_refresh = time.monotonic()
+                            state["gmgn_feed"] = {
+                                "status": "CONNECTED",
+                                "detail": "Official GMGN read-only feed is active. Trenches and trending refresh every five minutes; token-security checks are staggered between refreshes to respect the Free-plan rate budget.",
+                                "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                                "trenches_preview": __import__("json").dumps(trenches, ensure_ascii=False)[:5000] if trenches is not None else previous_feed.get("trenches_preview"),
+                                "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000] if trending is not None else previous_feed.get("trending_preview"),
+                                "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000] if gmgn_security_results else previous_feed.get("security_preview"),
+                                "security_errors": gmgn_security_errors,
+                                "tokens": gmgn_tokens,
+                            }
+                        except Exception as exc:
+                            error_text = str(exc)
+                            if "429" in error_text or "RATE_LIMIT" in error_text:
+                                gmgn_retry_after = time.monotonic() + 300
+                                error_status = "RATE_LIMITED"
+                            else:
+                                gmgn_retry_after = time.monotonic() + 300
+                                error_status = "API_ERROR"
+                            previous_feed = state.get("gmgn_feed", {})
+                            state["gmgn_feed"] = {
+                                **previous_feed,
+                                "status": error_status,
+                                "detail": "GMGN requests are paused for five minutes after an API error to avoid repeated requests or extending a rate-limit ban.",
+                                "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                                "error": error_text[:120],
+                                "security_errors": gmgn_security_errors,
+                            }
+                    elif gmgn_security_results:
+                        state["gmgn_feed"]["status"] = "CONNECTED"
+                        state["gmgn_feed"]["last_checked_at"] = datetime.now(timezone.utc).isoformat()
+                        state["gmgn_feed"]["security_preview"] = __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000]
+                        state["gmgn_feed"]["security_errors"] = gmgn_security_errors
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
                 state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
