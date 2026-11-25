@@ -160,11 +160,11 @@ def main():
     text = PLUGIN.read_text(encoding="utf-8")
     def append_methods(methods: str) -> None:
         nonlocal text
-        marker = "\\n}"
+        marker = "\n}"
         index = text.rfind(marker)
         if index < 0:
             raise SystemExit("Could not find end of TradingEnginePlugin class.")
-        text = text[:index] + "\\n" + methods + text[index:]
+        text = text[:index] + "\n" + methods + text[index:]
 
     if "saveBinanceTestnetCredentials" not in text:
         append_methods(r'''
