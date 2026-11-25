@@ -161,3 +161,19 @@ def test_router_refuses_to_route_when_testnet_order_gate_is_disabled():
         )
     assert client.exchange_info_calls == 0
     assert lifecycle.calls == []
+
+
+def test_router_accepts_only_verified_snapshot_object():
+    from types import SimpleNamespace
+    router, client, lifecycle, setup, quote, context, fees, now = fixtures()
+    snapshot = SimpleNamespace(
+        context=context,
+        account_snapshot_verified=True,
+        daily_loss_verified=True,
+    )
+    result = router.submit_verified_setup(
+        setup, quote, snapshot=snapshot, fees=fees,
+        list_client_order_id="dominion321", now=now,
+    )
+    assert result["protected"] is True
+    assert lifecycle.calls[0][1] == "dominion321"
