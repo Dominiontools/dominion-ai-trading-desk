@@ -70,6 +70,87 @@ function encryptTokens(payload: unknown, keyText: string) {
   };
 }
 
+async function verifyDemoAccounts(accessToken: string, clientId: string, clientSecret: string) {
+  const socket = new WebSocket("wss://demo.ctraderapi.com:5036");
+  const accounts = await new Promise<{ permissionScope?: number; accounts: Record<string, unknown>[]; authorizedAccountId?: string }>((resolve, reject) => {
+    let stage: "connecting" | "app-auth" | "account-list" | "account-auth" = "connecting";
+    let settled = false;
+    const finish = (error?: Error, result?: { permissionScope?: number; accounts: Record<string, unknown>[]; authorizedAccountId?: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try { socket.close(); } catch { /* already closed */ }
+      if (error) reject(error);
+      else resolve(result ?? { accounts: [] });
+    };
+    const send = (payloadType: number, payload: Record<string, unknown>) => {
+      socket.send(JSON.stringify({
+        clientMsgId: randomBytes(12).toString("hex"),
+        payloadType,
+        payload,
+      }));
+    };
+    const timeout = setTimeout(() => finish(new Error("cTrader demo account verification timed out.")), 18000);
+    socket.addEventListener("open", () => {
+      stage = "app-auth";
+      send(2100, { clientId, clientSecret });
+    });
+    socket.addEventListener("message", (event) => {
+      try {
+        const message = JSON.parse(String(event.data)) as { payloadType?: number; payload?: Record<string, unknown> };
+        if (message.payloadType === 2142) {
+          const detail = String(message.payload?.description || message.payload?.errorCode || "cTrader Open API returned an error.");
+          finish(new Error(detail));
+          return;
+        }
+        if (stage === "app-auth" && message.payloadType === 2101) {
+          stage = "account-list";
+          send(2149, { accessToken });
+          return;
+        }
+        if (stage === "account-list" && message.payloadType === 2150) {
+          const payload = message.payload ?? {};
+          const raw = Array.isArray(payload.ctidTraderAccount) ? payload.ctidTraderAccount as Record<string, unknown>[] : [];
+          const demoAccounts = raw.filter((account) => account.isLive === false);
+          if (payload.permissionScope !== 0) {
+            finish(new Error("cTrader did not confirm view-only account permission."));
+            return;
+          }
+          if (demoAccounts.length === 0) {
+            finish(undefined, { permissionScope: Number(payload.permissionScope), accounts: [] });
+            return;
+          }
+          const firstId = String(demoAccounts[0].ctidTraderAccountId ?? "");
+          if (!firstId) {
+            finish(new Error("cTrader returned a demo account without an account ID."));
+            return;
+          }
+          stage = "account-auth";
+          send(2102, { ctidTraderAccountId: firstId, accessToken });
+          (socket as WebSocket & { __demoAccounts?: Record<string, unknown>[]; __scope?: number }).__demoAccounts = demoAccounts;
+          (socket as WebSocket & { __scope?: number }).__scope = Number(payload.permissionScope);
+          return;
+        }
+        if (stage === "account-auth" && message.payloadType === 2103) {
+          const state = socket as WebSocket & { __demoAccounts?: Record<string, unknown>[]; __scope?: number };
+          finish(undefined, {
+            permissionScope: state.__scope,
+            accounts: state.__demoAccounts ?? [],
+            authorizedAccountId: String(message.payload?.ctidTraderAccountId ?? ""),
+          });
+        }
+      } catch {
+        finish(new Error("cTrader returned an unreadable account response."));
+      }
+    });
+    socket.addEventListener("error", () => finish(new Error("Could not connect to the cTrader demo Open API.")));
+    socket.addEventListener("close", () => {
+      if (!settled) finish(new Error("cTrader closed the demo connection before account verification completed."));
+    });
+  });
+  return accounts;
+}
+
 export default async (request: Request, context: { deploy: { context: string } }) => {
   if (request.method !== "GET") {
     return html("Method not allowed", "Use the cTrader authorization link with a browser.", 405);
@@ -167,14 +248,23 @@ export default async (request: Request, context: { deploy: { context: string } }
       return html("Token exchange failed", "cTrader returned an incomplete authorization response. No token was saved.", 502, { "set-cookie": clearCookie });
     }
 
+    stage = "verifying demo account access";
+    const accountCheck = await verifyDemoAccounts(
+      String(tokenData.accessToken),
+      clientId,
+      clientSecret,
+    );
     stage = "encrypting cTrader tokens";
     const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
     stage = "saving encrypted cTrader tokens";
     await storesForDeploy.tokens.setJSON("account/tokens", encrypted);
 
+    const accountSummary = accountCheck.accounts.length
+      ? ` Verified ${accountCheck.accounts.length} demo account(s); the first demo account was authenticated in read-only mode.`
+      : " Authorization succeeded, but no demo account was included in the approved account list.";
     return html(
       "cTrader authorization received",
-      "Your cTrader authorization code was exchanged and the tokens were encrypted before storage. You can close this page and return to Dominion AI Trading Desk. No trade was placed.",
+      `Your access is view-only. The cTrader demo connection check completed.${accountSummary} Tokens were encrypted before storage. No trade was placed.`,
       200,
       { "set-cookie": clearCookie },
     );
