@@ -28,7 +28,8 @@ working order is fully filled.
 ## Still not connected or verified
 
 The new BinanceProtectedLifecycle coordinator now performs a single gated
-submission followed by immediate exchange reconciliation. It rejects duplicate
+submission followed by bounded exchange reconciliation (up to four checks) to allow
+transient PENDING_NEW child orders to become active. It rejects duplicate
 order-list IDs within the coordinator, reports PROTECTED only when the entry is
 FILLED and both exit legs are NEW, and halts additional submissions when the
 result is uncertain. It can also reconcile an existing order list without
