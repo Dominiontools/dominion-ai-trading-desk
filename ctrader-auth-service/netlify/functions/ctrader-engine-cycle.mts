@@ -4,12 +4,12 @@ import {
   CTraderDemoSession,
   loadTradingCredentials,
   trendbarsToCandles,
-} from "../lib/ctrader-demo-session.mts";
+} from "../../lib/ctrader-demo-session.mts";
 import {
   evaluateConfluence,
   TIMEFRAME_PROFILES,
   type StrategyProfile,
-} from "../lib/ctrader-strategy.mts";
+} from "../../lib/ctrader-strategy.mts";
 
 const MAX_RISK_PER_TRADE = 0.005;
 const MAX_DAILY_LOSS = 0.02;
