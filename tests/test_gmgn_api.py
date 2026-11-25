@@ -132,3 +132,26 @@ def test_gmgn_trenches_parser_extracts_and_deduplicates_token_records():
     assert tokens[0]["chain"] == "sol"
     assert tokens[0]["rug_ratio"] == 0.2
     assert len(tokens) == 3
+
+
+def test_gmgn_rate_limit_response_preserves_reset_timestamp():
+    client = GMGNReadOnlyClient(
+        "key",
+        fetch_json=lambda *args: {
+            "code": 429, "error": "RATE_LIMIT_BANNED", "reset_at": 1_800_000_300,
+        },
+    )
+    with pytest.raises(RuntimeError, match="RESET_AT:1800000300"):
+        client.trending()
+
+
+def test_gmgn_http_rate_limit_reads_reset_header_without_exposing_key():
+    class HttpFailure(Exception):
+        code = 429
+        headers = {"X-RateLimit-Reset": "1800000300"}
+
+    client = GMGNReadOnlyClient("secret-key", fetch_json=lambda *args: (_ for _ in ()).throw(HttpFailure()))
+    with pytest.raises(RuntimeError) as exc:
+        client.trending()
+    assert "GMGN_HTTP_ERROR:429:RESET_AT:1800000300" in str(exc.value)
+    assert "secret-key" not in str(exc.value)
