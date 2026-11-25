@@ -171,6 +171,7 @@ def _runtime_config(
             "status": "ENABLED_TESTNET" if testnet_execution_enabled
                       else "DISABLED_OR_CREDENTIALS_MISSING",
             "orders_enabled": testnet_execution_enabled,
+            "halted": False,
             "environment": "BINANCE_SPOT_TESTNET",
         },
         "symbols": list(symbols),
@@ -643,6 +644,11 @@ def start_embedded(
                 "orders_enabled": False,
                 "environment": "BINANCE_SPOT_TESTNET",
             }
+            if state["binance_testnet_execution"]["enabled"] and recovery.get("halted") is True:
+                state["binance_testnet_execution"]["status"] = "HALTED_REQUIRES_REVIEW"
+                state["binance_testnet_execution"]["halted"] = True
+                state["binance_testnet_execution"]["orders_enabled"] = False
+                state["orders_enabled"] = False
             risk_context = recovery.get("risk_context", {})
             if isinstance(risk_context, dict):
                 state["binance_testnet_risk_context"] = {
