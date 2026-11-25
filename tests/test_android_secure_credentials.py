@@ -14,6 +14,9 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "gmgnApiKeyStatus" in script
     assert "clearGmgnApiKey" in script
     assert "loadGmgnApiKeyForNativeUse" in script
+    assert 'remove(IV).remove(CIPHERTEXT)' in script
+    assert 'remove(GMGN_IV).remove(GMGN_CIPHERTEXT)' in script
+    assert 'prefs.edit().clear()' not in script
     assert "payload.indexOf('\\n')" in script
     assert "engine.binance_android" in script
     assert "call.resolve(apiSecret)" not in script
