@@ -27,9 +27,18 @@ working order is fully filled.
 
 ## Still not connected or verified
 
-This module is not yet wired to the Android service or UI, and no testnet
+The new BinanceProtectedLifecycle coordinator now performs a single gated
+submission followed by immediate exchange reconciliation. It rejects duplicate
+order-list IDs within the coordinator, reports PROTECTED only when the entry is
+FILLED and both exit legs are NEW, and halts additional submissions when the
+result is uncertain. It can also reconcile an existing order list without
+submitting another order. Unit tests cover successful protection, duplicate
+submission, uncertain network outcomes and fail-closed behavior.
+
+This coordinator is not yet wired to the Android service or UI, and no testnet
 credentials or orders have been used. Symbol filters and actual account-tier
-fees are still caller-supplied and must be fetched/verified. Credential entry
-and secure Android storage, automatic polling/reconciliation, emergency
-handling, and a full authorized testnet lifecycle test remain outstanding.
-Bitget and HTX order adapters are not implemented. Live trading remains locked.
+fees still need to be fetched and verified at runtime. Durable recovery across
+Android process restarts, emergency flattening of any unexpected partial fill,
+background reconciliation, and a full authorized testnet lifecycle test remain
+outstanding. Bitget and HTX order adapters are not implemented. Live trading
+remains locked.
