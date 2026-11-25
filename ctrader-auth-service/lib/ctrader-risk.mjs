@@ -1,0 +1,98 @@
+export const MAX_RISK_PER_TRADE = 0.005;
+
+export function moneyScale(digits) {
+  if (!Number.isInteger(digits) || digits < 0 || digits > 10) {
+    throw new Error("INVALID_MONEY_DIGITS");
+  }
+  return 10 ** digits;
+}
+
+function number(value) {
+  return Number(value);
+}
+
+export function calculateDailyRisk(balance, moneyDigits, deals, cashFlows) {
+  const scale = moneyScale(moneyDigits);
+  const dealPnl = deals.reduce((sum, deal) => {
+    const detail = deal.closePositionDetail;
+    if (!detail) return sum;
+    const digits = Number(detail.moneyDigits ?? deal.moneyDigits ?? moneyDigits);
+    const dealScale = moneyScale(digits);
+    const gross = number(detail.grossProfit ?? 0);
+    const swap = number(detail.swap ?? 0);
+    const commission = number(detail.commission ?? 0);
+    const conversionFee = number(detail.pnlConversionFee ?? 0);
+    return sum + (gross + swap + commission + conversionFee) / dealScale;
+  }, 0);
+
+  let capitalFlows = 0;
+  let otherCashFlowPnl = 0;
+  for (const flow of cashFlows) {
+    const digits = Number(flow.moneyDigits ?? moneyDigits);
+    const delta = number(flow.delta ?? 0) / moneyScale(digits);
+    const operationType = number(flow.operationType);
+    if (operationType === 0 || operationType === 1) capitalFlows += delta;
+    else otherCashFlowPnl += delta;
+  }
+
+  const dailyNetPnl = dealPnl + otherCashFlowPnl;
+  const equity = number(balance) / scale;
+  const startingEquity = equity - dailyNetPnl - capitalFlows;
+  if (!(equity > 0) || !(startingEquity > 0)) throw new Error("INVALID_ACCOUNT_EQUITY");
+  const dailyLossFraction = Math.max(0, -dailyNetPnl / startingEquity);
+  return { equity, dailyNetPnl, startingEquity, dailyLossFraction };
+}
+
+export function estimateRoundTripCommission(symbol, volumeCents, entryPrice) {
+  const rate = number(symbol.preciseTradingCommissionRate);
+  const lotSize = number(symbol.lotSize);
+  const commissionType = number(symbol.commissionType ?? 1);
+  if (!Number.isFinite(rate) || rate < 0 || !(lotSize > 0)) {
+    throw new Error("UNVERIFIED_BROKER_COMMISSION");
+  }
+  const units = volumeCents / 100;
+  const lots = volumeCents / lotSize;
+  const notionalUsd = units * entryPrice;
+  let perSide = 0;
+  if (commissionType === 1) {
+    perSide = (rate / 1e8) * (notionalUsd / 1_000_000);
+  } else if (commissionType === 2) {
+    perSide = (rate / 1e8) * lots;
+  } else if (commissionType === 3) {
+    perSide = (rate / 1e7) * notionalUsd;
+  } else if (commissionType === 4) {
+    perSide = (rate / 1e8) * lots;
+  } else {
+    throw new Error("UNSUPPORTED_BROKER_COMMISSION_TYPE");
+  }
+  const minAsset = String(symbol.minCommissionAsset ?? "USD").toUpperCase();
+  if (minAsset !== "USD") throw new Error("UNSUPPORTED_MINIMUM_COMMISSION_CURRENCY");
+  const minimum = number(symbol.preciseMinCommission ?? 0) / 1e8;
+  if (!Number.isFinite(perSide) || perSide < 0 || !Number.isFinite(minimum) || minimum < 0) {
+    throw new Error("INVALID_BROKER_COMMISSION");
+  }
+  return 2 * Math.max(perSide, minimum);
+}
+
+export function sizeVolume(symbol, entryPrice, stopDistance, equity) {
+  const minVolume = number(symbol.minVolume);
+  const maxVolume = number(symbol.maxVolume);
+  const stepVolume = number(symbol.stepVolume);
+  if (!(minVolume > 0) || !(maxVolume >= minVolume) || !(stepVolume > 0)) {
+    throw new Error("BROKER_VOLUME_RULES_MISSING");
+  }
+  if (!(entryPrice > 0) || !(stopDistance > 0) || !(equity > 0)) {
+    throw new Error("INVALID_TRADE_PRICES");
+  }
+  const riskBudget = equity * MAX_RISK_PER_TRADE;
+  const rawVolume = Math.floor((riskBudget / stopDistance) * 100);
+  let volume = Math.min(maxVolume, Math.floor(rawVolume / stepVolume) * stepVolume);
+  for (let attempts = 0; attempts < 10000 && volume >= minVolume; attempts++, volume -= stepVolume) {
+    const riskAmount = (volume / 100) * stopDistance;
+    const commission = estimateRoundTripCommission(symbol, volume, entryPrice);
+    if (riskAmount + commission <= riskBudget + 1e-9) {
+      return { volume, riskAmount, commission };
+    }
+  }
+  throw new Error("BROKER_MINIMUM_VOLUME_EXCEEDS_RISK_BUDGET");
+}
