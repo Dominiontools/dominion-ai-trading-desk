@@ -45,18 +45,18 @@ test("commission estimator supports all documented broker commission types", () 
     minCommissionAsset: "USD",
     preciseMinCommission: 0,
   };
-  assert.equal(estimateRoundTripCommission({
+  assert.ok(Math.abs(estimateRoundTripCommission({
     ...base, commissionType: 1, preciseTradingCommissionRate: 5000000000,
-  }, 1000000, 1.1), 1.1);
-  assert.equal(estimateRoundTripCommission({
+  }, 1000000, 1.1) - 1.1) < 1e-9);
+  assert.ok(Math.abs(estimateRoundTripCommission({
     ...base, commissionType: 2, preciseTradingCommissionRate: 700000000,
-  }, 1000000, 1.1), 1.4);
-  assert.equal(estimateRoundTripCommission({
+  }, 1000000, 1.1) - 1.4) < 1e-9);
+  assert.ok(Math.abs(estimateRoundTripCommission({
     ...base, commissionType: 3, preciseTradingCommissionRate: 500,
-  }, 1000000, 1.1), 1.1);
-  assert.equal(estimateRoundTripCommission({
+  }, 1000000, 1.1) - 1.1) < 1e-9);
+  assert.ok(Math.abs(estimateRoundTripCommission({
     ...base, commissionType: 4, preciseTradingCommissionRate: 500000000,
-  }, 1000000, 1.1), 1.0);
+  }, 1000000, 1.1) - 1.0) < 1e-9);
 });
 
 test("minimum round-trip commission is applied twice", () => {
