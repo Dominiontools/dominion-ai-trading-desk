@@ -89,8 +89,14 @@ def make_handler(
                     if not isinstance(status, dict):
                         raise TypeError("Status provider must return a dictionary.")
                     safe_status = dict(status)
-                    safe_status["mode"] = "PAPER_ONLY"
-                    safe_status["orders_enabled"] = False
+                    mode = safe_status.get("mode")
+                    if mode not in {"PAPER_ONLY", "BINANCE_SPOT_TESTNET"}:
+                        mode = "PAPER_ONLY"
+                    safe_status["mode"] = mode
+                    safe_status["orders_enabled"] = (
+                        mode == "BINANCE_SPOT_TESTNET"
+                        and safe_status.get("orders_enabled") is True
+                    )
                     self._send(200, safe_status)
                 except Exception:
                     self._send(503, {"ok": False, "status": "unavailable",
