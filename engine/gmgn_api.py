@@ -60,7 +60,10 @@ class GMGNReadOnlyClient:
         try:
             payload = self.fetch_json(method, url, headers, body_bytes, self.timeout)
         except Exception as exc:
-            # Do not surface transport exceptions which may contain request headers or URLs.
+            # Surface only a numeric HTTP status, never headers, URL, or credential values.
+            status_code = getattr(exc, "code", None)
+            if isinstance(status_code, int):
+                raise RuntimeError(f"GMGN_HTTP_ERROR:{status_code}") from None
             raise RuntimeError(f"GMGN_READ_REQUEST_FAILED:{type(exc).__name__}") from None
         if isinstance(payload, dict):
             code = payload.get("code")
