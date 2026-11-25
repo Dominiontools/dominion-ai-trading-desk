@@ -316,6 +316,7 @@ class ConfluencePaperStrategy:
                 "event": "TESTNET_BLOCKED", "mode": "BINANCE_SPOT_TESTNET",
                 "orders_enabled": False, "symbol": symbol,
                 "reason": type(exc).__name__,
+                "halted": bool(getattr(getattr(router, "lifecycle", None), "halted", False)),
                 "operator_action_required": True,
             }
 
