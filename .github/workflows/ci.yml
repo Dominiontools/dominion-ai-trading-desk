@@ -17,6 +17,11 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run build
+      - name: Bundle-check Netlify Functions without deploying
+        run: >-
+          npx esbuild ctrader-auth-service/netlify/functions/*.mts netlify/functions/*.mts
+          --bundle --platform=node --target=node22 --format=esm
+          --external:@netlify/blobs --outdir=/tmp/dominion-function-check
 
   python-safety:
     runs-on: ubuntu-latest
