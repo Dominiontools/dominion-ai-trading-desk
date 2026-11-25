@@ -78,7 +78,7 @@ function encryptTokens(payload: unknown, keyText: string) {
   };
 }
 
-async function verifyDemoAccounts(accessToken: string, clientId: string, clientSecret: string) {
+async function verifyDemoAccounts(accessToken: string, clientId: string, clientSecret: string, expectedScope: number) {
   const socket = new WebSocket("wss://demo.ctraderapi.com:5036");
   const accounts = await new Promise<{ permissionScope?: number; accounts: Record<string, unknown>[]; authorizedAccountId?: string }>((resolve, reject) => {
     let stage: "connecting" | "app-auth" | "account-list" | "account-auth" = "connecting";
@@ -120,8 +120,10 @@ async function verifyDemoAccounts(accessToken: string, clientId: string, clientS
           const payload = message.payload ?? {};
           const raw = Array.isArray(payload.ctidTraderAccount) ? payload.ctidTraderAccount as Record<string, unknown>[] : [];
           const demoAccounts = raw.filter((account) => account.isLive === false);
-          if (payload.permissionScope !== 0) {
-            finish(new Error("cTrader did not confirm view-only account permission."));
+          if (Number(payload.permissionScope) !== expectedScope) {
+            finish(new Error(expectedScope === 1
+              ? "cTrader did not grant trading permission for this account."
+              : "cTrader did not confirm view-only account permission."));
             return;
           }
           if (demoAccounts.length === 0) {
@@ -168,6 +170,7 @@ export default async (request: Request, context: { deploy: { context: string } }
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const oauthError = url.searchParams.get("error");
+  const requestedMode = url.searchParams.get("mode") === "trading" ? "trading" : "view-only";
   const clearCookie = cookieHeader("", 0);
 
   if (oauthError) {
@@ -189,7 +192,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       stage = "creating authorization session";
       await storesForDeploy.state.setJSON(
         `state/${nonce}`,
-        { createdAt: Date.now() },
+        { createdAt: Date.now(), mode: requestedMode },
         { onlyIfNew: true },
       );
 
@@ -197,7 +200,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       authorize.search = new URLSearchParams({
         client_id: clientId,
         redirect_uri: REDIRECT_URI,
-        scope: "accounts",
+        scope: requestedMode === "trading" ? "trading" : "accounts",
         product: "web",
       }).toString();
 
@@ -220,12 +223,14 @@ export default async (request: Request, context: { deploy: { context: string } }
 
     const stateKey = `state/${nonce}`;
     stage = "reading authorization session";
-    const stateRecord = await storesForDeploy.state.get(stateKey, { type: "json" }) as { createdAt?: number } | null;
+    const stateRecord = await storesForDeploy.state.get(stateKey, { type: "json" }) as { createdAt?: number; mode?: string } | null;
     if (!stateRecord || typeof stateRecord.createdAt !== "number" || Date.now() - stateRecord.createdAt > 10 * 60 * 1000) {
       return html("Authorization session expired", "Please start cTrader authorization again from Dominion AI Trading Desk.", 400, { "set-cookie": clearCookie });
     }
     stage = "consuming authorization session";
     await storesForDeploy.state.delete(stateKey);
+    const authorizationMode = stateRecord.mode === "trading" ? "trading" : "view-only";
+    const expectedScope = authorizationMode === "trading" ? 1 : 0;
 
     const tokenParams = new URLSearchParams({
       grant_type: "authorization_code",
@@ -262,31 +267,34 @@ export default async (request: Request, context: { deploy: { context: string } }
       String(tokenData.accessToken),
       clientId,
       clientSecret,
+      expectedScope,
     );
     stage = "encrypting cTrader tokens";
     const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
     stage = "saving encrypted cTrader tokens";
-    await storesForDeploy.tokens.setJSON("account/tokens", encrypted);
+    const tokenKey = authorizationMode === "trading" ? "account/trading-tokens" : "account/tokens";
+    const statusKey = authorizationMode === "trading" ? "account/trading-status" : "account/status";
+    await storesForDeploy.tokens.setJSON(tokenKey, encrypted);
 
     const demoAccountVerified = accountCheck.accounts.length > 0 &&
-      accountCheck.permissionScope === 0 &&
+      accountCheck.permissionScope === expectedScope &&
       Boolean(accountCheck.authorizedAccountId);
-    await storesForDeploy.tokens.setJSON("account/status", {
+    await storesForDeploy.tokens.setJSON(statusKey, {
       connected: demoAccountVerified,
       broker: "Pepperstone",
       environment: "demo",
-      access: "view-only",
+      access: authorizationMode,
       permissionScope: accountCheck.permissionScope ?? null,
       demoAccountCount: accountCheck.accounts.length,
       verifiedAt: new Date().toISOString(),
     });
 
     const accountSummary = accountCheck.accounts.length
-      ? ` Verified ${accountCheck.accounts.length} demo account(s); the first demo account was authenticated in read-only mode.`
+      ? ` Verified ${accountCheck.accounts.length} demo account(s); the first demo account was authenticated with ${authorizationMode === "trading" ? "trading" : "read-only"} permission.`
       : " Authorization succeeded, but no demo account was included in the approved account list.";
     return html(
       "cTrader authorization received",
-      `Your access is view-only. The cTrader demo connection check completed.${accountSummary} Tokens were encrypted before storage. No trade was placed.`,
+      `Your access is ${authorizationMode === "trading" ? "trading-enabled for demo only" : "view-only"}. The cTrader demo connection check completed.${accountSummary} Tokens were encrypted before storage. No trade was placed.`,
       200,
       { "set-cookie": clearCookie },
     );
