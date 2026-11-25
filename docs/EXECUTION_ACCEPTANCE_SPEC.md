@@ -5,8 +5,9 @@ This specification records the user's requested operating model. It is an implem
 ## Current implementation status on the development branch
 
 - **Implemented in code, not deployed or broker-tested:** separate cTrader demo trading authorization, encrypted token separation, scheduled demo execution cycle, broker-side SL/TP verification, risk sizing, daily stop, break-even, 2R scale-out and 3R runner management.
-- **Implemented in code, paper-only:** Android multi-timeframe crypto confluence strategy and BTC cross-exchange REST snapshot monitor.
-- **Still outstanding:** dynamic 52-market discovery, crypto exchange testnet order lifecycle, shared cross-division position/risk lock, full independent division controls, all eight agents connected to verified feeds/workflows, configurable strategy builder, and broker/exchange integration tests.
+- **Implemented in code, paper-only:** Android multi-timeframe crypto confluence strategy and dynamic top-52 liquid USDT cross-exchange batch REST monitor.
+- **Implemented in code, not yet broker-tested:** cTrader demo strategy settings for timeframe profile, watchlist, confluence threshold, London/New York session filter, and bounded risk controls.
+- **Still outstanding:** crypto exchange testnet order lifecycle, shared cross-division position/risk lock, full independent division controls, all eight agents connected to verified feeds/workflows, broader custom indicator/rule builder, and broker/exchange integration tests.
 - No new Netlify deployment has been started and this development engine has not placed a trade.
 
 ## 1. Shared desk, independent market divisions
