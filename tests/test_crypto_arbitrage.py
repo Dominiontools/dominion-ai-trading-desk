@@ -51,6 +51,27 @@ def test_ignores_same_exchange_and_different_symbols():
     assert result == []
 
 
+
+@pytest.mark.parametrize("bid,ask,bid_size,ask_size", [
+    (float("nan"), 11, 1, 1),
+    (10, float("inf"), 1, 1),
+    (10, 11, float("nan"), 1),
+    (10, 11, 1, float("inf")),
+])
+def test_rejects_non_finite_market_quote_values(bid, ask, bid_size, ask_size):
+    with pytest.raises(ValueError, match="finite"):
+        ExchangeQuote("Binance", "BTC/USDT", bid, ask, NOW, bid_size, ask_size)
+
+
+def test_arbitrage_scanner_rejects_non_finite_fee_inputs():
+    result = scan_arbitrage(
+        [q("Binance", 100000, 100010), q("Bitget", 100500, 100510)],
+        {"Binance": (1.0, float("nan")), "Bitget": (1.0, 5.0)},
+        now=NOW,
+    )
+    assert result == []
+
+
 def test_rejects_invalid_naive_timestamp():
     with pytest.raises(ValueError):
         ExchangeQuote("Binance", "BTC/USDT", 10, 11, datetime(2026, 1, 1))
