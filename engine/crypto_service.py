@@ -16,7 +16,7 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
-from engine.gmgn_api import GMGNReadOnlyClient, summarize_security_evidence
+from engine.gmgn_api import GMGNReadOnlyClient, summarize_security_evidence, extract_trenches_tokens
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -173,6 +173,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
         "last_checked_at": None,
         "trenches_preview": None,
         "trending_preview": None,
+        "tokens": [],
     }
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
@@ -216,9 +217,19 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                         "solana": "sol", "ethereum": "eth", "bsc": "bsc",
                         "base": "base", "arbitrum": "arbitrum", "avalanche": "avalanche",
                     }
-                    for token in discovered[:5]:
-                        gmgn_chain = gmgn_chain_map.get(str(token.get("chain_id", "")).lower())
+                    previous_gmgn_tokens = state.get("gmgn_feed", {}).get("tokens", [])
+                    security_candidates = list(discovered)
+                    if isinstance(previous_gmgn_tokens, list):
+                        security_candidates.extend(previous_gmgn_tokens)
+                    seen_security_addresses = set()
+                    for token in security_candidates:
+                        gmgn_chain = str(token.get("chain") or "").lower() or gmgn_chain_map.get(str(token.get("chain_id", "")).lower())
                         address = str(token.get("token_address", "")).strip()
+                        if address in seen_security_addresses:
+                            continue
+                        seen_security_addresses.add(address)
+                        if len(gmgn_security_results) >= 5:
+                            break
                         if not gmgn_chain or not address:
                             continue
                         try:
@@ -283,6 +294,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     try:
                         trenches = gmgn_client.trenches("sol", limit=30)
                         trending = gmgn_client.trending("sol", "1h", limit=20)
+                        gmgn_tokens = extract_trenches_tokens(trenches, "sol", limit=30)
                         state["gmgn_feed"] = {
                             "status": "CONNECTED",
                             "detail": "Official GMGN Agent API read-only requests succeeded for Solana new-token discovery and 1-hour trending.",
@@ -291,6 +303,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000],
                             "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000],
                             "security_errors": gmgn_security_errors,
+                            "tokens": gmgn_tokens,
                         }
                     except Exception as exc:
                         state["gmgn_feed"] = {
@@ -302,6 +315,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             "trending_preview": None,
                             "security_preview": None,
                             "security_errors": gmgn_security_errors,
+                            "tokens": state.get("gmgn_feed", {}).get("tokens", []),
                         }
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
