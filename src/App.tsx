@@ -57,7 +57,16 @@ export default function App() {
     <section className="content">
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / OVERVIEW</div><h1>Trading command center</h1></div>
-        <div className="top-actions"><span className="demo-pill"><span/> DEMO + PAPER ONLY</span><span className="muted">cTrader scheduled engine · Crypto phone monitor</span></div>
+        <div className="top-actions">
+          <div className="execution-mode" role="group" aria-label="Trading account mode">
+            <span className="execution-mode-label">ACCOUNT MODE</span>
+            <span className="execution-mode-option is-active" aria-current="true">DEMO / TESTNET</span>
+            <button className="execution-mode-option is-locked" type="button" disabled title="Live trading is locked until demo verification, separate live authorization, security review and your explicit approval.">
+              LIVE <LockKeyhole size={12}/>
+            </button>
+          </div>
+          <span className="muted">cTrader demo engine · Crypto paper / testnet monitor</span>
+        </div>
       </header>
 
       <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live-money orders are disabled. cTrader demo orders require separate trading authorization and explicit automation enablement; crypto remains paper/testnet only.</span></div></div>
