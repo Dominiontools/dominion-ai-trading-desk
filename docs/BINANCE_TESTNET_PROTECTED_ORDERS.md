@@ -43,3 +43,13 @@ Android process restarts, emergency flattening of any unexpected partial fill,
 background reconciliation, and a full authorized testnet lifecycle test remain
 outstanding. Bitget and HTX order adapters are not implemented. Live trading
 remains locked.
+
+
+## Restart reconciliation
+
+The durable journal records each submitted order-list client ID together with its
+symbol before the network request. On app/process restart, the recovery routine
+can query every recorded OTOCO bracket without placing a replacement order.
+Execution remains halted if any order cannot be matched to a symbol, if an
+exchange response is uncertain, or if protection cannot be confirmed. Legacy
+journals without symbol metadata deliberately remain halted for manual review.
