@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import CTraderConnection from "./CTraderConnection";
 import "./styles.css";
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
@@ -12,5 +13,5 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><App /></React.StrictMode>
+  <React.StrictMode><App /><CTraderConnection /></React.StrictMode>
 );
