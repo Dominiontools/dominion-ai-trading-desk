@@ -457,9 +457,19 @@ async function executeCycle(): Promise<RecordData> {
         await appendEvent(store, dailyClose);
         return dailyClose;
       }
+      if (isDominionPosition && number(activePosition?.positionId) === positionId) {
+        const managed = await manageBotPosition(
+          session, store, position, activePosition as RecordData,
+          symbols, profile, scoreThreshold, now,
+        );
+        await saveStatus(store, managed);
+        return managed;
+      }
       const protectedState = {
-        status: "POSITION_OPEN_PROTECTED",
-        reason: "BROKER_SIDE_SL_TP_ACTIVE_NO_NEW_ENTRY",
+        status: isDominionPosition ? "BOT_POSITION_STATE_MISSING" : "POSITION_OPEN_PROTECTED",
+        reason: isDominionPosition
+          ? "BROKER_SIDE_SL_TP_ACTIVE_BUT_LOCAL_MANAGEMENT_STATE_MISSING"
+          : "MANUAL_POSITION_PROTECTED_NO_NEW_ENTRY",
         positionId,
         symbolId: number(tradeData?.symbolId),
         stopLoss: number(position.stopLoss),
