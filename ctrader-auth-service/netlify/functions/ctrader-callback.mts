@@ -6,12 +6,30 @@ const REDIRECT_URI =
 const AUTHORIZE_URL =
   "https://id.ctrader.com/my/settings/openapi/grantingaccess/";
 const TOKEN_URL = "https://openapi.ctrader.com/apps/token";
+const STATE_COOKIE = "dominion_oauth_state";
+const STATE_COOKIE_PATH = "/.netlify/functions/ctrader-callback";
 
-function html(title: string, message: string, status = 200) {
+function html(title: string, message: string, status = 200, headers: Record<string, string> = {}) {
   return new Response(
     `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;line-height:1.5"><h2>${title}</h2><p>${message}</p></body></html>`,
-    { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" } },
+    { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", ...headers } },
   );
+}
+
+function cookieHeader(value: string, maxAge: number) {
+  return `${STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=${STATE_COOKIE_PATH}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const cookieHeaderValue = request.headers.get("cookie") ?? "";
+  for (const part of cookieHeaderValue.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() === name) {
+      return part.slice(separator + 1).trim();
+    }
+  }
+  return null;
 }
 
 function requiredEnv(name: string): string {
@@ -59,11 +77,11 @@ export default async (request: Request, context: { deploy: { context: string } }
 
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const returnedState = url.searchParams.get("state");
   const oauthError = url.searchParams.get("error");
+  const clearCookie = cookieHeader("", 0);
 
   if (oauthError) {
-    return html("cTrader authorization not completed", "cTrader did not grant access. Return to Dominion AI Trading Desk and try again.", 400);
+    return html("cTrader authorization not completed", "cTrader did not grant access. Return to Dominion AI Trading Desk and try again.", 400, { "set-cookie": clearCookie });
   }
 
   try {
@@ -71,7 +89,10 @@ export default async (request: Request, context: { deploy: { context: string } }
     const clientSecret = requiredEnv("CTRADER_CLIENT_SECRET");
     const storesForDeploy = stores(context);
 
-    if (!code && !returnedState) {
+    // cTrader's documented redirect response returns the authorization code;
+    // it does not document an OAuth state parameter. Bind the browser session
+    // with a short-lived, HttpOnly, Secure, SameSite=Lax cookie instead.
+    if (!code) {
       const nonce = randomBytes(32).toString("base64url");
       await storesForDeploy.state.setJSON(
         `state/${nonce}`,
@@ -85,20 +106,28 @@ export default async (request: Request, context: { deploy: { context: string } }
         redirect_uri: REDIRECT_URI,
         scope: "trading",
         product: "web",
-        state: nonce,
       }).toString();
 
-      return Response.redirect(authorize.toString(), 302);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: authorize.toString(),
+          "cache-control": "no-store",
+          "set-cookie": cookieHeader(nonce, 600),
+          "referrer-policy": "no-referrer",
+        },
+      });
     }
 
-    if (!code || !returnedState || !/^[A-Za-z0-9_-]{40,60}$/.test(returnedState)) {
-      return html("Invalid callback", "The authorization response is incomplete. Start again from the Dominion app.", 400);
+    const nonce = readCookie(request, STATE_COOKIE);
+    if (!nonce || !/^[A-Za-z0-9_-]{40,60}$/.test(nonce)) {
+      return html("Authorization session missing", "The browser authorization session was not preserved. Start again from Dominion AI Trading Desk in the same browser.", 400, { "set-cookie": clearCookie });
     }
 
-    const stateKey = `state/${returnedState}`;
+    const stateKey = `state/${nonce}`;
     const stateRecord = await storesForDeploy.state.get(stateKey, { type: "json" }) as { createdAt?: number } | null;
     if (!stateRecord || typeof stateRecord.createdAt !== "number" || Date.now() - stateRecord.createdAt > 10 * 60 * 1000) {
-      return html("Authorization session expired", "Please start cTrader authorization again from the Dominion app.", 400);
+      return html("Authorization session expired", "Please start cTrader authorization again from Dominion AI Trading Desk.", 400, { "set-cookie": clearCookie });
     }
     await storesForDeploy.state.delete(stateKey);
 
@@ -115,7 +144,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       signal: AbortSignal.timeout(20000),
     });
     if (!tokenResponse.ok) {
-      return html("Token exchange failed", "cTrader did not accept the authorization code. Start again; no token was saved.", 502);
+      return html("Token exchange failed", "cTrader did not accept the authorization code. Start again; no token was saved.", 502, { "set-cookie": clearCookie });
     }
 
     const tokenData = await tokenResponse.json() as Record<string, unknown>;
@@ -127,7 +156,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       !Number.isFinite(Number(tokenData.expiresIn)) ||
       Number(tokenData.expiresIn) <= 0
     ) {
-      return html("Token exchange failed", "cTrader returned an incomplete authorization response. No token was saved.", 502);
+      return html("Token exchange failed", "cTrader returned an incomplete authorization response. No token was saved.", 502, { "set-cookie": clearCookie });
     }
 
     const encrypted = encryptTokens(tokenData, requiredEnv("CTRADER_TOKEN_ENCRYPTION_KEY"));
@@ -136,11 +165,13 @@ export default async (request: Request, context: { deploy: { context: string } }
     return html(
       "cTrader authorization received",
       "Your cTrader authorization code was exchanged and the tokens were encrypted before storage. You can close this page and return to Dominion AI Trading Desk. No trade was placed.",
+      200,
+      { "set-cookie": clearCookie },
     );
   } catch (error) {
     const safeMessage = error instanceof Error && error.message.startsWith("Missing required Netlify environment variable:")
       ? error.message
       : "The callback could not complete securely. Check the Netlify function logs and configuration.";
-    return html("Callback setup incomplete", safeMessage, 500);
+    return html("Callback setup incomplete", safeMessage, 500, { "set-cookie": clearCookie });
   }
 };
