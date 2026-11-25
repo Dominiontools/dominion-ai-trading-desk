@@ -199,6 +199,7 @@ class CryptoPaperMonitor:
         comparable_symbols = sorted(
             symbol for symbol, venues in coverage.items() if len(venues) >= 2
         )
+        quote_by_key = {(quote.symbol, quote.exchange): quote for quote in quotes}
         record.update({
             "venue_errors": venue_errors,
             "available_exchanges": sorted(exchanges_seen),
@@ -213,12 +214,17 @@ class CryptoPaperMonitor:
             },
             "quotes_preview": [
                 {
-                    "exchange": quote.exchange, "symbol": quote.symbol,
-                    "bid": quote.bid, "ask": quote.ask,
-                    "bid_size": quote.bid_size, "ask_size": quote.ask_size,
-                    "timestamp": quote.timestamp.astimezone(timezone.utc).isoformat(),
+                    "exchange": quote_by_key[(symbol, venue)].exchange,
+                    "symbol": quote_by_key[(symbol, venue)].symbol,
+                    "bid": quote_by_key[(symbol, venue)].bid,
+                    "ask": quote_by_key[(symbol, venue)].ask,
+                    "bid_size": quote_by_key[(symbol, venue)].bid_size,
+                    "ask_size": quote_by_key[(symbol, venue)].ask_size,
+                    "timestamp": quote_by_key[(symbol, venue)].timestamp.astimezone(timezone.utc).isoformat(),
                 }
-                for quote in quotes[:12]
+                for symbol in comparable_symbols[:4]
+                for venue in sorted(exchanges_seen)
+                if (symbol, venue) in quote_by_key
             ],
         })
         if venue_errors:
