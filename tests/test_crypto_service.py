@@ -19,6 +19,22 @@ class FakeMonitor:
         self.calls += 1
         return {"symbol": symbol, "status": "BLOCKED", "reason": "FEE_CONFIG_MISSING"}
 
+    def poll_many_once(self, symbols):
+        self.calls += 1
+        return {
+            "symbol": "MULTI_MARKET", "status": "BLOCKED",
+            "reason": "FEE_CONFIG_MISSING", "symbols_requested": len(symbols),
+            "symbols_with_two_venues": 0, "quote_count": 0,
+        }
+
+
+class FakeUniverse:
+    def __init__(self, timeout=8.0):
+        self.timeout = timeout
+
+    def top_usdt_symbols(self, limit=52, min_quote_volume=1_000_000.0):
+        return ("BTCUSDT", "ETHUSDT")[:limit]
+
 
 class FakeCandleFeed:
     def __init__(self, timeout=8.0):
@@ -58,6 +74,7 @@ def test_positive_float_rejects_zero(monkeypatch):
 def test_embedded_service_starts_read_only_api_and_stops(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
     monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
     monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
     monkeypatch.delenv("DOMINION_FEE_BINANCE_TAKER_BPS", raising=False)
     monkeypatch.delenv("DOMINION_FEE_BITGET_TAKER_BPS", raising=False)
@@ -86,6 +103,8 @@ def test_embedded_service_starts_read_only_api_and_stops(tmp_path, monkeypatch):
         assert status["paper_trading"]["starting_equity"] == 20.0
         assert status["paper_trading"]["open_position"] is None
         assert status["paper_trading"]["orders_enabled"] is False
+        assert status["arbitrage_universe"]["actual_count"] == 2
+        assert status["arbitrage_universe"]["status"] == "DYNAMIC_UNDER_52"
         assert status["agents"]["SNIPER"]["status"] == "READY_FOR_VALIDATED_SIGNALS"
     finally:
         stopped = service.stop_embedded()
