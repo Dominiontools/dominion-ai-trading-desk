@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from .binance_lifecycle import BinanceProtectedLifecycle
-from .binance_market_rules import fetch_symbol_rules
+from .binance_market_rules import fetch_symbol_rules, fetch_verified_taker_fees
 from .crypto_arbitrage import ExchangeQuote, quote_age_seconds
 from .risk_execution import (
     BinanceTestnetRiskGate, SpotRiskContext, VerifiedFees,
@@ -41,7 +41,7 @@ class BinanceTestnetSignalRouter:
         self.estimated_slippage_bps = estimated_slippage_bps
 
     def submit_verified_setup(
-        self, setup, quote: ExchangeQuote, *, snapshot, fees: VerifiedFees,
+        self, setup, quote: ExchangeQuote, *, snapshot, fees: VerifiedFees | None = None,
         list_client_order_id: str | None = None,
         now: datetime | None = None,
     ) -> dict:
@@ -49,7 +49,7 @@ class BinanceTestnetSignalRouter:
         return self.submit_setup(
             setup, quote,
             context=snapshot.context,
-            fees=fees,
+            fees=verified_fees,
             account_snapshot_verified=snapshot.account_snapshot_verified,
             daily_loss_verified=snapshot.daily_loss_verified,
             list_client_order_id=list_client_order_id,
@@ -62,7 +62,7 @@ class BinanceTestnetSignalRouter:
         quote: ExchangeQuote,
         *,
         context: SpotRiskContext,
-        fees: VerifiedFees,
+        fees: VerifiedFees | None = None,
         account_snapshot_verified: bool,
         daily_loss_verified: bool,
         list_client_order_id: str | None = None,
@@ -97,6 +97,7 @@ class BinanceTestnetSignalRouter:
                 "The setup's protective levels no longer bracket the current ask price."
             )
         rules = fetch_symbol_rules(self.client, symbol)
+        verified_fees = fees if fees is not None else fetch_verified_taker_fees(self.client, symbol)
         plan = self.risk_gate.prepare_buy(
             symbol=symbol,
             entry_price=entry,
