@@ -5,17 +5,22 @@ never labels a token safe.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 
 class GMGNSniperAgent:
-    def __init__(self, *, min_liquidity_usd: float = 10_000.0, max_rug_ratio: float = 0.3):
-        if min_liquidity_usd <= 0 or not 0 <= max_rug_ratio <= 1:
+    def __init__(self, *, min_liquidity_usd: float = 10_000.0, max_rug_ratio: float = 0.3,
+                 max_security_age_seconds: int = 600):
+        if min_liquidity_usd <= 0 or not 0 <= max_rug_ratio <= 1 or max_security_age_seconds <= 0:
             raise ValueError("Invalid GMGN sniper screening thresholds.")
         self.min_liquidity_usd = float(min_liquidity_usd)
         self.max_rug_ratio = float(max_rug_ratio)
+        self.max_security_age_seconds = int(max_security_age_seconds)
 
-    def rank(self, tokens: list[dict], security_checks: list[dict]) -> dict:
+    def rank(self, tokens: list[dict], security_checks: list[dict], *, now: datetime | None = None) -> dict:
+        current_time = now or datetime.now(timezone.utc)
         checks = {
-            str(item.get("token_address", "")).lower(): item.get("assessment", {})
+            str(item.get("token_address", "")).lower(): item
             for item in security_checks
             if item.get("token_address")
         }
@@ -42,10 +47,19 @@ class GMGNSniperAgent:
             elif rug_ratio > self.max_rug_ratio:
                 reasons.append("GMGN_RUG_RATIO_ABOVE_0_3")
 
-            assessment = checks.get(address.lower(), {})
+            check_record = checks.get(address.lower(), {})
+            assessment = check_record.get("assessment", {}) if isinstance(check_record, dict) else {}
             if not assessment:
                 reasons.append("SECURITY_CHECK_PENDING")
             else:
+                checked_at = check_record.get("checked_at")
+                try:
+                    checked_time = datetime.fromisoformat(str(checked_at).replace("Z", "+00:00"))
+                    age_seconds = (current_time - checked_time).total_seconds()
+                    if age_seconds < 0 or age_seconds > self.max_security_age_seconds:
+                        reasons.append("SECURITY_CHECK_STALE")
+                except (TypeError, ValueError):
+                    reasons.append("SECURITY_CHECK_TIMESTAMP_MISSING")
                 if assessment.get("risk_flags"):
                     reasons.extend(str(flag) for flag in assessment["risk_flags"][:10])
                 if assessment.get("status") != "NO_EXPLICIT_FLAGS":
