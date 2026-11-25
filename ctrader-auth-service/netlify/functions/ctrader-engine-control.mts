@@ -7,6 +7,8 @@ const DEFAULT_CONFIG = {
   profile: "intraday",
   scoreThreshold: 6,
   useSessionFilter: true,
+  riskPerTradePct: 0.5,
+  dailyLossLimitPct: 2,
   symbols: ["XAUUSD", "EURUSD", "GBPUSD"],
   maxRiskPerTradePct: 0.5,
   maxDailyLossPct: 2,
@@ -80,6 +82,14 @@ export default async (request: Request) => {
   if (typeof useSessionFilter !== "boolean") {
     return response(400, { error: "INVALID_SESSION_FILTER_SETTING" });
   }
+  const riskPerTradePct = Number(body.riskPerTradePct ?? previous?.riskPerTradePct ?? DEFAULT_CONFIG.riskPerTradePct);
+  const dailyLossLimitPct = Number(body.dailyLossLimitPct ?? previous?.dailyLossLimitPct ?? DEFAULT_CONFIG.dailyLossLimitPct);
+  if (!Number.isFinite(riskPerTradePct) || riskPerTradePct < 0.05 || riskPerTradePct > 0.5) {
+    return response(400, { error: "RISK_PER_TRADE_MUST_BE_BETWEEN_0_05_AND_0_5_PERCENT" });
+  }
+  if (!Number.isFinite(dailyLossLimitPct) || dailyLossLimitPct < 0.5 || dailyLossLimitPct > 2) {
+    return response(400, { error: "DAILY_LOSS_LIMIT_MUST_BE_BETWEEN_0_5_AND_2_PERCENT" });
+  }
   const rawSymbols = body.symbols ?? previous?.symbols ?? DEFAULT_CONFIG.symbols;
   if (!Array.isArray(rawSymbols) || rawSymbols.length < 1 || rawSymbols.length > 20) {
     return response(400, { error: "INVALID_SYMBOL_WATCHLIST" });
@@ -107,6 +117,8 @@ export default async (request: Request) => {
     profile,
     scoreThreshold,
     useSessionFilter,
+    riskPerTradePct,
+    dailyLossLimitPct,
     symbols,
     updatedAt: new Date().toISOString(),
     updatedBy: "authenticated-new-dashboard-proxy",
@@ -119,6 +131,8 @@ export default async (request: Request) => {
     profile: config.profile,
     scoreThreshold: config.scoreThreshold,
     useSessionFilter: config.useSessionFilter,
+    riskPerTradePct: config.riskPerTradePct,
+    dailyLossLimitPct: config.dailyLossLimitPct,
     symbols: config.symbols,
     environment: "demo",
     liveTradingEnabled: false,
