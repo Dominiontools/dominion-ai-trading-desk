@@ -129,3 +129,21 @@ def test_provider_blocks_two_total_positions_including_unmanaged_holdings(tmp_pa
         BinanceRiskContextProvider(
             AccountClient(btc_free="0.001"), recovery, ledger,
         ).snapshot()
+
+
+def test_provider_counts_each_unmanaged_asset_as_a_position(tmp_path):
+    class MultipleAssetClient(AccountClient):
+        def account(self):
+            result = super().account()
+            result["balances"].append({"asset": "ETH", "free": "0.01", "locked": "0"})
+            return result
+
+    ledger = BinanceDailyLossLedger(tmp_path / "loss.jsonl")
+    recovery = Recovery({
+        "status": "NO_JOURNALED_ORDERS", "halted": False,
+        "operator_action_required": False, "orders": [],
+    })
+    with pytest.raises(PermissionError, match="More than one"):
+        BinanceRiskContextProvider(
+            MultipleAssetClient(btc_free="0.001"), recovery, ledger,
+        ).snapshot()
