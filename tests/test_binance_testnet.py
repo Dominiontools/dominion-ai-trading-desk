@@ -193,3 +193,21 @@ def test_reconcile_does_not_query_exit_orders_before_entry_fills(
     assert calls == ["dominion123E"]
     assert result["take_profit_status"] is None
     assert result["stop_loss_status"] is None
+
+
+
+def test_account_commission_is_signed_and_pinned_to_spot_testnet(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url, headers=headers)
+        return {"symbol": "BTCUSDT"}
+    client = make_client(monkeypatch, transport)
+    result = client.account_commission("btcusdt")
+    params = parse_qs(urlsplit(captured["url"]).query)
+    assert result["symbol"] == "BTCUSDT"
+    assert captured["method"] == "GET"
+    assert urlsplit(captured["url"]).netloc == "testnet.binance.vision"
+    assert urlsplit(captured["url"]).path == "/api/v3/account/commission"
+    assert params["symbol"] == ["BTCUSDT"]
+    assert params["signature"]
+    assert captured["headers"]["X-MBX-APIKEY"] == "test-api-key"
