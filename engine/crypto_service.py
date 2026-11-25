@@ -334,7 +334,10 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                             }
                         except Exception as exc:
                             error_text = str(exc)
-                            if "429" in error_text or "RATE_LIMIT" in error_text:
+                            if "PLAN_UPGRADE_REQUIRED" in error_text:
+                                gmgn_retry_after = float("inf")
+                                error_status = "PLAN_UPGRADE_REQUIRED"
+                            elif "429" in error_text or "RATE_LIMIT" in error_text:
                                 gmgn_retry_after = time.monotonic() + 300
                                 error_status = "RATE_LIMITED"
                             else:
