@@ -297,7 +297,7 @@ async function manageBotPosition(
   };
 }
 
-async function executeCycle(): Promise<RecordData> {
+export async function executeCycle(): Promise<RecordData> {
   const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
   const config = await store.get("account/engine-config", { type: "json" }) as RecordData | null;
   const enabled = config?.enabled === true;
@@ -740,37 +740,41 @@ async function executeCycle(): Promise<RecordData> {
   }
 }
 
-export default async (request: Request) => {
-  const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
-  const now = Date.now();
-  const lockId = randomUUID();
-  const lockKey = "account/engine-lock";
-  let acquired = false;
+import { createHmac, randomUUID } from "node:crypto";
+
+const WORKER_URL = "https://dominion-ai-trading-desk-p7cp.netlify.app/.netlify/functions/ctrader-engine-worker";
+
+export default async (_request: Request) => {
+  const secret = Netlify.env.get("DOMINION_CONTROL_API_SECRET")?.trim();
+  if (!secret) {
+    console.error("cTrader scheduler skipped: control secret is not configured.");
+    return;
+  }
+  const timestamp = Date.now().toString();
+  const nonce = randomUUID();
+  const body = JSON.stringify({ trigger: "scheduled", timestamp });
+  const signature = createHmac("sha256", secret)
+    .update(`${timestamp}.${nonce}.${body}`)
+    .digest("hex");
   try {
-    const existing = await store.get(lockKey, { type: "json" }) as RecordData | null;
-    if (existing && number(existing.expiresAt) > now) {
-      return Response.json({ status: "SKIPPED_LOCKED", mode: "DEMO_ONLY" });
+    const response = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dominion-timestamp": timestamp,
+        "x-dominion-nonce": nonce,
+        "x-dominion-signature": signature,
+      },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (response.status !== 202) {
+      console.error("cTrader background worker trigger was not accepted.", { status: response.status });
     }
-    if (existing) await store.delete(lockKey);
-    try {
-      await store.setJSON(lockKey, { id: lockId, expiresAt: now + 45000 }, { onlyIfNew: true });
-      acquired = true;
-    } catch {
-      return Response.json({ status: "SKIPPED_LOCKED", mode: "DEMO_ONLY" });
-    }
-    const result = await executeCycle();
-    return Response.json(result);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "UNKNOWN_ENGINE_ERROR";
-    const failed = { status: "BLOCKED", reason, mode: "DEMO_ONLY", liveTradingEnabled: false };
-    await saveStatus(store, failed);
-    await appendEvent(store, failed);
-    return Response.json(failed);
-  } finally {
-    if (acquired) {
-      const current = await store.get(lockKey, { type: "json" }) as RecordData | null;
-      if (current?.id === lockId) await store.delete(lockKey);
-    }
+    console.error("cTrader background worker trigger failed.", {
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
   }
 };
 
