@@ -1,9 +1,10 @@
 """Strategy-to-Binance Spot Testnet router with explicit verified-context gates.
 
 This adapter converts a validated directional setup into a risk-sized,
-exchange-protected OTOCO order. It is deliberately not wired into the Android
-paper loop: callers must supply verified account/daily-risk context and the
-client must independently pass the Testnet order-enable gates.
+exchange-protected OTOCO order. The Android strategy service can call it only
+when its explicit Testnet switch is enabled; callers must supply verified
+account/daily-risk context and the client must independently pass the Testnet
+order-enable gates.
 """
 from __future__ import annotations
 
