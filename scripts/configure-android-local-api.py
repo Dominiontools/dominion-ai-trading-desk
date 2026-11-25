@@ -98,7 +98,7 @@ def configure_python_sources() -> None:
                  "crypto_api.py", "crypto_service.py", "crypto_strategy.py",
                  "paper_workflow.py", "strategies.py", "confluence_strategy.py", "market_data.py",
                  "specialist_agents.py", "agent_feeds.py", "positions.py",
-                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_android.py", "binance_market_rules.py", "crypto_universe.py"):
+                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_android.py", "binance_market_rules.py", "crypto_universe.py", "gmgn_api.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
 
@@ -253,8 +253,14 @@ public class TradingEngineService extends Service {
                 Python.start(new AndroidPlatform(getApplicationContext()));
             }
             PyObject module = Python.getInstance().getModule("engine.crypto_service");
+            String gmgnApiKey = "";
+            try {
+                gmgnApiKey = new CredentialVault(getApplicationContext()).loadGmgnApiKeyForNativeUse();
+            } catch (Exception ignored) {
+                // GMGN is optional; the rest of the paper engine must still start.
+            }
             PyObject result = module.callAttr("start_embedded",
-                getFilesDir().getAbsolutePath(), 8766);
+                getFilesDir().getAbsolutePath(), 8766, gmgnApiKey);
             running = true;
             lastError = "";
             Log.i(TAG, "Embedded paper engine started: " + result.toString());
