@@ -80,8 +80,16 @@ def make_handler(
                 return
             route = urlsplit(self.path)
             if route.path == "/health":
-                self._send(200, {"ok": True, "mode": "PAPER_ONLY",
-                                 "orders_enabled": False})
+                try:
+                    status = get_status()
+                    mode = status.get("mode") if isinstance(status, dict) else "PAPER_ONLY"
+                    if mode not in {"PAPER_ONLY", "BINANCE_SPOT_TESTNET"}:
+                        mode = "PAPER_ONLY"
+                    enabled = mode == "BINANCE_SPOT_TESTNET" and status.get("orders_enabled") is True
+                    self._send(200, {"ok": True, "mode": mode, "orders_enabled": enabled})
+                except Exception:
+                    self._send(503, {"ok": False, "mode": "PAPER_ONLY",
+                                     "orders_enabled": False})
                 return
             if route.path == "/api/crypto/status":
                 try:
