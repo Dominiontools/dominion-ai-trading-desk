@@ -83,3 +83,12 @@
 .spin{animation:dominion-spin 1s linear infinite}
 @keyframes dominion-spin{to{transform:rotate(360deg)}}
 @media(max-width:700px){.ctrader-engine-panel .crypto-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.engine-control-actions{width:100%}.engine-control-actions button{flex:1 1 auto}}
+
+.ctrader-config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.ctrader-config-field{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.04em}
+.ctrader-config-field input,.ctrader-config-field select{width:100%;min-height:40px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;letter-spacing:normal}
+.ctrader-config-field input:focus,.ctrader-config-field select:focus{outline:2px solid rgba(224,177,95,.35);border-color:#c99b55}
+.ctrader-symbol-field{grid-column:1/-1}
+.ctrader-session-toggle{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px}
+.ctrader-session-toggle input{accent-color:#c99b55;width:16px;height:16px}
+@media(max-width:700px){.ctrader-config-grid{grid-template-columns:1fr}.ctrader-symbol-field{grid-column:auto}.ctrader-session-toggle{grid-column:1/-1}}
