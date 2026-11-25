@@ -10,8 +10,13 @@ import {
   TIMEFRAME_PROFILES,
   type StrategyProfile,
 } from "../../lib/ctrader-strategy.mts";
+import {
+  calculateDailyRisk,
+  moneyScale,
+  sizeVolume,
+  MAX_RISK_PER_TRADE,
+} from "../../lib/ctrader-risk.mjs";
 
-const MAX_RISK_PER_TRADE = 0.005;
 const MAX_DAILY_LOSS = 0.02;
 const MAX_SPREAD_BPS = 20;
 const MAX_SLIPPAGE_BPS = 15;
@@ -42,109 +47,6 @@ function normalizeSymbol(value: unknown): string {
 
 function utcDayStart(now: Date): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-}
-
-function moneyScale(digits: number): number {
-  if (!Number.isInteger(digits) || digits < 0 || digits > 10) {
-    throw new Error("INVALID_MONEY_DIGITS");
-  }
-  return 10 ** digits;
-}
-
-function calculateDailyRisk(
-  balance: number,
-  moneyDigits: number,
-  deals: RecordData[],
-  cashFlows: RecordData[],
-): { equity: number; dailyNetPnl: number; startingEquity: number; dailyLossFraction: number } {
-  const scale = moneyScale(moneyDigits);
-  const dailyNetPnl = deals.reduce((sum, deal) => {
-    const detail = deal.closePositionDetail as RecordData | undefined;
-    if (!detail) return sum;
-    const digits = Number(detail.moneyDigits ?? deal.moneyDigits ?? moneyDigits);
-    const dealScale = moneyScale(digits);
-    const gross = number(detail.grossProfit ?? 0);
-    const swap = number(detail.swap ?? 0);
-    const commission = number(detail.commission ?? 0);
-    const conversionFee = number(detail.pnlConversionFee ?? 0);
-    return sum + (gross + swap + commission + conversionFee) / dealScale;
-  }, 0);
-  let capitalFlows = 0;
-  let otherCashFlowPnl = 0;
-  for (const flow of cashFlows) {
-    const digits = Number(flow.moneyDigits ?? moneyDigits);
-    const delta = number(flow.delta ?? 0) / moneyScale(digits);
-    const operationType = number(flow.operationType);
-    if (operationType === 0 || operationType === 1) capitalFlows += delta;
-    else otherCashFlowPnl += delta;
-  }
-  const totalDailyPnl = dailyNetPnl + otherCashFlowPnl;
-  const equity = balance / scale;
-  const startingEquity = equity - totalDailyPnl - capitalFlows;
-  if (!(equity > 0) || !(startingEquity > 0)) throw new Error("INVALID_ACCOUNT_EQUITY");
-  const dailyLossFraction = Math.max(0, -totalDailyPnl / startingEquity);
-  return { equity, dailyNetPnl: totalDailyPnl, startingEquity, dailyLossFraction };
-}
-
-function estimateRoundTripCommission(
-  symbol: RecordData,
-  volumeCents: number,
-  entryPrice: number,
-): number {
-  const rate = number(symbol.preciseTradingCommissionRate);
-  const lotSize = number(symbol.lotSize);
-  const commissionType = number(symbol.commissionType ?? 1);
-  if (!Number.isFinite(rate) || rate < 0 || !(lotSize > 0)) {
-    throw new Error("UNVERIFIED_BROKER_COMMISSION");
-  }
-  const units = volumeCents / 100;
-  const lots = volumeCents / lotSize;
-  const notionalUsd = units * entryPrice;
-  let perSide = 0;
-  if (commissionType === 1) {
-    perSide = (rate / 1e8) * (notionalUsd / 1_000_000);
-  } else if (commissionType === 2) {
-    perSide = (rate / 1e8) * lots;
-  } else if (commissionType === 3) {
-    perSide = (rate / 1e7) * notionalUsd;
-  } else if (commissionType === 4) {
-    perSide = (rate / 1e8) * lots;
-  } else {
-    throw new Error("UNSUPPORTED_BROKER_COMMISSION_TYPE");
-  }
-  const minAsset = String(symbol.minCommissionAsset ?? "USD").toUpperCase();
-  if (minAsset !== "USD") throw new Error("UNSUPPORTED_MINIMUM_COMMISSION_CURRENCY");
-  const minimum = number(symbol.preciseMinCommission ?? 0) / 1e8;
-  if (!Number.isFinite(perSide) || perSide < 0 || !Number.isFinite(minimum) || minimum < 0) {
-    throw new Error("INVALID_BROKER_COMMISSION");
-  }
-  return 2 * Math.max(perSide, minimum);
-}
-
-function sizeVolume(
-  symbol: RecordData,
-  entryPrice: number,
-  stopDistance: number,
-  equity: number,
-): { volume: number; riskAmount: number; commission: number } {
-  const minVolume = number(symbol.minVolume);
-  const maxVolume = number(symbol.maxVolume);
-  const stepVolume = number(symbol.stepVolume);
-  if (!(minVolume > 0) || !(maxVolume >= minVolume) || !(stepVolume > 0)) {
-    throw new Error("BROKER_VOLUME_RULES_MISSING");
-  }
-  if (!(entryPrice > 0) || !(stopDistance > 0)) throw new Error("INVALID_TRADE_PRICES");
-  const riskBudget = equity * MAX_RISK_PER_TRADE;
-  const rawVolume = Math.floor((riskBudget / stopDistance) * 100);
-  let volume = Math.min(maxVolume, Math.floor(rawVolume / stepVolume) * stepVolume);
-  for (let attempts = 0; attempts < 10000 && volume >= minVolume; attempts++, volume -= stepVolume) {
-    const riskAmount = (volume / 100) * stopDistance;
-    const commission = estimateRoundTripCommission(symbol, volume, entryPrice);
-    if (riskAmount + commission <= riskBudget + 1e-9) {
-      return { volume, riskAmount, commission };
-    }
-  }
-  throw new Error("BROKER_MINIMUM_VOLUME_EXCEEDS_RISK_BUDGET");
 }
 
 function buildCandidate(
