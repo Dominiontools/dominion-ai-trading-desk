@@ -152,3 +152,114 @@ class CryptoPaperMonitor:
             if stop_event.wait(self.interval_seconds):
                 break
         return cycles
+
+
+    def poll_many_once(self, symbols: list[str] | tuple[str, ...]) -> dict:
+        """Scan a multi-market universe using one batched public request per venue."""
+        started = self.clock()
+        requested = tuple(dict.fromkeys(
+            str(symbol).replace("/", "").replace("-", "").upper()
+            for symbol in symbols if str(symbol).strip()
+        ))
+        record = {
+            "recorded_at": started.astimezone(timezone.utc).isoformat(),
+            "symbol": "MULTI_MARKET",
+            "symbols_requested": len(requested),
+            "symbols": list(requested),
+            "mode": "PAPER_ONLY",
+            "orders_enabled": False,
+        }
+        if not requested:
+            record.update(status="BLOCKED", reason="EMPTY_MARKET_UNIVERSE")
+            return self._write(record)
+        if not hasattr(self.feeds, "snapshot_many_with_diagnostics"):
+            record.update(status="BLOCKED", reason="BATCH_MARKET_FEED_NOT_AVAILABLE")
+            return self._write(record)
+
+        try:
+            quotes, venue_errors = self.feeds.snapshot_many_with_diagnostics(requested)
+        except Exception as exc:
+            record.update(status="BLOCKED", reason="BATCH_MARKET_DATA_FETCH_FAILED",
+                          error_type=type(exc).__name__, error=str(exc)[:240])
+            return self._write(record)
+
+        finished = self.clock()
+        duration_ms = max(0.0, (finished - started).total_seconds() * 1000)
+        keys = [(quote.exchange, quote.symbol) for quote in quotes]
+        duplicates = len(keys) != len(set(keys))
+        exchanges_seen = {quote.exchange for quote in quotes}
+        coverage: dict[str, set[str]] = {}
+        for quote in quotes:
+            coverage.setdefault(quote.symbol, set()).add(quote.exchange)
+        comparable_symbols = sorted(
+            symbol for symbol, venues in coverage.items() if len(venues) >= 2
+        )
+        record.update({
+            "venue_errors": venue_errors,
+            "available_exchanges": sorted(exchanges_seen),
+            "collection_duration_ms": round(duration_ms, 3),
+            "quote_count": len(quotes),
+            "symbols_with_quotes": len(coverage),
+            "symbols_with_two_venues": len(comparable_symbols),
+            "comparable_symbols": comparable_symbols,
+            "quotes_by_exchange": {
+                venue: sum(quote.exchange == venue for quote in quotes)
+                for venue in sorted(exchanges_seen)
+            },
+        })
+        if venue_errors:
+            record["error"] = " | ".join(
+                f"{venue}: {detail}" for venue, detail in venue_errors.items()
+            )[:700]
+        if duplicates:
+            record.update(status="BLOCKED", reason="DUPLICATE_EXCHANGE_SYMBOL_QUOTES")
+            return self._write(record)
+        if len(exchanges_seen) < 2 or not comparable_symbols:
+            record.update(
+                status="BLOCKED",
+                reason="INSUFFICIENT_INDEPENDENT_MARKET_QUOTES",
+                error="At least two independent exchanges must quote the same symbol.",
+            )
+            return self._write(record)
+
+        missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
+        if missing_fees:
+            record.update(
+                status="BLOCKED", reason="FEE_CONFIG_MISSING",
+                missing_fee_exchanges=missing_fees,
+            )
+            return self._write(record)
+
+        opportunities = scan_arbitrage(
+            quotes, self.costs_by_exchange, now=finished,
+            max_quote_age_seconds=self.max_quote_age_seconds,
+            min_net_edge_bps=self.min_net_edge_bps,
+            max_notional=self.max_notional,
+        )
+        if opportunities:
+            record.update(
+                status="PAPER_OPPORTUNITY",
+                reason="NET_EDGE_THRESHOLD_MET",
+                opportunities=[
+                    {
+                        "symbol": item.symbol,
+                        "buy_exchange": item.buy_exchange,
+                        "sell_exchange": item.sell_exchange,
+                        "buy_price": item.buy_price,
+                        "sell_price": item.sell_price,
+                        "gross_edge_bps": item.gross_edge_bps,
+                        "estimated_cost_bps": item.estimated_cost_bps,
+                        "net_edge_bps": item.net_edge_bps,
+                        "max_notional_at_top_of_book": item.max_notional_at_top_of_book,
+                    }
+                    for item in opportunities[:20]
+                ],
+                opportunities_count=len(opportunities),
+            )
+        else:
+            record.update(
+                status="NO_QUALIFYING_OPPORTUNITY",
+                reason="No fresh, depth-backed price gap cleared verified fees, provisional slippage and the minimum net edge.",
+                opportunities_count=0,
+            )
+        return self._write(record)
