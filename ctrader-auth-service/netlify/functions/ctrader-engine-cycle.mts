@@ -250,37 +250,54 @@ async function executeCycle(): Promise<RecordData> {
     ]);
     if (deals.hasMore) throw new Error("DAILY_DEAL_HISTORY_INCOMPLETE");
     const daily = calculateDailyRisk(balance, moneyDigits, deals.deals, cashFlows);
-    if (daily.dailyLossFraction >= MAX_DAILY_LOSS) {
-      const stopped = {
-        status: "DAILY_STOP",
-        reason: "DAILY_LOSS_LIMIT_REACHED",
-        dailyLossPct: daily.dailyLossFraction * 100,
-        equity: daily.equity,
-        dailyNetPnl: daily.dailyNetPnl,
-        mode: "DEMO_ONLY",
-      };
-      await saveStatus(store, stopped);
-      return stopped;
-    }
+    const activePosition = await store.get("account/active-position", { type: "json" }) as RecordData | null;
 
     if (accountState.positions.length > 0) {
       const position = accountState.positions[0];
       if (accountState.positions.length > 1) throw new Error("MULTIPLE_OPEN_POSITIONS_DETECTED");
       const positionId = number(position.positionId);
-      const volume = number((position.tradeData as RecordData | undefined)?.volume);
-      if (!(number(position.stopLoss) > 0) || !(number(position.takeProfit) > 0)) {
+      const tradeData = position.tradeData as RecordData | undefined;
+      const volume = number(tradeData?.volume);
+      const isDominionPosition = String(tradeData?.label ?? "") === "DOMINION_AI_DEMO" ||
+        number(activePosition?.positionId) === positionId;
+      const hasProtection = number(position.stopLoss) > 0 && number(position.takeProfit) > 0;
+      if (!hasProtection) {
+        if (!isDominionPosition) {
+          const manualUnprotected = {
+            status: "MANUAL_POSITION_UNPROTECTED_BLOCK",
+            reason: "UNPROTECTED_MANUAL_POSITION_NOT_TOUCHED",
+            positionId, mode: "DEMO_ONLY",
+          };
+          await saveStatus(store, manualUnprotected);
+          return manualUnprotected;
+        }
         if (!(positionId > 0) || !(volume > 0)) throw new Error("UNPROTECTED_POSITION_CANNOT_BE_CLOSED");
         await session.closePosition(positionId, volume);
+        await store.delete("account/active-position");
         const emergency = { status: "EMERGENCY_CLOSE_SENT", reason: "OPEN_POSITION_MISSING_PROTECTIVE_SL_TP", positionId, mode: "DEMO_ONLY" };
         await saveStatus(store, emergency);
         await appendEvent(store, emergency);
         return emergency;
       }
+      if (daily.dailyLossFraction >= MAX_DAILY_LOSS && isDominionPosition) {
+        await session.closePosition(positionId, volume);
+        await store.delete("account/active-position");
+        const dailyClose = {
+          status: "DAILY_STOP_POSITION_CLOSE_SENT",
+          reason: "DAILY_LOSS_LIMIT_REACHED",
+          positionId,
+          dailyLossPct: daily.dailyLossFraction * 100,
+          mode: "DEMO_ONLY",
+        };
+        await saveStatus(store, dailyClose);
+        await appendEvent(store, dailyClose);
+        return dailyClose;
+      }
       const protectedState = {
         status: "POSITION_OPEN_PROTECTED",
         reason: "BROKER_SIDE_SL_TP_ACTIVE_NO_NEW_ENTRY",
         positionId,
-        symbolId: number((position.tradeData as RecordData | undefined)?.symbolId),
+        symbolId: number(tradeData?.symbolId),
         stopLoss: number(position.stopLoss),
         takeProfit: number(position.takeProfit),
         equity: daily.equity,
@@ -294,6 +311,18 @@ async function executeCycle(): Promise<RecordData> {
       const pending = { status: "PENDING_ORDER_BLOCK", reason: "EXISTING_PENDING_ORDER", pendingOrders: accountState.orders.length, mode: "DEMO_ONLY" };
       await saveStatus(store, pending);
       return pending;
+    }
+    if (daily.dailyLossFraction >= MAX_DAILY_LOSS) {
+      const stopped = {
+        status: "DAILY_STOP",
+        reason: "DAILY_LOSS_LIMIT_REACHED",
+        dailyLossPct: daily.dailyLossFraction * 100,
+        equity: daily.equity,
+        dailyNetPnl: daily.dailyNetPnl,
+        mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, stopped);
+      return stopped;
     }
 
     const symbolByName = new Map(symbols.map((item) => [normalizeSymbol(item.symbolName), item]));
