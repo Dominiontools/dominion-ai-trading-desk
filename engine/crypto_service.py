@@ -50,6 +50,7 @@ def _fee_config() -> dict[str, tuple[float, float]]:
         ("Binance", "DOMINION_FEE_BINANCE_TAKER_BPS"),
         ("Bitget", "DOMINION_FEE_BITGET_TAKER_BPS"),
         ("HTX", "DOMINION_FEE_HTX_TAKER_BPS"),
+        ("OKX", "DOMINION_FEE_OKX_TAKER_BPS"),
     ):
         raw = os.getenv(env_name, "").strip()
         if not raw:
