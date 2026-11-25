@@ -602,6 +602,9 @@ def _runtime_config(
                             state["agents"]["SNIPER"] = {"status": "WAITING_FOR_SIGNAL", "detail": "No entry signal passed to the paper execution desk in this cycle."}
                 except Exception as exc:
                     state["strategy_engine"] = {"status": "FEED_ERROR", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "symbol": symbol, "detail": type(exc).__name__, "last_cycle_at": datetime.now(timezone.utc).isoformat()}
+                if (testnet_execution_enabled and event == "TESTNET_BLOCKED"
+                        and result.get("reason") == "UNSUPPORTED_SPOT_SIDE_OR_MARKET"):
+                    continue
                 if testnet_execution_enabled and event in {"TESTNET_ORDER", "TESTNET_POSITION_OPEN", "TESTNET_BLOCKED"}:
                     break
             stop_event.wait(60.0)
