@@ -57,3 +57,13 @@ def test_fee_readiness_requires_every_enabled_public_exchange():
     )
     assert next(x for x in partial["tasks"] if x["id"] == "fees")["status"] == "INCOMPLETE"
     assert next(x for x in complete["tasks"] if x["id"] == "fees")["status"] == "VERIFIED"
+
+
+
+def test_crypto_readiness_describes_verified_context_but_not_enabled_execution():
+    result = build_readiness()
+    crypto = next(task for task in result["tasks"] if task["id"] == "crypto_testnet")
+    assert crypto["status"] == "BINANCE_ROUTER_AND_RISK_CONTEXT_READY_TESTNET_EXECUTION_PENDING"
+    assert "daily-loss ledger" in crypto["detail"]
+    assert "not yet connected to the Android strategy loop" in crypto["detail"]
+    assert result["live_trading_enabled"] is False
