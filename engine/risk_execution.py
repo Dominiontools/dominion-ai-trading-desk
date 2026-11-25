@@ -127,7 +127,7 @@ class BinanceTestnetRiskGate:
         if not fees.verified:
             raise PermissionError("Verified account-tier taker fees are required.")
         taker_bps = _dec(fees.taker_fee_bps, "taker fee")
-        if taker_bps < 0 or taker_bps > D("100"):
+        if taker_bps < 0 or taker_bps > D("500"):
             raise ValueError("Taker fee is outside the accepted range.")
         risk_budget = equity * self.max_risk_fraction
         round_trip_fee_rate = (taker_bps * D("2")) / D("10000")
