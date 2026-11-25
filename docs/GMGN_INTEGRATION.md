@@ -25,7 +25,7 @@ The official Agent API describes token information/security, market candles, tre
 1. Obtain GMGN API access through the official GMGN account process.
 2. Confirm which chains and read endpoints are enabled for that key.
 3. Add the credential only to the secure server/native credential vault, never to browser storage or Git.
-4. Implement a read-only connector first: token/trending data, contract security, liquidity/pool information, holder/trader indicators, wallet activity and market candles.
+4. Implement a read-only connector first: Trenches token discovery, trending data and documented token-security fields. The current connector also extracts parsed Solana Trenches candidates and routes GMGN security responses into the Rug agent. Pool, holder/trader, wallet activity and K-line endpoints remain available in the client but are not yet wired into agent workflows.
 5. Normalize source timestamps and chain/address identifiers; reject stale, missing, unsupported or contradictory evidence.
 6. Keep GMGN as an independent evidence source. A GMGN security label is not a guarantee and must not override failed safety checks from other sources.
 7. Only after read-only integration tests pass should a separate demo/test wallet execution design be reviewed. No GMGN swap or live-wallet order is enabled by this document.
