@@ -262,3 +262,21 @@ def test_legacy_journal_without_symbols_fails_closed_on_restart_reconciliation(p
     assert result["unresolved"][0]["reason"] == "SYMBOL_MISSING_FROM_LEGACY_JOURNAL"
     assert client.reconciliations == 0
     assert client.submissions == 0
+
+
+def test_corrupt_journal_cannot_be_cleared_by_restart_reconciliation(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text("{broken", encoding="utf-8")
+    client = FakeClient({
+        "state": "PROTECTED", "protected": True, "action_required": False,
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = lifecycle.reconcile_after_restart()
+    assert result["status"] == "LIFECYCLE_JOURNAL_INVALID"
+    assert result["halted"] is True
+    assert result["operator_action_required"] is True
+    assert client.reconciliations == 0
+    assert client.submissions == 0
+    with pytest.raises(PermissionError, match="halted"):
+        lifecycle.submit_and_verify(plan, list_client_order_id="dominion999")
