@@ -288,14 +288,14 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
                 checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
-                gmgn_security_success_count = sum("assessment" in item for item in gmgn_security_results)
+                gmgn_security_success_count = sum("assessment" in item for item in gmgn_security_checks)
                 gmgn_security_flag_count = sum(
                     len(item.get("assessment", {}).get("risk_flags", []))
-                    for item in gmgn_security_results
+                    for item in gmgn_security_checks
                 )
                 gmgn_security_unknown_count = sum(
                     item.get("assessment", {}).get("status") == "INSUFFICIENT_EVIDENCE"
-                    for item in gmgn_security_results
+                    for item in gmgn_security_checks
                 )
                 total_security_checks = checked_count + gmgn_security_success_count
                 total_security_errors = error_count + gmgn_security_errors
@@ -324,12 +324,12 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                                f"{gmgn_security_unknown_count} insufficient-evidence assessments. "
                                "No result is a safety guarantee; missing fields remain unknown."),
                     "checked_tokens": security_results[:5],
-                    "gmgn_security_checks": gmgn_security_results[:5],
+                    "gmgn_security_checks": gmgn_security_checks[:5],
                     "risk_flags": [item for item in security_results if item.get("risks")][:5],
                     "gmgn_risk_flags": [
                         {"symbol": item.get("symbol"), "chain": item.get("chain"),
                          "risk_flags": item.get("assessment", {}).get("risk_flags", [])}
-                        for item in gmgn_security_results
+                        for item in gmgn_security_checks
                         if item.get("assessment", {}).get("risk_flags")
                     ][:5],
                     "unsupported_tokens": unsupported_count,
@@ -383,7 +383,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                     elif gmgn_security_results:
                         state["gmgn_feed"]["status"] = "CONNECTED"
                         state["gmgn_feed"]["last_checked_at"] = datetime.now(timezone.utc).isoformat()
-                        state["gmgn_feed"]["security_preview"] = __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000]
+                        state["gmgn_feed"]["security_preview"] = __import__("json").dumps(gmgn_security_checks, ensure_ascii=False)[:5000]
                         state["gmgn_feed"]["security_errors"] = gmgn_security_errors
                         state["gmgn_feed"]["security_checks"] = gmgn_security_checks
                 headlines = news_feed.headlines(limit=20)
