@@ -296,7 +296,10 @@ public class TradingEngineService extends Service {
             lastError = "";
             Log.i(TAG, "Embedded trading engine started: " + result.toString());
             NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) manager.notify(NOTIFICATION_ID, notification("Paper monitor is running"));
+            String engineMessage = binanceOrdersEnabled
+                ? "Binance Spot Testnet automation is enabled"
+                : "Paper monitor is running";
+            if (manager != null) manager.notify(NOTIFICATION_ID, notification(engineMessage));
         } catch (Exception error) {
             running = false;
             lastError = error.getClass().getSimpleName() + ": " + error.getMessage();
