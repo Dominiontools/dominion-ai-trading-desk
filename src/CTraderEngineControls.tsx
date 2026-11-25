@@ -187,7 +187,7 @@ export default function CTraderEngineControls() {
     </div>
     <small className="engine-control-state">
       {message || (authorized
-        ? "The scheduled engine evaluates every minute after final deployment. Each order must pass server-side risk, margin, spread, slippage and protective-order checks."
+        ? "The scheduled engine evaluates every minute after final deployment. Pausing blocks new entries but continues managing an existing bot position. Each order must pass server-side risk, margin, spread, slippage and protective-order checks."
         : "First complete the separate cTrader demo trading authorization. Your existing view-only authorization is preserved.")}
     </small>
     <div className="panel-foot"><ShieldCheck size={14}/> This control can enable demo orders only. Live-money trading remains disabled in code and is not available from this panel.</div>
