@@ -78,7 +78,7 @@ def test_snapshot_reports_each_failed_venue_without_returning_partial_quotes():
     assert "TimeoutError" in failures["Bitget"]
     assert "connection timed out" in failures["Bitget"]
     assert "OSError" in failures["HTX"]
-    assert "TLS handshake failed" in failures["Htx"]
+    assert "TLS handshake failed" in failures["HTX"]
     assert "OSError" in failures["OKX"]
 
 
