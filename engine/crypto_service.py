@@ -550,6 +550,26 @@ def start_embedded(data_dir: str, port: int = 8766, gmgn_api_key: str = "", bina
                 "orders_enabled": False,
                 "environment": "BINANCE_SPOT_TESTNET",
             }
+            risk_context = recovery.get("risk_context", {})
+            if isinstance(risk_context, dict):
+                state["binance_testnet_risk_context"] = {
+                    "verified": risk_context.get("verified") is True,
+                    "status": str(risk_context.get("status", "NOT_AVAILABLE"))[:32],
+                    "quote_asset": str(risk_context.get("quote_asset", "USDT"))[:12],
+                    "equity_quote": str(risk_context.get("equity_quote", "0"))[:32],
+                    "available_quote": str(risk_context.get("available_quote", "0"))[:32],
+                    "daily_loss_quote": str(risk_context.get("daily_loss_quote", "0"))[:32],
+                    "open_positions": max(0, min(100, int(risk_context.get("open_positions", 0) or 0))),
+                    "open_order_lists": max(0, min(100, int(risk_context.get("open_order_lists", 0) or 0))),
+                    "orders_enabled": False,
+                    "environment": "BINANCE_SPOT_TESTNET",
+                }
+            else:
+                state["binance_testnet_risk_context"] = {
+                    "verified": False, "status": "INVALID",
+                    "quote_asset": "USDT", "orders_enabled": False,
+                    "environment": "BINANCE_SPOT_TESTNET",
+                }
         except (TypeError, ValueError, json.JSONDecodeError):
             state["binance_testnet_recovery"] = {
                 "status": "RECOVERY_STATUS_INVALID", "halted": True,
