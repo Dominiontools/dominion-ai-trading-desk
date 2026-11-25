@@ -139,6 +139,7 @@ export default async (request: Request) => {
       environment?: string;
       access?: string;
       demoAccountCount?: number;
+      authorizedAccountId?: string;
       verifiedAt?: string;
     } | null;
 
@@ -169,6 +170,7 @@ export default async (request: Request) => {
         environment: "demo",
         access: mode,
         demoAccountCount: verified.accounts.length,
+        authorizedAccountId: verified.authorizedAccountId,
         verifiedAt: new Date().toISOString(),
       };
       await store.setJSON(statusKey, saved);
