@@ -437,16 +437,59 @@ async function executeCycle(): Promise<RecordData> {
       mode: "DEMO_ONLY",
     };
 
-    const execution = await session.newMarketRangeOrder({
-      symbolId: best.symbolId,
-      side: best.setup.side,
-      volume: sized.volume,
-      entryPrice: best.setup.side === "BUY" ? best.ask : best.bid,
-      stopLoss,
-      takeProfit,
-      slippageInPoints,
-      clientOrderId,
-    });
+    let execution: RecordData;
+    try {
+      execution = await session.newMarketRangeOrder({
+        symbolId: best.symbolId,
+        side: best.setup.side,
+        volume: sized.volume,
+        entryPrice: best.setup.side === "BUY" ? best.ask : best.bid,
+        stopLoss,
+        takeProfit,
+        slippageInPoints,
+        clientOrderId,
+      });
+    } catch (orderError) {
+      const afterOrderError = await session.reconcile();
+      const partialPosition = afterOrderError.positions.find((item) => {
+        const tradeData = item.tradeData as RecordData | undefined;
+        return number(tradeData?.symbolId) === best.symbolId &&
+          String(tradeData?.label ?? "") === "DOMINION_AI_DEMO";
+      });
+      if (partialPosition) {
+        const partialId = number(partialPosition.positionId);
+        const partialVolume = number((partialPosition.tradeData as RecordData).volume);
+        const protectedPartial = number(partialPosition.stopLoss) > 0 &&
+          number(partialPosition.takeProfit) > 0;
+        if (!protectedPartial && partialId > 0 && partialVolume > 0) {
+          await session.closePosition(partialId, partialVolume);
+          throw new Error("PARTIAL_FILL_UNPROTECTED_EMERGENCY_CLOSE_SENT");
+        }
+        if (protectedPartial) {
+          const partialStatus = {
+            status: "PARTIAL_FILL_PROTECTED",
+            reason: "PARTIAL_FILL_RECEIVED_WITH_BROKER_SIDE_SL_TP",
+            positionId: partialId,
+            symbol: best.symbolName,
+            side: best.setup.side,
+            confirmedStopLoss: number(partialPosition.stopLoss),
+            confirmedTakeProfit: number(partialPosition.takeProfit),
+            clientOrderId,
+            mode: "DEMO_ONLY",
+          };
+          await store.setJSON("account/active-position", {
+            positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
+            side: best.setup.side, entryPrice: number(partialPosition.price ?? entryPrice),
+            initialRiskDistance: riskDistanceForSizing, initialStopLoss: stopLoss,
+            target3R: target3Distance, openedAt: new Date().toISOString(), clientOrderId,
+          });
+          await saveStatus(store, partialStatus);
+          await appendEvent(store, partialStatus);
+          return partialStatus;
+        }
+      }
+      throw orderError;
+    }
     let reconciled = await session.reconcile();
     let position = reconciled.positions.find((item) => {
       const tradeData = item.tradeData as RecordData | undefined;
