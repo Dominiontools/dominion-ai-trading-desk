@@ -84,3 +84,65 @@ def reconcile_saved_orders(api_key: str, api_secret: str, journal_path: str) -> 
                            "orders_enabled": False,
                            "environment": "BINANCE_SPOT_TESTNET"},
                           separators=(",", ":"))
+
+
+
+def account_risk_snapshot(
+    api_key: str, api_secret: str, journal_path: str, daily_loss_path: str,
+) -> str:
+    """Read-only account, open-position and daily-loss snapshot for Android."""
+    if not api_key or not api_secret:
+        return json.dumps({
+            "status": "SKIPPED", "halted": True, "reconciled": 0,
+            "unresolved": [{"reason": "CREDENTIALS_MISSING"}],
+            "operator_action_required": True, "orders_enabled": False,
+            "environment": "BINANCE_SPOT_TESTNET",
+        }, separators=(",", ":"))
+    try:
+        from pathlib import Path
+        from .binance_daily_loss import BinanceDailyLossLedger
+        from .binance_lifecycle import BinanceProtectedLifecycle
+        from .binance_risk_context import BinanceRiskContextProvider
+        from .risk_execution import BinanceTestnetRiskGate
+
+        client = BinanceSpotTestnetClient(api_key, api_secret, allow_orders=False)
+        ledger = BinanceDailyLossLedger(Path(daily_loss_path))
+        lifecycle = BinanceProtectedLifecycle(
+            BinanceTestnetRiskGate(), client,
+            journal_path=Path(journal_path), daily_loss_ledger=ledger,
+        )
+        snapshot = BinanceRiskContextProvider(
+            client, lifecycle, ledger, quote_asset="USDT",
+        ).snapshot()
+        recovery = lifecycle.last_result or {}
+        return json.dumps({
+            "status": snapshot.recovery_status,
+            "halted": False,
+            "reconciled": int(recovery.get("reconciled", 0) or 0),
+            "unresolved": [],
+            "operator_action_required": False,
+            "orders_enabled": False,
+            "environment": "BINANCE_SPOT_TESTNET",
+            "risk_context": {
+                "verified": True,
+                "quote_asset": snapshot.quote_asset,
+                "equity_quote": format(snapshot.context.equity_quote, "f"),
+                "available_quote": format(snapshot.context.available_quote, "f"),
+                "daily_loss_quote": format(snapshot.context.daily_loss_quote, "f"),
+                "open_positions": snapshot.context.open_positions,
+                "open_order_lists": snapshot.open_order_lists,
+                "status": "VERIFIED",
+            },
+        }, separators=(",", ":"))
+    except Exception:
+        return json.dumps({
+            "status": "RISK_CONTEXT_BLOCKED", "halted": True,
+            "reconciled": 0,
+            "unresolved": [{"reason": "ACCOUNT_OR_RISK_CONTEXT_UNVERIFIED"}],
+            "operator_action_required": True, "orders_enabled": False,
+            "environment": "BINANCE_SPOT_TESTNET",
+            "risk_context": {
+                "verified": False, "status": "BLOCKED",
+                "quote_asset": "USDT",
+            },
+        }, separators=(",", ":"))
