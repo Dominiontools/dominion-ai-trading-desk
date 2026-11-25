@@ -109,3 +109,26 @@ def test_gmgn_security_summary_flags_bsc_honeypot_and_never_claims_safe():
     assert incomplete["status"] == "INSUFFICIENT_EVIDENCE"
     assert incomplete["risk_flags"] == []
     assert "safety" not in incomplete["status"].lower()
+
+
+def test_gmgn_trenches_parser_extracts_and_deduplicates_token_records():
+    from engine.gmgn_api import extract_trenches_tokens
+
+    payload = {
+        "data": {
+            "new_creation": {"list": [
+                {"address": "A" * 32, "symbol": "AAA", "name": "Alpha", "rug_ratio": 0.2},
+                {"token_address": "B" * 32, "symbol": "BBB"},
+            ]},
+            "near_completion": {"list": [
+                {"address": "A" * 32, "symbol": "AAA", "name": "Alpha"},
+                {"address": "short", "symbol": "BAD"},
+                {"address": "C" * 32, "symbol": "CCC"},
+            ]},
+        }
+    }
+    tokens = extract_trenches_tokens(payload, "sol", limit=10)
+    assert [item["symbol"] for item in tokens] == ["AAA", "BBB", "CCC"]
+    assert tokens[0]["chain"] == "sol"
+    assert tokens[0]["rug_ratio"] == 0.2
+    assert len(tokens) == 3
