@@ -91,7 +91,7 @@ class BinanceRiskContextProvider:
         # Any non-quote holding is treated as an unmanaged open position.
         # This prevents the bot from ignoring manual or externally opened Spot
         # holdings when enforcing its one-position policy.
-        open_positions += 1 if unmanaged_assets else 0
+        open_positions += len(unmanaged_assets)
         if open_positions > 1:
             raise PermissionError("More than one managed or unmanaged Spot holding is present.")
 
