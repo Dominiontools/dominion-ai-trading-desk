@@ -68,7 +68,8 @@ class GMGNReadOnlyClient:
         if isinstance(payload, dict):
             code = payload.get("code")
             if code not in (None, 0, "0", 200, "200", "success", "SUCCESS"):
-                raise RuntimeError(f"GMGN_API_REJECTED:{str(code)[:32]}")
+                reason = str(payload.get("error") or payload.get("message") or "")[:80]
+                raise RuntimeError(f"GMGN_API_REJECTED:{str(code)[:32]}:{reason}")
             if payload.get("success") is False:
                 raise RuntimeError("GMGN_API_REJECTED")
         return payload
