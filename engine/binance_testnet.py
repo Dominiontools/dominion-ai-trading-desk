@@ -178,14 +178,27 @@ class BinanceSpotTestnetClient:
         if not list_client_order_id or len(list_client_order_id) > 20:
             raise ValueError("A valid order-list client ID is required.")
         working = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "E")
+        working_status = working.get("status", "UNKNOWN")
+        from .binance_protection import classify_otoco
+
+        # OTOCO's pending exit orders are not placed until the working order
+        # is fully filled. Do not query client IDs that cannot exist yet.
+        if working_status != "FILLED":
+            state = classify_otoco(working_status)
+            return {
+                **state,
+                "working_status": working_status,
+                "take_profit_status": None,
+                "stop_loss_status": None,
+                "list_client_order_id": list_client_order_id,
+            }
+
         take_profit = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "T")
         stop_loss = self.query_order_by_client_id(symbol=symbol, client_order_id=list_client_order_id + "S")
-        from .binance_protection import classify_otoco
-        state = classify_otoco(working.get("status", "UNKNOWN"),
-                               take_profit.get("status"), stop_loss.get("status"))
+        state = classify_otoco(working_status, take_profit.get("status"), stop_loss.get("status"))
         return {
             **state,
-            "working_status": working.get("status", "UNKNOWN"),
+            "working_status": working_status,
             "take_profit_status": take_profit.get("status", "UNKNOWN"),
             "stop_loss_status": stop_loss.get("status", "UNKNOWN"),
             "list_client_order_id": list_client_order_id,
