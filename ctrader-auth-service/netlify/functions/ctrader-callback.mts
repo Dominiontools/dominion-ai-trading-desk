@@ -9,9 +9,17 @@ const TOKEN_URL = "https://openapi.ctrader.com/apps/token";
 const STATE_COOKIE = "dominion_oauth_state";
 const STATE_COOKIE_PATH = "/.netlify/functions/ctrader-callback";
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]!);
+}
+
 function html(title: string, message: string, status = 200, headers: Record<string, string> = {}) {
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
   return new Response(
-    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;line-height:1.5"><h2>${title}</h2><p>${message}</p></body></html>`,
+    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;line-height:1.5"><h2>${safeTitle}</h2><p>${safeMessage}</p></body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", ...headers } },
   );
 }
@@ -271,9 +279,15 @@ export default async (request: Request, context: { deploy: { context: string } }
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("cTrader callback failed", { stage, error: detail });
+    const safeDiagnostic = detail
+      .replace(/(accessToken|refreshToken|clientSecret|clientId|authorization code)\\s*[:=]\\s*[^,\\s}]+/gi, "$1=[hidden]")
+      .replace(/[\\r\\n<>]/g, " ")
+      .slice(0, 180);
     const safeMessage = error instanceof Error && error.message.startsWith("Missing required Netlify environment variable:")
       ? error.message
-      : `The callback failed while ${stage}. Please start authorization again after the issue is fixed.`;
+      : stage === "verifying demo account access"
+        ? `Demo account verification error: ${safeDiagnostic}. No trade was placed; no tokens were saved.`
+        : `The callback failed while ${stage}. Please start authorization again after the issue is fixed.`;
     return html("Callback setup incomplete", safeMessage, 500, { "set-cookie": clearCookie });
   }
 };
