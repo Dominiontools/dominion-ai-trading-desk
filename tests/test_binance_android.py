@@ -50,9 +50,8 @@ def test_account_summary_missing_credentials_fails_closed():
 
 def test_restart_recovery_uses_read_only_client_and_does_not_submit(monkeypatch, tmp_path):
     from engine import binance_lifecycle
-    from engine import risk_execution
 
-    calls = {"client": 0, "reconcile": 0, "submit": 0}
+    calls = {"client": 0, "reconcile": 0}
 
     class RecoveryClient:
         def __init__(self, api_key, api_secret, *, allow_orders):
@@ -62,24 +61,28 @@ def test_restart_recovery_uses_read_only_client_and_does_not_submit(monkeypatch,
             calls["client"] += 1
 
         def reconcile_protected_buy_otoco(self, *, symbol, list_client_order_id):
+            assert symbol == "BTCUSDT"
+            assert list_client_order_id == "dominion123"
             calls["reconcile"] += 1
             return {"state": "PROTECTED", "protected": True,
                     "action_required": False}
 
-    class EmptyGate:
-        pass
-
     monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", RecoveryClient)
-    monkeypatch.setattr(binance_lifecycle, "BinanceProtectedLifecycle",
-                        binance_lifecycle.BinanceProtectedLifecycle)
-    journal = tmp_path / "empty-journal.json"
+    journal = tmp_path / "binance-lifecycle.json"
+    journal.write_text(json.dumps({
+        "version": 1,
+        "submitted_ids": ["dominion123"],
+        "submitted_symbols": {"dominion123": "BTCUSDT"},
+        "halted": True,
+        "last_result": None,
+    }), encoding="utf-8")
     result = json.loads(binance_android.reconcile_saved_orders(
         "test-key", "test-secret", str(journal)
     ))
-    assert result["status"] == "NO_JOURNALED_ORDERS"
+    assert result["status"] == "RECONCILED"
     assert result["orders_enabled"] is False
     assert result["halted"] is False
-    assert calls == {"client": 1, "reconcile": 0, "submit": 0}
+    assert calls == {"client": 1, "reconcile": 1}
 
 
 def test_restart_recovery_without_credentials_stays_blocked():
