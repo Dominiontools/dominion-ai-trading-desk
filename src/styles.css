@@ -68,3 +68,18 @@
 .ctrader-reconnect{font-size:10px;color:#f0c879;text-decoration:none;border-left:1px solid #34445c;padding-left:8px;white-space:nowrap}
 .ctrader-reconnect:hover{text-decoration:underline}
 @media(max-width:700px){.top-actions{flex-wrap:wrap;justify-content:flex-start}.ctrader-connection{flex-wrap:wrap}.ctrader-label{white-space:normal}}
+
+
+.ctrader-engine-panel>.crypto-summary,
+.ctrader-engine-panel>.engine-control-actions,
+.ctrader-engine-panel>.engine-control-state,
+.ctrader-engine-panel>.panel-foot{grid-column:1/-1}
+.ctrader-engine-panel .decision-list-head{align-items:center;gap:12px}
+.ctrader-engine-panel .decision-list-head span{color:#e8bd76}
+.engine-control-actions{align-items:center;flex-wrap:wrap}
+.engine-control-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px}
+.engine-control-actions button:focus-visible{outline:2px solid #e0b15f;outline-offset:2px}
+.engine-control-state{display:block;line-height:1.55}
+.spin{animation:dominion-spin 1s linear infinite}
+@keyframes dominion-spin{to{transform:rotate(360deg)}}
+@media(max-width:700px){.ctrader-engine-panel .crypto-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.engine-control-actions{width:100%}.engine-control-actions button{flex:1 1 auto}}
