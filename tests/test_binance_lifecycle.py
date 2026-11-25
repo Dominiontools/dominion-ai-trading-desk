@@ -397,3 +397,6 @@ def test_stop_loss_without_saved_risk_basis_stays_halted(plan, tmp_path):
     assert result["status"] == "RECONCILIATION_REQUIRED"
     assert result["halted"] is True
     assert result["unresolved"][0]["reason"] == "STOP_LOSS_RISK_BASIS_MISSING"
+    # The order-level status must reflect the final ledger/risk decision,
+    # not merely the exchange's STOP_LOSS terminal state.
+    assert result["orders"][0]["safe"] is False
