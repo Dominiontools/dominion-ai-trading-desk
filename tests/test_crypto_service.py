@@ -125,7 +125,12 @@ class FakeGMGN:
         return {"code": 0, "data": {"chain": chain, "interval": interval, "tokens": []}}
 
     def token_security(self, chain, address):
-        return {"code": 0, "data": {"chain": chain, "address": address, "is_honeypot": False}}
+        return {"code": 0, "data": {
+            "chain": chain, "address": address, "open_source": "yes",
+            "owner_renounced": "yes", "rug_ratio": 0.1,
+            "is_wash_trading": False, "renounced_mint": True,
+            "renounced_freeze_account": True,
+        }}
 
 
 class EmptyDiscovery:
