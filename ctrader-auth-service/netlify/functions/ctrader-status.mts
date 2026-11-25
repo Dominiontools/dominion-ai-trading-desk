@@ -40,7 +40,7 @@ function decryptTokens(encrypted: {
   return JSON.parse(clear) as Record<string, unknown>;
 }
 
-async function verifyDemoAccounts(accessToken: string, clientId: string, clientSecret: string) {
+async function verifyDemoAccounts(accessToken: string, clientId: string, clientSecret: string, expectedScope: number) {
   const socket = new WebSocket("wss://demo.ctraderapi.com:5036");
   return await new Promise<{ permissionScope: number; accounts: Record<string, unknown>[]; authorizedAccountId: string }>((resolve, reject) => {
     let stage: "connecting" | "app-auth" | "account-list" | "account-auth" = "connecting";
@@ -83,8 +83,10 @@ async function verifyDemoAccounts(accessToken: string, clientId: string, clientS
         if (stage === "account-list" && message.payloadType === 2150) {
           const payload = message.payload ?? {};
           permissionScope = Number(payload.permissionScope);
-          if (permissionScope !== 0) {
-            finish(new Error("cTrader did not confirm view-only permission."));
+          if (permissionScope !== expectedScope) {
+            finish(new Error(expectedScope === 1
+              ? "cTrader did not confirm trading permission."
+              : "cTrader did not confirm view-only permission."));
             return;
           }
           const raw = Array.isArray(payload.ctidTraderAccount) ? payload.ctidTraderAccount as Record<string, unknown>[] : [];
@@ -122,12 +124,16 @@ async function verifyDemoAccounts(accessToken: string, clientId: string, clientS
 
 export default async (request: Request) => {
   const headers = corsHeaders(request);
+  const mode = new URL(request.url).searchParams.get("mode") === "trading" ? "trading" : "view-only";
+  const expectedScope = mode === "trading" ? 1 : 0;
+  const statusKey = mode === "trading" ? "account/trading-status" : "account/status";
+  const tokenKey = mode === "trading" ? "account/trading-tokens" : "account/tokens";
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
   if (request.method !== "GET") return Response.json({ error: "METHOD_NOT_ALLOWED" }, { status: 405, headers });
 
   try {
     const store = getStore({ name: "dominion-ctrader-oauth-prod", consistency: "strong" });
-    let saved = await store.get("account/status", { type: "json" }) as {
+    let saved = await store.get(statusKey, { type: "json" }) as {
       connected?: boolean;
       broker?: string;
       environment?: string;
@@ -139,7 +145,7 @@ export default async (request: Request) => {
     // Older successful authorizations stored encrypted tokens before the dashboard
     // status record existed. Verify those saved tokens once; never expose them.
     if (!saved) {
-      const encrypted = await store.get("account/tokens", { type: "json" }) as {
+      const encrypted = await store.get(tokenKey, { type: "json" }) as {
         iv?: string; tag?: string; ciphertext?: string;
       } | null;
       if (!encrypted) {
@@ -156,23 +162,23 @@ export default async (request: Request) => {
 
       const tokenData = decryptTokens(encrypted, key);
       if (typeof tokenData.accessToken !== "string") throw new Error("Saved cTrader access token is missing.");
-      const verified = await verifyDemoAccounts(tokenData.accessToken, clientId, clientSecret);
+      const verified = await verifyDemoAccounts(tokenData.accessToken, clientId, clientSecret, expectedScope);
       saved = {
-        connected: verified.permissionScope === 0 && verified.accounts.length > 0 && Boolean(verified.authorizedAccountId),
+        connected: verified.permissionScope === expectedScope && verified.accounts.length > 0 && Boolean(verified.authorizedAccountId),
         broker: "Pepperstone",
         environment: "demo",
-        access: "view-only",
+        access: mode,
         demoAccountCount: verified.accounts.length,
         verifiedAt: new Date().toISOString(),
       };
-      await store.setJSON("account/status", saved);
+      await store.setJSON(statusKey, saved);
     }
 
     return Response.json({
       connected: saved.connected === true,
       broker: "Pepperstone",
       environment: saved.environment === "demo" ? "demo" : null,
-      access: saved.access === "view-only" ? "view-only" : null,
+      access: saved.access === "view-only" || saved.access === "trading" ? saved.access : null,
       demoAccountCount: Number.isInteger(saved.demoAccountCount) ? saved.demoAccountCount : 0,
       verifiedAt: typeof saved.verifiedAt === "string" ? saved.verifiedAt : null,
     }, { headers });
