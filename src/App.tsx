@@ -375,7 +375,7 @@ function CryptoMonitorPanel() {
         : scannerOpportunities.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "")}>
             <div><b>{String(item.symbol || "—")}</b><small>Buy {String(item.buy_exchange || "—")} → Sell {String(item.sell_exchange || "—")}</small></div>
             <span>Net {Number(item.net_edge_bps ?? 0).toFixed(1)} bps</span>
-            <small>Top-of-book cap ${Number(item.max_notional_at_top_of_book ?? 0).toFixed(2)}}</small>
+            <small>Top-of-book cap ${Number(item.max_notional_at_top_of_book ?? 0).toFixed(2)}</small>
           </div>)}
       <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
       {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
