@@ -98,7 +98,7 @@ def configure_python_sources() -> None:
                  "crypto_api.py", "crypto_service.py", "crypto_strategy.py",
                  "paper_workflow.py", "strategies.py", "confluence_strategy.py", "market_data.py",
                  "specialist_agents.py", "agent_feeds.py", "positions.py",
-                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_android.py", "binance_market_rules.py"):
+                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_android.py", "binance_market_rules.py", "crypto_universe.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
 
