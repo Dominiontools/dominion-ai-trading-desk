@@ -20,7 +20,7 @@ class BinanceRiskSnapshot:
     account_snapshot_verified: bool
     daily_loss_verified: bool
     quote_asset: str
-    open_order_lists: int
+    journaled_order_lists: int
     recovery_status: str
 
 
@@ -93,6 +93,6 @@ class BinanceRiskContextProvider:
             account_snapshot_verified=True,
             daily_loss_verified=True,
             quote_asset=self.quote_asset,
-            open_order_lists=len(orders),
+            journaled_order_lists=len(orders),
             recovery_status=str(recovery.get("status", "UNKNOWN")),
         )
