@@ -116,3 +116,15 @@ credentials are sent to Netlify, and the adapter remains pinned to
 This integration is code-complete but not yet end-to-end verified against a
 real Binance Spot Testnet account. The first actual demo order must be
 explicitly enabled by the user in the Android app.
+
+
+## Unconfirmed protection and emergency boundary
+
+If an order submission or exchange reconciliation is uncertain, the durable
+lifecycle halts further entries and reports that operator review is required.
+It does not blindly retry an entry. The Android Disable automation control
+prevents new entries after service restart, while any confirmed exchange-held
+OTOCO legs remain at Binance. Automatic emergency market-flattening for a
+filled but unprotected position is not yet implemented; an unconfirmed
+protection state must be treated as requiring immediate manual review in the
+Binance Spot Testnet account.
