@@ -129,7 +129,7 @@ export function evaluateConfluence(
   if (!Number.isInteger(scoreThreshold) || scoreThreshold < 1 || scoreThreshold > 15) {
     throw new Error("INVALID_SCORE_THRESHOLD");
   }
-  if (!execution.length || !context.length) return null;
+  if (!execution.length || !context.length || !Number.isFinite(now.getTime())) return null;
   const symbol = execution[execution.length - 1].symbol;
   const market = execution[execution.length - 1].market;
   validateCandles(execution, symbol, timeframes.execution);
@@ -200,7 +200,7 @@ export function evaluateConfluence(
   if (bearishFvg) { sellScore += 1; sellReasons.push("Bearish fair-value gap."); }
   if (fibBullDiscount) { buyScore += 1; buyReasons.push("Price in 50–78.6% discount retracement."); }
   if (fibBearPremium) { sellScore += 1; sellReasons.push("Price in 50–78.6% premium retracement."); }
-  if (market !== "CRYPTO" && inMajorSession(now)) {
+  if (inMajorSession(now)) {
     if (buyScore) { buyScore += 1; buyReasons.push("London/New York session filter passed."); }
     if (sellScore) { sellScore += 1; sellReasons.push("London/New York session filter passed."); }
   }
