@@ -208,6 +208,7 @@ async function manageBotPosition(
   symbols: RecordData[],
   profile: StrategyProfile,
   scoreThreshold: number,
+  daily: { startingEquity: number; dailyNetPnl: number; dailyLossFraction: number },
   now: Date,
 ): Promise<RecordData> {
   const positionId = number(position.positionId);
@@ -238,6 +239,22 @@ async function manageBotPosition(
     return { status: "POSITION_OPEN_PROTECTED_STALE_QUOTE", reason: "BROKER_SIDE_SL_TP_REMAINS_ACTIVE", positionId, quoteAgeSeconds: quoteAge, mode: "DEMO_ONLY" };
   }
   const currentPrice = side === "BUY" ? bid : ask;
+  const unrealizedPnl = (side === "BUY" ? currentPrice - entryPrice : entryPrice - currentPrice) *
+    (volume / 100) - number(activePosition.estimatedRoundTripCommission ?? 0);
+  const markToMarketDailyPnl = daily.dailyNetPnl + unrealizedPnl;
+  const markToMarketLossFraction = Math.max(0, -markToMarketDailyPnl / daily.startingEquity);
+  if (markToMarketLossFraction >= MAX_DAILY_LOSS) {
+    await session.closePosition(positionId, volume);
+    await store.delete("account/active-position");
+    const dailyClose = {
+      status: "DAILY_STOP_UNREALIZED_CLOSE_SENT",
+      reason: "REALIZED_PLUS_UNREALIZED_DAILY_LOSS_LIMIT_REACHED",
+      positionId, markToMarketDailyLossPct: markToMarketLossFraction * 100,
+      mode: "DEMO_ONLY",
+    };
+    await appendEvent(store, dailyClose);
+    return dailyClose;
+  }
   const periods = TIMEFRAME_PROFILES[profile];
   const [executionBars, contextBars] = await Promise.all([
     session.trendbars(symbolId, periods.executionPeriod, 220),
@@ -460,7 +477,7 @@ async function executeCycle(): Promise<RecordData> {
       if (isDominionPosition && number(activePosition?.positionId) === positionId) {
         const managed = await manageBotPosition(
           session, store, position, activePosition as RecordData,
-          symbols, profile, scoreThreshold, now,
+          symbols, profile, scoreThreshold, daily, now,
         );
         await saveStatus(store, managed);
         return managed;
@@ -663,6 +680,7 @@ async function executeCycle(): Promise<RecordData> {
             initialRiskDistance: riskDistanceForSizing, initialStopLoss: stopLoss,
             target2R, target3R: takeProfit, partialTaken: false, breakEvenSet: false,
             minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
+            estimatedRoundTripCommission: sized.commission,
             openedAt: new Date().toISOString(), clientOrderId,
           });
           await saveStatus(store, partialStatus);
@@ -728,6 +746,7 @@ async function executeCycle(): Promise<RecordData> {
       breakEvenSet: false,
       minVolume: number(best.symbol.minVolume),
       stepVolume: number(best.symbol.stepVolume),
+      estimatedRoundTripCommission: sized.commission,
       openedAt: new Date().toISOString(),
       clientOrderId,
     });
