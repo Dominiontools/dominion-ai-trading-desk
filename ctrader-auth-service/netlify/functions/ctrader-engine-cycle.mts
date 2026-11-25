@@ -69,15 +69,21 @@ function calculateDailyRisk(
     const conversionFee = number(detail.pnlConversionFee ?? 0);
     return sum + (gross + swap + commission + conversionFee) / dealScale;
   }, 0);
-  const cashFlowNet = cashFlows.reduce((sum, flow) => {
+  let capitalFlows = 0;
+  let otherCashFlowPnl = 0;
+  for (const flow of cashFlows) {
     const digits = Number(flow.moneyDigits ?? moneyDigits);
-    return sum + number(flow.delta ?? 0) / moneyScale(digits);
-  }, 0);
+    const delta = number(flow.delta ?? 0) / moneyScale(digits);
+    const operationType = number(flow.operationType);
+    if (operationType === 0 || operationType === 1) capitalFlows += delta;
+    else otherCashFlowPnl += delta;
+  }
+  const totalDailyPnl = dailyNetPnl + otherCashFlowPnl;
   const equity = balance / scale;
-  const startingEquity = equity - dailyNetPnl - cashFlowNet;
+  const startingEquity = equity - totalDailyPnl - capitalFlows;
   if (!(equity > 0) || !(startingEquity > 0)) throw new Error("INVALID_ACCOUNT_EQUITY");
-  const dailyLossFraction = Math.max(0, -dailyNetPnl / startingEquity);
-  return { equity, dailyNetPnl, startingEquity, dailyLossFraction };
+  const dailyLossFraction = Math.max(0, -totalDailyPnl / startingEquity);
+  return { equity, dailyNetPnl: totalDailyPnl, startingEquity, dailyLossFraction };
 }
 
 function estimateRoundTripCommission(
@@ -377,8 +383,11 @@ async function executeCycle(): Promise<RecordData> {
     const distance = best.setup.riskDistance;
     const digits = number(best.symbol.digits);
     const point = 10 ** -digits;
+    const slippagePrice = entryPrice * MAX_SLIPPAGE_BPS / 10000;
+    const riskDistanceForSizing = distance + slippagePrice;
+    const targetDistance = 2 * riskDistanceForSizing;
     const stopLoss = Number((best.setup.side === "BUY" ? entryPrice - distance : entryPrice + distance).toFixed(digits));
-    const takeProfit = Number((best.setup.side === "BUY" ? entryPrice + 2 * distance : entryPrice - 2 * distance).toFixed(digits));
+    const takeProfit = Number((best.setup.side === "BUY" ? entryPrice + targetDistance : entryPrice - targetDistance).toFixed(digits));
     const minStopDistance = number(best.symbol.slDistance ?? 0) * point;
     const minTakeDistance = number(best.symbol.tpDistance ?? 0) * point;
     if (Math.abs(entryPrice - stopLoss) < minStopDistance ||
@@ -390,11 +399,12 @@ async function executeCycle(): Promise<RecordData> {
       throw new Error("PROTECTIVE_PRICE_DIRECTION_INVALID");
     }
 
-    const sized = sizeVolume(best.symbol, entryPrice, distance, daily.equity);
-    const marginRows = await session.expectedMargin(best.symbolId, sized.volume);
-    const marginRow = marginRows.find((item) => number(item.volume) === sized.volume) ?? marginRows[0];
+    const commissionPrice = entryPrice * (1 + MAX_SLIPPAGE_BPS / 10000);
+    const sized = sizeVolume(best.symbol, commissionPrice, riskDistanceForSizing, daily.equity);
+    const marginResponse = await session.expectedMargin(best.symbolId, sized.volume);
+    const marginRow = marginResponse.margins.find((item) => number(item.volume) === sized.volume) ?? marginResponse.margins[0];
     if (!marginRow) throw new Error("EXPECTED_MARGIN_NOT_RETURNED");
-    const marginDigits = number((await session.trader()).moneyDigits);
+    const marginDigits = marginResponse.moneyDigits || moneyDigits;
     const marginValue = number(best.setup.side === "BUY" ? marginRow.buyMargin : marginRow.sellMargin) /
       moneyScale(marginDigits);
     if (!Number.isFinite(marginValue) || marginValue <= 0 || marginValue > daily.equity * MAX_MARGIN_FRACTION) {
@@ -416,7 +426,7 @@ async function executeCycle(): Promise<RecordData> {
       entryPrice,
       stopLoss,
       takeProfit,
-      target3R: best.setup.side === "BUY" ? entryPrice + 3 * distance : entryPrice - 3 * distance,
+      target3R: best.setup.side === "BUY" ? entryPrice + 3 * riskDistanceForSizing : entryPrice - 3 * riskDistanceForSizing,
       riskAmount: sized.riskAmount,
       estimatedRoundTripCommission: sized.commission,
       riskPct,
@@ -484,7 +494,7 @@ async function executeCycle(): Promise<RecordData> {
       symbolId: best.symbolId,
       side: best.setup.side,
       entryPrice: number(position.price ?? entryPrice),
-      initialRiskDistance: distance,
+      initialRiskDistance: riskDistanceForSizing,
       initialStopLoss: stopLoss,
       target3R: preview.target3R,
       openedAt: new Date().toISOString(),
