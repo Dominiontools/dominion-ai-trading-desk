@@ -29,6 +29,8 @@ final class CredentialVault {
     private static final String KEY_ALIAS = "dominion_exchange_aes_gcm_v1";
     private static final String CIPHERTEXT = "credentials_v1";
     private static final String IV = "iv_v1";
+    private static final String GMGN_CIPHERTEXT = "gmgn_api_key_v1";
+    private static final String GMGN_IV = "gmgn_api_iv_v1";
     private final SharedPreferences prefs;
 
     CredentialVault(Context context) {
@@ -56,6 +58,42 @@ final class CredentialVault {
 
     synchronized boolean hasCredentials() {
         return prefs.contains(IV) && prefs.contains(CIPHERTEXT);
+    }
+
+    synchronized void saveGmgnApiKey(String apiKey) throws Exception {
+        if (apiKey == null || apiKey.trim().length() < 12 ||
+            apiKey.length() > 512 || apiKey.trim().length() != apiKey.length()) {
+            throw new IllegalArgumentException("Invalid GMGN API key format.");
+        }
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+        byte[] encrypted = cipher.doFinal(apiKey.getBytes(StandardCharsets.UTF_8));
+        boolean committed = prefs.edit()
+            .putString(GMGN_IV, Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
+            .putString(GMGN_CIPHERTEXT, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .commit();
+        if (!committed) throw new IllegalStateException("Could not persist GMGN API key.");
+    }
+
+    synchronized boolean hasGmgnApiKey() {
+        return prefs.contains(GMGN_IV) && prefs.contains(GMGN_CIPHERTEXT);
+    }
+
+    synchronized String loadGmgnApiKeyForNativeUse() throws Exception {
+        String encodedIv = prefs.getString(GMGN_IV, null);
+        String encodedCiphertext = prefs.getString(GMGN_CIPHERTEXT, null);
+        if (encodedIv == null || encodedCiphertext == null) {
+            throw new IllegalStateException("No saved GMGN API key.");
+        }
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(),
+            new GCMParameterSpec(128, Base64.decode(encodedIv, Base64.NO_WRAP)));
+        return new String(cipher.doFinal(Base64.decode(encodedCiphertext, Base64.NO_WRAP)),
+            StandardCharsets.UTF_8);
+    }
+
+    synchronized void clearGmgnApiKey() {
+        prefs.edit().remove(GMGN_IV).remove(GMGN_CIPHERTEXT).commit();
     }
 
     /** Decrypt only for native in-process exchange use; never bridge this result to JS. */
@@ -160,6 +198,42 @@ def main():
                 credentials[0] = null;
                 credentials[1] = null;
             }
+        }
+    }
+
+    @PluginMethod
+    public void saveGmgnApiKey(PluginCall call) {
+        String apiKey = call.getString("apiKey");
+        try {
+            new CredentialVault(getContext()).saveGmgnApiKey(apiKey);
+            JSObject result = new JSObject();
+            result.put("saved", true);
+            result.put("storage", "ANDROID_KEYSTORE_AES_GCM");
+            call.resolve(result);
+        } catch (IllegalArgumentException error) {
+            call.reject("The GMGN API key is not in an accepted format.");
+        } catch (Exception error) {
+            call.reject("Could not securely save the GMGN API key.");
+        }
+    }
+
+    @PluginMethod
+    public void gmgnApiKeyStatus(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("saved", new CredentialVault(getContext()).hasGmgnApiKey());
+        result.put("storage", "ANDROID_KEYSTORE_AES_GCM");
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void clearGmgnApiKey(PluginCall call) {
+        try {
+            new CredentialVault(getContext()).clearGmgnApiKey();
+            JSObject result = new JSObject();
+            result.put("cleared", true);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Could not clear the saved GMGN API key.");
         }
     }
 
