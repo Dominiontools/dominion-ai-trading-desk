@@ -58,6 +58,7 @@ function buildCandidate(
   contextBars: RecordData[],
   profile: StrategyProfile,
   scoreThreshold: number,
+  useSessionFilter: boolean,
   now: Date,
 ): Candidate | null {
   const symbolId = number(lightSymbol.symbolId);
@@ -80,7 +81,7 @@ function buildCandidate(
     trendbarsToCandles(symbolName, symbolName.startsWith("XAU") ? "GOLD" : "FOREX",
       TIMEFRAME_PROFILES[profile].context, contextBars,
       TIMEFRAME_PROFILES[profile].contextSeconds, now.getTime()),
-    profile, now, scoreThreshold,
+    profile, now, scoreThreshold, useSessionFilter,
   );
   if (!setup) return null;
   return { symbolName, symbolId, symbol, lightSymbol, setup, bid, ask, quoteTimestamp, spreadBps };
@@ -110,6 +111,7 @@ async function manageBotPosition(
   symbols: RecordData[],
   profile: StrategyProfile,
   scoreThreshold: number,
+  useSessionFilter: boolean,
   daily: { startingEquity: number; dailyNetPnl: number; dailyLossFraction: number },
   now: Date,
 ): Promise<RecordData> {
@@ -168,7 +170,7 @@ async function manageBotPosition(
     oppositeSetup = evaluateConfluence(
       trendbarsToCandles(symbolName, market, periods.execution, executionBars, periods.executionSeconds, now.getTime()),
       trendbarsToCandles(symbolName, market, periods.context, contextBars, periods.contextSeconds, now.getTime()),
-      profile, now, scoreThreshold,
+      profile, now, scoreThreshold, useSessionFilter,
     );
   } catch {
     // Keep broker-side protection active if strategy data is temporarily unavailable.
@@ -294,6 +296,7 @@ async function executeCycle(): Promise<RecordData> {
     return invalid;
   }
   const scoreThreshold = number(config?.scoreThreshold ?? 6);
+  const useSessionFilter = config?.useSessionFilter !== false;
   const requestedSymbols = Array.isArray(config?.symbols)
     ? config.symbols.map(normalizeSymbol).filter(Boolean)
     : DEFAULT_SYMBOLS;
@@ -379,7 +382,7 @@ async function executeCycle(): Promise<RecordData> {
       if (isDominionPosition && number(activePosition?.positionId) === positionId) {
         const managed = await manageBotPosition(
           session, store, position, activePosition as RecordData,
-          symbols, profile, scoreThreshold, daily, now,
+          symbols, profile, scoreThreshold, useSessionFilter, daily, now,
         );
         await saveStatus(store, managed);
         return managed;
@@ -451,7 +454,7 @@ async function executeCycle(): Promise<RecordData> {
         ]);
         const candidate = buildCandidate(
           requested, light, symbol, spot, executionBars, contextBars,
-          profile, scoreThreshold, now,
+          profile, scoreThreshold, useSessionFilter, now,
         );
         if (candidate) candidates.push(candidate);
       } catch (error) {
