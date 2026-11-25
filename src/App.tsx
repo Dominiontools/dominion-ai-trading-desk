@@ -268,8 +268,12 @@ function CryptoMonitorPanel() {
         setEngineControl("starting");
       }
       setTestnetAutomationMessage(result.enabled
-        ? "Enabled for Binance Spot Testnet. Restarting the local engine to apply."
-        : "Disabled. Restarting the local engine; exchange-hosted protective orders remain at Binance.");
+        ? (engineControl === "running"
+            ? "Enabled for Binance Spot Testnet. Restarting the local engine to apply."
+            : "Enabled for Binance Spot Testnet. Start the local engine to apply.")
+        : (engineControl === "running"
+            ? "Disabled. Restarting the local engine; exchange-hosted protective orders remain at Binance."
+            : "Disabled. Exchange-hosted protective orders remain at Binance."));
     } catch {
       setTestnetAutomationMessage("Could not change Testnet automation. Check the saved credentials and restart the phone engine.");
     } finally {
@@ -440,8 +444,8 @@ function CryptoMonitorPanel() {
     <div className="crypto-summary">
       <div><small>GMGN FEED</small><b>{String(gmgnFeed?.status || "NOT CONFIGURED")}</b></div>
       <div><small>ENGINE</small><b>{engine}</b></div>
-      <div><small>MODE</small><b>Paper only</b></div>
-      <div><small>ORDER ROUTING</small><b>Disabled</b></div>
+      <div><small>MODE</small><b>{String(status?.mode || "PAPER_ONLY").replaceAll("_", " ")}</b></div>
+      <div><small>ORDER ROUTING</small><b>{status?.orders_enabled === true ? "Binance Spot Testnet" : "Disabled"}</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
       <div><small>52-MARKET CROSS-EXCHANGE SCAN</small><b>{String(arbitrageScanner?.status || "Waiting")}</b></div>
