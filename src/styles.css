@@ -92,3 +92,6 @@
 .ctrader-session-toggle{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px}
 .ctrader-session-toggle input{accent-color:#c99b55;width:16px;height:16px}
 @media(max-width:700px){.ctrader-config-grid{grid-template-columns:1fr}.ctrader-symbol-field{grid-column:auto}.ctrader-session-toggle{grid-column:1/-1}}
+
+
+.gmgn-preview{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px;color:var(--muted);font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
