@@ -371,7 +371,14 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                                 gmgn_retry_after = float("inf")
                                 error_status = "PLAN_UPGRADE_REQUIRED"
                             elif "429" in error_text or "RATE_LIMIT" in error_text:
-                                gmgn_retry_after = time.monotonic() + 300
+                                cooldown_seconds = 300.0
+                                if "RESET_AT:" in error_text:
+                                    try:
+                                        reset_text = error_text.split("RESET_AT:", 1)[1].split(":", 1)[0]
+                                        cooldown_seconds = max(1.0, min(300.0, float(reset_text) - time.time()))
+                                    except (TypeError, ValueError):
+                                        cooldown_seconds = 300.0
+                                gmgn_retry_after = time.monotonic() + cooldown_seconds
                                 error_status = "RATE_LIMITED"
                             else:
                                 gmgn_retry_after = time.monotonic() + 300
