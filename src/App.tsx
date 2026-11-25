@@ -257,6 +257,9 @@ function CryptoMonitorPanel() {
   const arbitrageScanner = status?.arbitrage_scanner && typeof status.arbitrage_scanner === "object"
     ? status.arbitrage_scanner as Record<string, unknown>
     : null;
+  const arbitrageUniverse = status?.arbitrage_universe && typeof status.arbitrage_universe === "object"
+    ? status.arbitrage_universe as Record<string, unknown>
+    : null;
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -310,8 +313,12 @@ function CryptoMonitorPanel() {
       <div><small>ORDER ROUTING</small><b>Disabled</b></div>
       <div><small>FEE CONFIG</small><b>{String(status?.fee_configuration || "Not loaded")}</b></div>
       <div><small>LAST UPDATE</small><b>{lastUpdated || "Not connected"}</b></div>
-      <div><small>BTC CROSS-EXCHANGE SCAN</small><b>{String(arbitrageScanner?.status || "Waiting")}</b></div>
-      <div><small>SCAN TARGET</small><b>{String(status?.poll_interval_seconds ?? "1")}s · REST</b></div>
+      <div><small>52-MARKET CROSS-EXCHANGE SCAN</small><b>{String(arbitrageScanner?.status || "Waiting")}</b></div>
+      <div><small>MARKETS SCANNED</small><b>{String(arbitrageScanner?.symbols_scanned ?? 0)} / {String(arbitrageUniverse?.target_count ?? 52)}</b></div>
+      <div><small>TWO-VENUE COVERAGE</small><b>{String(arbitrageScanner?.symbols_with_two_venues ?? 0)}</b></div>
+      <div><small>PAPER OPPORTUNITIES</small><b>{String(arbitrageScanner?.opportunities_count ?? 0)}</b></div>
+      <div><small>MARKET UNIVERSE</small><b>{String(arbitrageUniverse?.status || "Waiting")}</b></div>
+      <div><small>SCAN TARGET</small><b>{String(status?.poll_interval_seconds ?? "1")}s · batch REST</b></div>
       <div><small>STRATEGY PROFILE</small><b>{String(strategyEngine?.profile || "Intraday")} · {String(strategyEngine?.execution_timeframe || "15m")}/{String(strategyEngine?.context_timeframe || "4h")}</b></div>
     </div>
     <div className="agent-runtime-list readiness-panel">
@@ -321,7 +328,7 @@ function CryptoMonitorPanel() {
         <span className={"readiness-state " + String(task.status || "UNKNOWN").toLowerCase()}>{String(task.status || "UNKNOWN").replaceAll("_", " ")}</span>
       </div>)}
       {readinessTasks.length === 0 && <div className="decision-empty"><div><b>Integration checklist unavailable</b><span>Start the phone engine to load the outstanding work and external approval gates.</span></div></div>}
-      <div className="panel-foot">The BTC cross-exchange monitor uses public REST snapshots with a one-second target, not a persistent WebSocket stream; actual cycles depend on venue response times and rate limits. This checklist separates code work from external approvals and tests. Live-money trading remains locked, even after demo checks pass.</div>
+      <div className="panel-foot">The cross-exchange monitor selects up to 52 liquid USDT pairs from Binance 24-hour quote volume and requests one batched REST snapshot per venue. One-second polling is a target, not a guarantee; actual cycles depend on venue response times and rate limits. This checklist separates code work from external approvals and tests. Live-money trading remains locked, even after demo checks pass.</div>
     </div>
     <div className="agent-runtime-list paper-book-panel">
       <div className="decision-list-head"><b>PAPER TRADING ACCOUNT</b><span>{paperTrading ? "CONNECTED TO LOCAL ENGINE" : "WAITING FOR ENGINE"}</span></div>
