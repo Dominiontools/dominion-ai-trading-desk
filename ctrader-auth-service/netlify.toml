@@ -4,6 +4,4 @@
 
 [functions]
   directory = "netlify/functions"
-
-[functions."ctrader-callback"]
   node_bundler = "esbuild"
