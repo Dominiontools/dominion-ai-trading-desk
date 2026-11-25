@@ -481,6 +481,16 @@ async function executeCycle(): Promise<RecordData> {
       await saveStatus(store, protectedState);
       return protectedState;
     }
+    if (accountState.positions.length === 0 && activePosition) {
+      await store.delete("account/active-position");
+      await appendEvent(store, {
+        status: "BROKER_POSITION_CLOSED",
+        reason: "POSITION_NO_LONGER_PRESENT_IN_BROKER_RECONCILIATION",
+        previousPositionId: activePosition.positionId,
+        symbol: activePosition.symbol,
+        mode: "DEMO_ONLY",
+      });
+    }
     if (accountState.orders.length > 0) {
       const pending = { status: "PENDING_ORDER_BLOCK", reason: "EXISTING_PENDING_ORDER", pendingOrders: accountState.orders.length, mode: "DEMO_ONLY" };
       await saveStatus(store, pending);
