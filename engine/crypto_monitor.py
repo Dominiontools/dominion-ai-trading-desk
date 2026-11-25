@@ -40,6 +40,11 @@ class CryptoPaperMonitor:
 
     def _write(self, record: dict) -> dict:
         self.decision_log.parent.mkdir(parents=True, exist_ok=True)
+        if self.decision_log.exists() and self.decision_log.stat().st_size >= 5 * 1024 * 1024:
+            backup = self.decision_log.with_name(self.decision_log.name + ".1")
+            if backup.exists():
+                backup.unlink()
+            self.decision_log.replace(backup)
         with self.decision_log.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
             handle.flush()
