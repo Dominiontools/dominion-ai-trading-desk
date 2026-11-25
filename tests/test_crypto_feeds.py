@@ -94,7 +94,7 @@ def test_batch_snapshot_fetches_all_requested_pairs_with_one_request_per_exchang
     assert len(calls) == 3
     assert len(quotes) == 6
     assert {quote.symbol for quote in quotes} == {"BTCUSDT", "ETHUSDT"}
-    assert {quote.exchange for quote in quotes} == {"Binance", "Bitget", "HTX"}
+    assert {quote.exchange for quote in quotes} == {"Binance", "Bitget", "HTX", "OKX"}
 
 
 def test_okx_rejects_api_error():
