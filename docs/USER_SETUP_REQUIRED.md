@@ -33,7 +33,7 @@ Saving credentials and reading the account does not enable order execution. The 
 
 ## 4. Exchange execution costs
 
-- Supply or verify the actual account-tier taker fees for Binance, Bitget and HTX.
+- Supply or verify the actual account-tier taker fees for Binance, Bitget, HTX and OKX. OKX public market data does not require an API key; its fee value is still required before its quotes can contribute to fee-adjusted arbitrage comparisons.
 - Unknown fees keep cross-exchange arbitrage execution blocked. Do not use guessed fees to claim net profitability.
 
 ## 5. Final two-account Netlify connection
