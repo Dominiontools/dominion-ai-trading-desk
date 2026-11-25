@@ -250,3 +250,55 @@ def test_gmgn_security_evidence_is_used_by_rug_agent_for_solana_tokens(tmp_path,
         assert status["orders_enabled"] is False
     finally:
         service.stop_embedded()
+
+
+
+def test_embedded_service_exposes_only_safe_binance_recovery_summary(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
+    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
+    for name in ("DOMINION_FEE_BINANCE_TAKER_BPS", "DOMINION_FEE_BITGET_TAKER_BPS",
+                 "DOMINION_FEE_HTX_TAKER_BPS", "DOMINION_FEE_OKX_TAKER_BPS"):
+        monkeypatch.delenv(name, raising=False)
+
+    recovery = json.dumps({
+        "status": "RECONCILIATION_REQUIRED", "halted": True,
+        "reconciled": 2, "unresolved": [{"order_list_id": "secret-order-id"}],
+        "operator_action_required": True, "orders_enabled": False,
+        "api_secret": "must-not-leak",
+    })
+    started = service.start_embedded(str(tmp_path), port=0,
+                                     binance_recovery_json=recovery)
+    try:
+        with urlopen(f"http://127.0.0.1:{started['port']}/api/crypto/status", timeout=2) as response:
+            status = json.loads(response.read())
+        recovery_status = status["binance_testnet_recovery"]
+        assert recovery_status == {
+            "status": "RECONCILIATION_REQUIRED", "halted": True,
+            "reconciled": 2, "unresolved_count": 1,
+            "operator_action_required": True, "orders_enabled": False,
+            "environment": "BINANCE_SPOT_TESTNET",
+        }
+        assert "secret-order-id" not in json.dumps(status)
+        assert "must-not-leak" not in json.dumps(status)
+        assert status["orders_enabled"] is False
+    finally:
+        service.stop_embedded()
+
+
+def test_invalid_binance_recovery_payload_is_reported_as_halted(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
+    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
+    started = service.start_embedded(str(tmp_path), port=0,
+                                     binance_recovery_json="{not-json")
+    try:
+        with urlopen(f"http://127.0.0.1:{started['port']}/api/crypto/status", timeout=2) as response:
+            status = json.loads(response.read())
+        assert status["binance_testnet_recovery"]["status"] == "RECOVERY_STATUS_INVALID"
+        assert status["binance_testnet_recovery"]["halted"] is True
+        assert status["binance_testnet_recovery"]["operator_action_required"] is True
+    finally:
+        service.stop_embedded()
