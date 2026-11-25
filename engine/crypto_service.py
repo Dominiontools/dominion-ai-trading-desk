@@ -110,7 +110,14 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         "arbitrage_symbols": list(arbitrage_symbols),
         "exchanges": ["Binance", "Bitget", "HTX"],
         "poll_interval_seconds": interval,
+        "market_data_mode": "PUBLIC_REST_SNAPSHOT_LOCAL_RECEIPT_TIME",
+        "market_data_note": "BTC cross-exchange scan targets a one-second cycle; REST response time and venue rate limits can make actual cycles slower.",
         "fee_configuration": "complete" if len(fees) == 3 else "missing",
+        "arbitrage_scanner": {
+            "status": "STARTING", "symbol": arbitrage_symbols[0],
+            "mode": "PAPER_ONLY", "orders_enabled": False,
+            "detail": "Waiting for public Binance, Bitget and HTX quote snapshots and verified fee settings.",
+        },
         "last_cycle_at": None,
         "last_error": None,
         "strategy_engine": {"status": "STARTING", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "score_threshold": score_threshold, "detail": "Waiting for completed execution/context candles and a fresh Binance quote."},
@@ -136,7 +143,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
         while not stop_event.is_set():
             try:
                 discovered = discovery_feed.discover(limit=8)
-                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume."}
+                state["agents"]["SCANNER"] = {"status":"CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS", "detail":f"DEX Screener connected; {len(discovered)} recent token pools enriched with price/liquidity/volume. The independent BTC cross-exchange REST scan targets a one-second cycle."}
                 whale_trades = []
                 whale_errors = 0
                 for token in discovered[:5]:
@@ -218,7 +225,19 @@ def _runtime_config(data_dir: str | Path, port: int | None = None):
                 if stop_event.is_set():
                     break
                 try:
-                    monitor.poll_once(symbol)
+                    scan = monitor.poll_once(symbol)
+                    state["arbitrage_scanner"] = {
+                        "status": scan.get("status", "UNKNOWN"),
+                        "reason": scan.get("reason"),
+                        "symbol": symbol,
+                        "quotes": scan.get("quotes", []),
+                        "opportunities": scan.get("opportunities", []),
+                        "available_exchanges": scan.get("available_exchanges", []),
+                        "collection_duration_ms": scan.get("collection_duration_ms"),
+                        "last_cycle_at": scan.get("recorded_at"),
+                        "mode": "PAPER_ONLY",
+                        "orders_enabled": False,
+                    }
                     state["last_error"] = None
                 except Exception as exc:
                     state["last_error"] = type(exc).__name__
