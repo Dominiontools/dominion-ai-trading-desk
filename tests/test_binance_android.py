@@ -90,3 +90,57 @@ def test_restart_recovery_without_credentials_stays_blocked():
     assert result["status"] == "SKIPPED"
     assert result["halted"] is True
     assert result["orders_enabled"] is False
+
+
+
+def test_android_risk_snapshot_returns_only_verified_read_only_context(monkeypatch, tmp_path):
+    class RiskClient:
+        def __init__(self, api_key, api_secret, *, allow_orders):
+            assert api_key == "test-key"
+            assert api_secret == "test-secret"
+            assert allow_orders is False
+
+        def account(self):
+            return {
+                "canTrade": True,
+                "balances": [
+                    {"asset": "USDT", "free": "100.00", "locked": "5.00"},
+                ],
+            }
+
+    monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", RiskClient)
+    result = json.loads(binance_android.account_risk_snapshot(
+        "test-key", "test-secret",
+        str(tmp_path / "binance-lifecycle.json"),
+        str(tmp_path / "binance-daily-loss.jsonl"),
+    ))
+    assert result["status"] == "NO_JOURNALED_ORDERS"
+    assert result["halted"] is False
+    assert result["orders_enabled"] is False
+    assert result["risk_context"] == {
+        "verified": True, "quote_asset": "USDT",
+        "equity_quote": "105.00", "available_quote": "100.00",
+        "daily_loss_quote": "0", "open_positions": 0,
+        "open_order_lists": 0, "status": "VERIFIED",
+    }
+    assert "test-secret" not in json.dumps(result)
+
+
+def test_android_risk_snapshot_blocks_when_account_lacks_trade_permission(monkeypatch, tmp_path):
+    class ReadOnlyClient:
+        def __init__(self, api_key, api_secret, *, allow_orders):
+            assert allow_orders is False
+
+        def account(self):
+            return {"canTrade": False, "balances": []}
+
+    monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", ReadOnlyClient)
+    result = json.loads(binance_android.account_risk_snapshot(
+        "test-key", "test-secret",
+        str(tmp_path / "binance-lifecycle.json"),
+        str(tmp_path / "binance-daily-loss.jsonl"),
+    ))
+    assert result["status"] == "RISK_CONTEXT_BLOCKED"
+    assert result["halted"] is True
+    assert result["risk_context"]["verified"] is False
+    assert result["orders_enabled"] is False
