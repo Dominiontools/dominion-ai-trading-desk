@@ -202,39 +202,35 @@ class BinanceProtectedLifecycle:
                 raise
 
     def reconcile_existing(self, *, symbol: str, list_client_order_id: str) -> dict[str, Any]:
-        """Refresh an existing order list; never submit a replacement order."""
+        """Refresh one order but preserve the aggregate state of every journaled order."""
         with self._lock:
-            if not list_client_order_id or len(list_client_order_id) > 20:
-                raise ValueError("A valid order-list ID is required.")
-            reconcile = getattr(self._client, "reconcile_protected_buy_otoco", None)
-            if not callable(reconcile):
+            if self._journal_invalid:
                 self._halted = True
-                self._persist_state()
-                raise RuntimeError("Client cannot reconcile protected order-list legs.")
-            state = reconcile(symbol=symbol, list_client_order_id=list_client_order_id)
-            if not isinstance(state, dict):
+                return self.reconcile_after_restart()
+            normalized_symbol = symbol.strip().upper()
+            if (not normalized_symbol or not list_client_order_id
+                    or len(list_client_order_id) > 20):
+                raise ValueError("A valid symbol and order-list ID are required.")
+            existing_symbol = self._submitted_symbols.get(list_client_order_id)
+            if existing_symbol and existing_symbol != normalized_symbol:
                 self._halted = True
-                self._persist_state()
-                raise RuntimeError("Exchange reconciliation returned an invalid response.")
-            protected = (
-                state.get("state") == "PROTECTED"
-                and state.get("protected") is True
-                and state.get("action_required") is False
-            )
-            result = {
-                "status": "PROTECTED" if protected else "PROTECTION_UNCONFIRMED",
-                "protected": protected,
-                "halted": not protected,
-                "order_list_id": list_client_order_id,
-                "exchange_state": state,
-                "operator_action_required": not protected,
-            }
-            self._halted = not protected
-            self._last_result = result
+                raise PermissionError("Order-list ID is already journaled to a different symbol.")
             self._submitted_ids.add(list_client_order_id)
-            self._submitted_symbols[list_client_order_id] = symbol.strip().upper()
+            self._submitted_symbols[list_client_order_id] = normalized_symbol
             self._persist_state()
-            return dict(result)
+            aggregate = self.reconcile_after_restart()
+            matching = next(
+                (item for item in aggregate.get("orders", [])
+                 if item.get("order_list_id") == list_client_order_id),
+                None,
+            )
+            result = dict(aggregate)
+            result["order_list_id"] = list_client_order_id
+            result["protected"] = bool(
+                matching and matching.get("state") == "PROTECTED"
+                and matching.get("safe") is True
+            )
+            return result
 
     def reconcile_after_restart(self) -> dict[str, Any]:
         """Reconcile every journaled order; never submit or silently clear unknown state."""
@@ -269,7 +265,13 @@ class BinanceProtectedLifecycle:
                     unresolved.append({"order_list_id": order_id,
                                        "reason": "SYMBOL_MISSING_FROM_LEGACY_JOURNAL"})
                     continue
-                state = reconcile(symbol=symbol, list_client_order_id=order_id)
+                try:
+                    state = reconcile(symbol=symbol, list_client_order_id=order_id)
+                except Exception as exc:
+                    unresolved.append({"order_list_id": order_id,
+                                       "reason": "EXCHANGE_QUERY_FAILED",
+                                       "error_type": type(exc).__name__})
+                    continue
                 if not isinstance(state, dict):
                     unresolved.append({"order_list_id": order_id,
                                        "reason": "INVALID_EXCHANGE_RECONCILIATION"})
