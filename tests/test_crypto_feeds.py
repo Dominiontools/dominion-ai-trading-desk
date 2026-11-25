@@ -31,6 +31,27 @@ def test_fetches_four_public_spot_quotes_without_credentials():
     assert [(q.bid, q.ask) for q in quotes] == [(100, 101), (99, 100), (98, 99), (97, 98)]
 
 
+
+def test_bitget_uses_current_public_v3_spot_ticker_without_authentication():
+    calls = []
+
+    def fetch(url, timeout):
+        calls.append(url)
+        return {"code": "00000", "data": [{
+            "category": "SPOT", "symbol": "BTCUSDT",
+            "bid1Price": "100", "ask1Price": "101",
+            "bid1Size": "2", "ask1Size": "3", "ts": STAMP,
+        }]}
+
+    quote = PublicCryptoFeeds(fetch_json=fetch).bitget("BTCUSDT")
+    assert quote.exchange == "Bitget"
+    assert (quote.bid, quote.ask) == (100, 101)
+    assert len(calls) == 1
+    assert "api.bitget.com/api/v3/market/tickers" in calls[0]
+    assert "category=SPOT" in calls[0]
+    assert "symbol=BTCUSDT" in calls[0]
+
+
 def test_bitget_rejects_api_error():
     def bad(url, timeout):
         return {"code": "40000", "data": []}
