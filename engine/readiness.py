@@ -55,8 +55,8 @@ def build_readiness(
             "title": "Connect exchange testnet accounts and verify test orders",
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
-                      else "BINANCE_RISK_GATE_READY_PROTECTION_PENDING",
-            "detail": "A Binance Spot Testnet adapter, default-deny 0.5%/2% risk planner and protected OTOCO request path are built. The router submits only a FOK BUY entry with server-held take-profit and stop-loss legs, behind both explicit testnet gates. A separate lifecycle classifier refuses to mark protection active until the entry is FILLED and both exit orders are confirmed NEW. The protected-order lifecycle is not yet wired into the phone service; verified exchange filters/fees, automatic reconciliation, emergency handling and an authorized end-to-end testnet lifecycle test remain outstanding. Android Keystore credential storage and read-only Testnet account checks are implemented. Bitget and HTX order adapters are not built.",
+                      else "BINANCE_ROUTER_AND_RISK_CONTEXT_READY_TESTNET_EXECUTION_PENDING",
+            "detail": "A Binance Spot Testnet BUY-only signal router, default-deny 0.5%/2% risk planner, verified USDT account-context provider, durable UTC daily-loss ledger, and protected OTOCO request path are built and unit-tested. The router requires a fresh Binance quote, verified symbol filters and taker fees, confirmed account trading permission, reconciled open-position state, and a verified daily-loss ledger. Confirmed stop-loss exits are conservatively charged at planned risk and deduplicated across restarts. Android startup now performs a read-only account/risk snapshot. The strategy router is not yet connected to the Android strategy loop; order permission remains disabled by default, and an authorized end-to-end Testnet order/exit/restart test is still outstanding. Bitget and HTX order adapters are not built.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
         },
         {
