@@ -184,11 +184,7 @@ export class CTraderDemoSession {
     }
     if (payloadType === 2132) {
       const error = new Error(String(payload.description ?? payload.errorCode ?? "CTRADER_ORDER_ERROR"));
-      if (pending) this.rejectPending(clientMsgId, pending, error);
-      for (const waiter of [...this.eventWaiters]) {
-        waiter.reject(error);
-        this.removeWaiter(waiter);
-      }
+      this.failAll(error);
       return;
     }
 
@@ -376,12 +372,17 @@ export class CTraderDemoSession {
 
   async spot(symbolId: number): Promise<JsonRecord> {
     const event = this.waitForEvent(2131, (payload) => Number(payload.symbolId) === symbolId);
-    await this.request(2127, 2128, {
-      ctidTraderAccountId: this.requireAccount(),
-      symbolId: [symbolId],
-      subscribeToSpotTimestamp: true,
-    });
-    return await event;
+    try {
+      await this.request(2127, 2128, {
+        ctidTraderAccountId: this.requireAccount(),
+        symbolId: [symbolId],
+        subscribeToSpotTimestamp: true,
+      });
+      return await event;
+    } catch (error) {
+      void event.catch(() => undefined);
+      throw error;
+    }
   }
 
   async expectedMargin(symbolId: number, volume: number): Promise<JsonRecord[]> {
@@ -485,7 +486,7 @@ export function trendbarsToCandles(
   bars: JsonRecord[],
   timeframeSeconds: number,
   now = Date.now(),
-): Array<{ symbol: string; market: string; timeframe: string; timestamp: Date; open: number; high: number; low: number; close: number; volume: number }> {
+): Array<{ symbol: string; market: "FOREX" | "GOLD"; timeframe: string; timestamp: Date; open: number; high: number; low: number; close: number; volume: number }> {
   const result = bars.map((bar) => {
     const low = Number(bar.low) / 100000;
     const open = (Number(bar.low) + Number(bar.deltaOpen ?? 0)) / 100000;
@@ -496,7 +497,9 @@ export function trendbarsToCandles(
       timestamp: new Date(Number(bar.utcTimestampInMinutes) * 60000),
       open, high, low, close, volume: Number(bar.volume ?? 0),
     };
-  }).filter((bar) => Number.isFinite(bar.close) &&
+  }).filter((bar) => Number.isFinite(bar.open) && Number.isFinite(bar.high) &&
+    Number.isFinite(bar.low) && Number.isFinite(bar.close) &&
+    Number.isFinite(bar.timestamp.getTime()) &&
     bar.timestamp.getTime() + timeframeSeconds * 1000 <= now);
   return result.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
