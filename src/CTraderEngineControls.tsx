@@ -8,6 +8,8 @@ type EngineStatus = {
   profile?: string;
   scoreThreshold?: number;
   useSessionFilter?: boolean;
+  riskPerTradePct?: number;
+  dailyLossLimitPct?: number;
   symbols?: string[];
   tradingAuthorized?: boolean;
   tradingAccountCount?: number;
@@ -29,6 +31,8 @@ export default function CTraderEngineControls() {
   const [scoreThreshold, setScoreThreshold] = useState(6);
   const [symbolsInput, setSymbolsInput] = useState("XAUUSD, EURUSD, GBPUSD");
   const [useSessionFilter, setUseSessionFilter] = useState(true);
+  const [riskPerTradePct, setRiskPerTradePct] = useState(0.5);
+  const [dailyLossLimitPct, setDailyLossLimitPct] = useState(2);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,6 +45,8 @@ export default function CTraderEngineControls() {
         setScoreThreshold(data.scoreThreshold ?? 6);
         setSymbolsInput((data.symbols || ["XAUUSD", "EURUSD", "GBPUSD"]).join(", "));
         setUseSessionFilter(data.useSessionFilter !== false);
+        setRiskPerTradePct(data.riskPerTradePct ?? 0.5);
+        setDailyLossLimitPct(data.dailyLossLimitPct ?? 2);
       }
     } catch {
       setStatus(null);
@@ -74,6 +80,8 @@ export default function CTraderEngineControls() {
           profile,
           scoreThreshold,
           useSessionFilter,
+          riskPerTradePct,
+          dailyLossLimitPct,
           symbols,
         }),
       });
@@ -119,6 +127,7 @@ export default function CTraderEngineControls() {
       <div><small>STRATEGY PROFILE</small><b>{profile}</b></div>
       <div><small>CONFLUENCE SCORE</small><b>{scoreThreshold} / 15</b></div>
       <div><small>WATCHLIST</small><b>{symbolsInput || "Not configured"}</b></div>
+      <div><small>RISK / DAILY STOP</small><b>{riskPerTradePct}% / {dailyLossLimitPct}%</b></div>
       <div><small>EXECUTION MODE</small><b>Demo only · Live locked</b></div>
     </div>
 
@@ -133,8 +142,18 @@ export default function CTraderEngineControls() {
       </label>
       <label className="ctrader-config-field">
         <span>Minimum confluence score</span>
-        <input type="number" min={1} max={15} value={scoreThreshold}
+        <input type="number" min={1} max={15} step={1} value={scoreThreshold}
           onChange={(event) => { setScoreThreshold(Number(event.target.value)); setDirty(true); }}/>
+      </label>
+      <label className="ctrader-config-field">
+        <span>Risk per trade · maximum 0.5%</span>
+        <input type="number" min={0.05} max={0.5} step={0.05} value={riskPerTradePct}
+          onChange={(event) => { setRiskPerTradePct(Number(event.target.value)); setDirty(true); }}/>
+      </label>
+      <label className="ctrader-config-field">
+        <span>Daily loss stop · maximum 2%</span>
+        <input type="number" min={0.5} max={2} step={0.25} value={dailyLossLimitPct}
+          onChange={(event) => { setDailyLossLimitPct(Number(event.target.value)); setDirty(true); }}/>
       </label>
       <label className="ctrader-config-field ctrader-symbol-field">
         <span>Broker symbols · comma separated</span>
