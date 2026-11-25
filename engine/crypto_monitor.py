@@ -206,6 +206,15 @@ class CryptoPaperMonitor:
                 venue: sum(quote.exchange == venue for quote in quotes)
                 for venue in sorted(exchanges_seen)
             },
+            "quotes_preview": [
+                {
+                    "exchange": quote.exchange, "symbol": quote.symbol,
+                    "bid": quote.bid, "ask": quote.ask,
+                    "bid_size": quote.bid_size, "ask_size": quote.ask_size,
+                    "timestamp": quote.timestamp.astimezone(timezone.utc).isoformat(),
+                }
+                for quote in quotes[:12]
+            ],
         })
         if venue_errors:
             record["error"] = " | ".join(
