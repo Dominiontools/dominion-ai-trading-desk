@@ -148,6 +148,8 @@ def test_multi_market_scan_compares_multiple_pairs_in_one_batch(tmp_path):
     assert result["symbols_with_two_venues"] == 2
     assert result["orders_enabled"] is False
     assert result["opportunities_count"] >= 2
+    assert len(result["quotes_preview"]) == 4
+    assert {item["symbol"] for item in result["quotes_preview"]} == {"BTCUSDT", "ETHUSDT"}
     assert len(read_records(log)) == 1
 
 
