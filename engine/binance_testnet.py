@@ -96,6 +96,13 @@ class BinanceSpotTestnetClient:
         """Read the Testnet account only."""
         return self._signed("GET", "/api/v3/account", {})
 
+    def account_commission(self, symbol: str) -> dict:
+        """Read the authenticated per-symbol commission schedule from Testnet."""
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        return self._signed("GET", "/api/v3/account/commission", {"symbol": pair})
+
     def place_limit_order(
         self,
         *,
