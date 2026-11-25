@@ -164,13 +164,18 @@ class ConfluencePaperStrategy:
             return {"status": "BLOCKED", "reason": "CONTEXT_SYMBOL_MISMATCH", "mode": "PAPER_ONLY"}
         if quote.symbol.replace("/", "").replace("-", "").upper() != symbol:
             return {"status": "BLOCKED", "reason": "QUOTE_SYMBOL_MISMATCH", "mode": "PAPER_ONLY"}
+        try:
+            age = quote_age_seconds(quote, now=current)
+        except ValueError:
+            return {"status": "BLOCKED", "reason": "INVALID_QUOTE_TIMESTAMP", "mode": "PAPER_ONLY"}
+        if age > 2.0:
+            return {"status": "BLOCKED", "reason": "STALE_QUOTE_DATA", "mode": "PAPER_ONLY"}
         if desk.position is not None:
             if desk.position.symbol != symbol:
                 return {"status": "WAITING", "reason": "ONE_POSITION_LIMIT", "mode": "PAPER_ONLY"}
             exit_price = quote.bid if desk.position.side == "BUY" else quote.ask
             return desk.update_price(symbol, exit_price)
 
-        age = quote_age_seconds(quote, now=current)
         for series, timeframe, label in (
             (execution_candles, execution_tf, "EXECUTION"),
             (context_candles, context_tf, "CONTEXT"),
