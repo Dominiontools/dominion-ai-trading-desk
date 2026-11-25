@@ -392,13 +392,16 @@ export class CTraderDemoSession {
     }
   }
 
-  async expectedMargin(symbolId: number, volume: number): Promise<JsonRecord[]> {
+  async expectedMargin(symbolId: number, volume: number): Promise<{ margins: JsonRecord[]; moneyDigits: number }> {
     const result = await this.request(2139, 2140, {
       ctidTraderAccountId: this.requireAccount(),
       symbolId,
       volume: [volume],
     });
-    return Array.isArray(result.margin) ? result.margin as JsonRecord[] : [];
+    return {
+      margins: Array.isArray(result.margin) ? result.margin as JsonRecord[] : [],
+      moneyDigits: Number(result.moneyDigits ?? 0),
+    };
   }
 
   async newMarketRangeOrder(args: {
