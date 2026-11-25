@@ -46,6 +46,7 @@ class BinanceProtectedLifecycle:
         self._journal_path = Path(journal_path) if journal_path is not None else None
         self._submitted_ids: set[str] = set()
         self._submitted_symbols: dict[str, str] = {}
+        self._journal_invalid = False
         self._halted = False
         self._last_result: dict[str, Any] | None = None
         self._restore_state()
@@ -74,6 +75,7 @@ class BinanceProtectedLifecycle:
             self._last_result = last_result
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             # Corrupt or unreadable state must never permit a fresh order.
+            self._journal_invalid = True
             self._halted = True
             self._last_result = {
                 "status": "LIFECYCLE_JOURNAL_INVALID",
@@ -237,6 +239,13 @@ class BinanceProtectedLifecycle:
     def reconcile_after_restart(self) -> dict[str, Any]:
         """Reconcile every journaled order; never submit or silently clear unknown state."""
         with self._lock:
+            if self._journal_invalid:
+                self._halted = True
+                result = {"status": "LIFECYCLE_JOURNAL_INVALID", "halted": True,
+                          "reconciled": 0, "unresolved": [{"reason": "JOURNAL_CORRUPT"}],
+                          "operator_action_required": True}
+                self._last_result = result
+                return dict(result)
             if not self._submitted_ids:
                 self._halted = False
                 result = {"status": "NO_JOURNALED_ORDERS", "halted": False,
