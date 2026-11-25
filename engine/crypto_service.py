@@ -271,6 +271,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
             snapshot["integration_readiness"] = build_readiness(
                 phone_engine_running=state.get("engine") == "running",
                 verified_fee_exchanges=tuple(fees.keys()),
+                gmgn_read_only_status=str(state.get("gmgn_feed", {}).get("status", "NOT_CONFIGURED")),
             )
             return snapshot
 
