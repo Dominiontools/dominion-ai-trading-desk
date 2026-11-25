@@ -286,6 +286,7 @@ export default async (request: Request, context: { deploy: { context: string } }
       access: authorizationMode,
       permissionScope: accountCheck.permissionScope ?? null,
       demoAccountCount: accountCheck.accounts.length,
+      authorizedAccountId: accountCheck.authorizedAccountId ?? null,
       verifiedAt: new Date().toISOString(),
     });
 
