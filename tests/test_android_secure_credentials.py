@@ -51,3 +51,9 @@ def test_android_service_passes_restart_recovery_into_safe_status_provider():
 def test_android_python_bundle_includes_verified_context_signal_router():
     script = Path("scripts/configure-android-local-api.py").read_text()
     assert '"binance_signal_router.py"' in script
+
+
+def test_android_python_bundle_includes_daily_loss_and_verified_risk_context():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    assert '"binance_daily_loss.py"' in script
+    assert '"binance_risk_context.py"' in script
