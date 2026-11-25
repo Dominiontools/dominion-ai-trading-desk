@@ -316,3 +316,95 @@ def test_invalid_binance_recovery_payload_is_reported_as_halted(tmp_path, monkey
         assert status["binance_testnet_recovery"]["operator_action_required"] is True
     finally:
         service.stop_embedded()
+
+
+
+def test_runtime_keeps_testnet_execution_off_without_explicit_enablement(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
+    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
+    result = service._runtime_config(str(tmp_path), port=0)
+    stop_event, server, _monitor, _agents, _strategy, state, *_ = result
+    try:
+        assert state["mode"] == "PAPER_ONLY"
+        assert state["orders_enabled"] is False
+        assert state["binance_testnet_execution"]["enabled"] is False
+        assert service.os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] == "NO"
+    finally:
+        stop_event.set()
+        server.server_close()
+
+
+def test_runtime_enables_only_the_explicit_binance_testnet_route(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
+    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
+    monkeypatch.setattr(service, "DexScreenerDiscovery", EmptyDiscovery)
+    monkeypatch.setattr(service, "GeckoTerminalWhaleFeed", EmptyWhaleFeed)
+    monkeypatch.setattr(service, "GoPlusSecurityFeed", EmptySecurityFeed)
+    monkeypatch.setattr(service, "PublicNewsRSS", EmptyNewsFeed)
+
+    class FakeTestnetClient:
+        def __init__(self, api_key, api_secret, *, allow_orders):
+            assert api_key == "demo-key"
+            assert api_secret == "demo-secret"
+            assert allow_orders is True
+
+    class FakeLedger:
+        def __init__(self, path):
+            self.path = path
+
+    class FakeLifecycle:
+        def __init__(self, gate, client, **kwargs):
+            assert isinstance(client, FakeTestnetClient)
+
+    class FakeRiskProvider:
+        def __init__(self, client, lifecycle, ledger, *, quote_asset):
+            assert quote_asset == "USDT"
+
+    class FakeRouter:
+        def __init__(self, client, lifecycle, gate):
+            assert isinstance(client, FakeTestnetClient)
+
+    monkeypatch.setattr(service, "BinanceSpotTestnetClient", FakeTestnetClient)
+    monkeypatch.setattr(service, "BinanceDailyLossLedger", FakeLedger)
+    monkeypatch.setattr(service, "BinanceProtectedLifecycle", FakeLifecycle)
+    monkeypatch.setattr(service, "BinanceRiskContextProvider", FakeRiskProvider)
+    monkeypatch.setattr(service, "BinanceTestnetSignalRouter", FakeRouter)
+
+    result = service._runtime_config(
+        str(tmp_path), port=0, binance_api_key="demo-key",
+        binance_api_secret="demo-secret", binance_testnet_orders_enabled=True,
+    )
+    stop_event, server, _monitor, _agents, _strategy, state, *_ = result
+    try:
+        assert state["mode"] == "BINANCE_SPOT_TESTNET"
+        assert state["orders_enabled"] is True
+        assert state["binance_testnet_execution"]["enabled"] is True
+        assert state["binance_testnet_execution"]["status"] == "ENABLED_TESTNET"
+        assert service.os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] == "YES"
+    finally:
+        stop_event.set()
+        server.server_close()
+        service.os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] = "NO"
+
+
+def test_runtime_refuses_testnet_mode_when_credentials_are_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
+    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
+    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
+    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
+    result = service._runtime_config(
+        str(tmp_path), port=0, binance_testnet_orders_enabled=True,
+    )
+    stop_event, server, _monitor, _agents, _strategy, state, *_ = result
+    try:
+        assert state["mode"] == "PAPER_ONLY"
+        assert state["orders_enabled"] is False
+        assert state["binance_testnet_execution"]["enabled"] is False
+        assert service.os.environ["DOMINION_ENABLE_BINANCE_TESTNET_ORDERS"] == "NO"
+    finally:
+        stop_event.set()
+        server.server_close()
