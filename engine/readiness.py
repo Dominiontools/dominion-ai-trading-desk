@@ -74,9 +74,9 @@ def build_readiness(
         {
             "id": "fees",
             "title": "Configure verified exchange fees and execution costs",
-            "status": "VERIFIED" if {"Binance", "Bitget", "HTX"}.issubset(set(verified_fee_exchanges))
+            "status": "VERIFIED" if {"Binance", "Bitget", "HTX", "OKX"}.issubset(set(verified_fee_exchanges))
                       else "INCOMPLETE",
-            "detail": "Use the actual account tier, maker/taker fees and withdrawal/network costs where relevant. Unknown fees block profitability claims.",
+            "detail": "Use the actual account-tier maker/taker fees and withdrawal/network costs for Binance, Bitget, HTX and OKX where relevant. Unknown fees block profitability claims.",
             "owner": "USER_CONFIGURATION",
         },
         {
