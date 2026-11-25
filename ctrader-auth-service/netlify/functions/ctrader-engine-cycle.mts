@@ -385,10 +385,11 @@ async function executeCycle(): Promise<RecordData> {
     const point = 10 ** -digits;
     const slippagePrice = entryPrice * MAX_SLIPPAGE_BPS / 10000;
     const riskDistanceForSizing = distance + slippagePrice;
-    const targetDistance = 2 * distance + 3 * slippagePrice;
+    const target2Distance = 2 * distance + 3 * slippagePrice;
     const target3Distance = 3 * distance + 4 * slippagePrice;
     const stopLoss = Number((best.setup.side === "BUY" ? entryPrice - distance : entryPrice + distance).toFixed(digits));
-    const takeProfit = Number((best.setup.side === "BUY" ? entryPrice + targetDistance : entryPrice - targetDistance).toFixed(digits));
+    const target2R = Number((best.setup.side === "BUY" ? entryPrice + target2Distance : entryPrice - target2Distance).toFixed(digits));
+    const takeProfit = Number((best.setup.side === "BUY" ? entryPrice + target3Distance : entryPrice - target3Distance).toFixed(digits));
     const minStopDistance = number(best.symbol.slDistance ?? 0) * point;
     const minTakeDistance = number(best.symbol.tpDistance ?? 0) * point;
     if (Math.abs(entryPrice - stopLoss) < minStopDistance ||
@@ -427,7 +428,8 @@ async function executeCycle(): Promise<RecordData> {
       entryPrice,
       stopLoss,
       takeProfit,
-      target3R: best.setup.side === "BUY" ? entryPrice + target3Distance : entryPrice - target3Distance,
+      target2R,
+      target3R: takeProfit,
       riskAmount: sized.riskAmount,
       estimatedRoundTripCommission: sized.commission,
       riskPct,
@@ -481,7 +483,8 @@ async function executeCycle(): Promise<RecordData> {
             positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
             side: best.setup.side, entryPrice: number(partialPosition.price ?? entryPrice),
             initialRiskDistance: riskDistanceForSizing, initialStopLoss: stopLoss,
-            target3R: best.setup.side === "BUY" ? entryPrice + target3Distance : entryPrice - target3Distance,
+            target2R, target3R: takeProfit, partialTaken: false, breakEvenSet: false,
+            minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
             openedAt: new Date().toISOString(), clientOrderId,
           });
           await saveStatus(store, partialStatus);
@@ -541,7 +544,12 @@ async function executeCycle(): Promise<RecordData> {
       entryPrice: number(position.price ?? entryPrice),
       initialRiskDistance: riskDistanceForSizing,
       initialStopLoss: stopLoss,
+      target2R: preview.target2R,
       target3R: preview.target3R,
+      partialTaken: false,
+      breakEvenSet: false,
+      minVolume: number(best.symbol.minVolume),
+      stepVolume: number(best.symbol.stepVolume),
       openedAt: new Date().toISOString(),
       clientOrderId,
     });
