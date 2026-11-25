@@ -39,6 +39,8 @@ export default async (request: Request) => {
       profile: String(engineConfig?.profile ?? "intraday"),
       scoreThreshold: Number(engineConfig?.scoreThreshold ?? 6),
       useSessionFilter: engineConfig?.useSessionFilter !== false,
+      riskPerTradePct: Number(engineConfig?.riskPerTradePct ?? 0.5),
+      dailyLossLimitPct: Number(engineConfig?.dailyLossLimitPct ?? 2),
       symbols: Array.isArray(engineConfig?.symbols) ? engineConfig?.symbols : ["XAUUSD", "EURUSD", "GBPUSD"],
       tradingAuthorized: tradingStatus?.connected === true &&
         tradingStatus?.environment === "demo" &&
