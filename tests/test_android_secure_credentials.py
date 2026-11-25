@@ -66,3 +66,12 @@ def test_android_python_bundle_includes_daily_loss_and_verified_risk_context():
     script = Path("scripts/configure-android-local-api.py").read_text()
     assert '"binance_daily_loss.py"' in script
     assert '"binance_risk_context.py"' in script
+
+
+def test_android_default_recovery_json_has_valid_java_escaping():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    line = next(line for line in script.splitlines()
+                if "String binanceRecoveryJson" in line)
+    prefix = line.split("status")[0]
+    assert prefix.endswith("\\")
+    assert not prefix.endswith("\\\\")
