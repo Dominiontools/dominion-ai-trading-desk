@@ -18,6 +18,7 @@ from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
 from engine.gmgn_api import GMGNReadOnlyClient, summarize_security_evidence, extract_trenches_tokens
+from engine.gmgn_sniper import GMGNSniperAgent
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -179,6 +180,12 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
         "trenches_preview": None,
         "trending_preview": None,
         "tokens": [],
+        "security_checks": [],
+    }
+    state["gmgn_sniper"] = {
+        "status": "WAITING_FOR_GMGN_FEED", "candidate_count": 0,
+        "blocked_count": 0, "candidates": [], "blocked": [],
+        "execution_enabled": False,
     }
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
@@ -263,6 +270,21 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                                 "symbol": token.get("symbol"), "chain": gmgn_chain,
                                 "status": "GMGN_SECURITY_ERROR", "error": type(exc).__name__,
                             })
+                previous_security_checks = state.get("gmgn_feed", {}).get("security_checks", [])
+                security_by_address = {
+                    str(item.get("token_address", "")).lower(): item
+                    for item in previous_security_checks
+                    if isinstance(item, dict) and item.get("token_address")
+                } if isinstance(previous_security_checks, list) else {}
+                for item in gmgn_security_results:
+                    if item.get("assessment") and item.get("token_address"):
+                        security_by_address[str(item["token_address"]).lower()] = item
+                gmgn_security_checks = list(security_by_address.values())[-50:]
+                gmgn_tokens_for_sniper = state.get("gmgn_feed", {}).get("tokens", [])
+                state["gmgn_sniper"] = GMGNSniperAgent().rank(
+                    gmgn_tokens_for_sniper if isinstance(gmgn_tokens_for_sniper, list) else [],
+                    gmgn_security_checks,
+                )
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
                 checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
@@ -331,6 +353,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                                 "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000] if gmgn_security_results else previous_feed.get("security_preview"),
                                 "security_errors": gmgn_security_errors,
                                 "tokens": gmgn_tokens,
+                                "security_checks": gmgn_security_checks,
                             }
                         except Exception as exc:
                             error_text = str(exc)
@@ -357,6 +380,7 @@ def _runtime_config(data_dir: str | Path, port: int | None = None, gmgn_api_key:
                         state["gmgn_feed"]["last_checked_at"] = datetime.now(timezone.utc).isoformat()
                         state["gmgn_feed"]["security_preview"] = __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000]
                         state["gmgn_feed"]["security_errors"] = gmgn_security_errors
+                        state["gmgn_feed"]["security_checks"] = gmgn_security_checks
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
                 state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
