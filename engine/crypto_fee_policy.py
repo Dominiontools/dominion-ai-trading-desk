@@ -201,8 +201,10 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
 def load_fee_policy() -> tuple[dict[str, tuple[float, float]], dict]:
     """Return the latest public rates and any explicitly verified Binance override."""
     with _lock:
-        fees = dict(PUBLIC_SPOT_FEES_BPS)
-        fees.update(_cached_fees)
+        # Use only currently verified cache entries. Do not re-seed the static
+        # module baseline here: refresh_public_fee_policy removes entries once
+        # their seven-day verification window expires.
+        fees = dict(_cached_fees)
         sources = {key: dict(value) for key, value in _cached_meta.items()}
 
     personal_maker = _read_bps("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS")
