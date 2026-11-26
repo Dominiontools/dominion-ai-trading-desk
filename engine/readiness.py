@@ -13,6 +13,7 @@ def build_readiness(
     spotware_approved: bool = False,
     ctrader_demo_authorized: bool = False,
     ctrader_demo_orders_verified: bool = False,
+    ctrader_partial_close_verified: bool = False,
     crypto_testnet_authorized: bool = False,
     crypto_testnet_orders_verified: bool = False,
     binance_emergency_handling_verified: bool = False,
@@ -50,6 +51,13 @@ def build_readiness(
             "status": "VERIFIED" if ctrader_demo_orders_verified else "NOT_TESTED",
             "detail": "Must be tested against the authorized Pepperstone demo account; no live account or live orders are permitted in this stage.",
             "owner": "DEVELOPMENT_AND_DEMO_TEST",
+        },
+        {
+            "id": "ctrader_partial_close",
+            "title": "Verify broker-confirmed cTrader partial close and restart recovery",
+            "status": "VERIFIED" if ctrader_partial_close_verified else "NOT_TESTED",
+            "detail": "The 2R scale-out now persists its outstanding close target before submission, reconciles actual broker remaining volume, and resumes the exact outstanding target after worker restarts. Automated unit tests cover sizing and partial-fill classification; Pepperstone demo verification is still required before acceptance.",
+            "owner": "DEVELOPMENT_AND_CTRADER_DEMO_TEST",
         },
         {
             "id": "crypto_testnet",
