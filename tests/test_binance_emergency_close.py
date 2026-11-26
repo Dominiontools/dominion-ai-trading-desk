@@ -52,7 +52,7 @@ class FakeClient:
         self.calls.append(("market-sell", quantity, client_order_id))
         if self.market_response.get("status") == "FILLED":
             from decimal import Decimal
-            remaining = Decimal(self.balances[0]["free"]) - Decimal(quantity)
+            remaining = Decimal(self.balances[0]["free"]) - Decimal(self.market_response["executedQty"])
             self.balances[0]["free"] = format(max(remaining, Decimal("0")), "f")
         return dict(self.market_response)
 
