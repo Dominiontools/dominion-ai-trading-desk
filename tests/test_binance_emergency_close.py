@@ -159,3 +159,36 @@ def test_already_filled_exit_and_zero_balance_does_not_submit_duplicate_sell():
     assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
     assert result["sold_quantity"] == "0"
     assert not any(call[0] in {"cancel-list", "market-sell"} for call in client.calls)
+
+
+def test_partial_entry_is_canceled_and_only_confirmed_filled_balance_is_sold():
+    client = FakeClient()
+    client.orders["entryE"] = {"status": "PARTIALLY_FILLED", "executedQty": "0.0005"}
+    client.balances[0]["free"] = "0.0005"
+    client.market_response = {"status": "FILLED", "executedQty": "0.0005"}
+    original_cancel = client.cancel_filled_otoco_for_emergency
+
+    def cancel_partial(*, symbol, list_client_order_id):
+        original_cancel(symbol=symbol, list_client_order_id=list_client_order_id)
+        client.orders["entryE"] = {"status": "CANCELED", "executedQty": "0.0005"}
+
+    client.cancel_filled_otoco_for_emergency = cancel_partial
+    client.query_order_list = lambda **kwargs: {"listOrderStatus": "ALL_DONE"}
+    result = run(client)
+    assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
+    sell = next(call for call in client.calls if call[0] == "market-sell")
+    assert sell[1] == "0.0005"
+
+
+def test_partial_entry_without_all_done_confirmation_never_sells():
+    client = FakeClient()
+    client.orders["entryE"] = {"status": "PARTIALLY_FILLED", "executedQty": "0.0005"}
+
+    def cancel_partial(*, symbol, list_client_order_id):
+        client.orders["entryE"] = {"status": "CANCELED", "executedQty": "0.0005"}
+
+    client.cancel_filled_otoco_for_emergency = cancel_partial
+    client.query_order_list = lambda **kwargs: {"listOrderStatus": "EXECUTING"}
+    with pytest.raises(RuntimeError, match="not confirmed ALL_DONE"):
+        run(client)
+    assert not any(call[0] == "market-sell" for call in client.calls)
