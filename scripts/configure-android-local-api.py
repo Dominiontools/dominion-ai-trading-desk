@@ -98,7 +98,7 @@ def configure_python_sources() -> None:
                  "crypto_api.py", "crypto_service.py", "crypto_strategy.py",
                  "paper_workflow.py", "strategies.py", "confluence_strategy.py", "market_data.py",
                  "specialist_agents.py", "agent_feeds.py", "positions.py",
-                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_lifecycle.py", "binance_android.py", "binance_market_rules.py", "binance_signal_router.py", "binance_daily_loss.py", "binance_risk_context.py", "crypto_universe.py"):
+                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_lifecycle.py", "binance_emergency_close.py", "binance_android.py", "binance_market_rules.py", "binance_signal_router.py", "binance_daily_loss.py", "binance_risk_context.py", "crypto_universe.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
 
@@ -148,6 +148,7 @@ def configure_manifest() -> None:
 
 PLUGIN_JAVA = r'''package com.dominion.aitradingdesk;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSObject;
@@ -190,6 +191,55 @@ public class TradingEnginePlugin extends Plugin {
         result.put("running", TradingEngineService.isRunning());
         result.put("error", TradingEngineService.lastError());
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void requestBinanceEmergencyClose(PluginCall call) {
+        final String symbol = call.getString("symbol", "").trim().toUpperCase();
+        final String orderListId = call.getString("orderListId", "").trim();
+        if (!symbol.matches("[A-Z0-9]{5,20}") ||
+            !orderListId.matches("[A-Za-z0-9]{1,20}")) {
+            call.reject("A valid journaled Testnet position is required.");
+            return;
+        }
+        getActivity().runOnUiThread(() -> new AlertDialog.Builder(getActivity())
+            .setTitle("Emergency close · " + symbol)
+            .setMessage("Approve ONE emergency close for " + symbol +
+                "?\n\nBot order list: " + orderListId +
+                "\n\nIf still required by fresh Binance Testnet checks, the app may cancel this bot's protective exit orders and submit one market SELL for the remaining bot-held quantity. This is a simulated Testnet action. The engine will remain halted afterward. An uncertain submission will NOT be retried.")
+            .setNegativeButton("Cancel", (dialog, which) -> call.reject("Emergency close was not approved."))
+            .setPositiveButton("Approve one Testnet close", (dialog, which) -> {
+                new Thread(() -> {
+                    String[] credentials = null;
+                    try {
+                        CredentialVault vault = new CredentialVault(getContext());
+                        credentials = vault.loadForNativeUse();
+                        if (!com.chaquo.python.Python.isStarted()) {
+                            com.chaquo.python.Python.start(
+                                new com.chaquo.python.android.AndroidPlatform(getContext()));
+                        }
+                        String dataDirectory = getContext().getFilesDir().getAbsolutePath();
+                        String json = com.chaquo.python.Python.getInstance()
+                            .getModule("engine.binance_android")
+                            .callAttr("emergency_close_after_native_approval",
+                                credentials[0], credentials[1],
+                                dataDirectory + "/binance-lifecycle.json",
+                                dataDirectory + "/binance-daily-loss.jsonl",
+                                symbol, orderListId, true).toString();
+                        JSObject result = new JSObject(json);
+                        call.resolve(result);
+                    } catch (Exception error) {
+                        call.reject("Emergency close was blocked. Reconcile the Testnet position manually; do not retry.", error);
+                    } finally {
+                        if (credentials != null) {
+                            credentials[0] = null;
+                            credentials[1] = null;
+                        }
+                    }
+                }, "dominion-emergency-close").start();
+            })
+            .setCancelable(false)
+            .show());
     }
 }
 '''
