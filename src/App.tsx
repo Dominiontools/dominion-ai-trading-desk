@@ -119,6 +119,7 @@ function CryptoMonitorPanel() {
   const [testnetAutomationMessage, setTestnetAutomationMessage] = useState("Automated Testnet orders are OFF.");
   const [emergencyCloseBusy, setEmergencyCloseBusy] = useState(false);
   const [emergencyCloseMessage, setEmergencyCloseMessage] = useState("");
+  const [engineError, setEngineError] = useState("");
   const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
     Capacitor.isNativePlatform() ? "stopped" : "web"
   );
@@ -199,7 +200,8 @@ function CryptoMonitorPanel() {
     setEngineControl("starting");
     try {
       await TradingEngine.start();
-    } catch {
+    } catch (error) {
+      setEngineError(error instanceof Error ? error.message : String(error));
       setEngineControl("error");
     }
   }, [isNativeApp]);
@@ -246,6 +248,7 @@ function CryptoMonitorPanel() {
     if (isNativeApp) {
       try {
         const nativeStatus = await TradingEngine.status();
+        setEngineError(nativeStatus.error || "");
         setEngineControl(nativeStatus.running ? "running" : nativeStatus.error ? "error" : "stopped");
       } catch {
         setEngineControl("error");
@@ -385,6 +388,7 @@ function CryptoMonitorPanel() {
         <button className="engine-stop" onClick={() => void stopPhoneEngine()} disabled={!isNativeApp || engineControl === "stopped" || engineControl === "web"}>Stop</button>
       </div>
       <small className={"engine-control-state " + engineControl}>Phone service: {engineControl === "web" ? "Android app required" : engineControl}</small>
+      {engineError && <small className="engine-control-state error" role="status">Engine diagnostic: {engineError}</small>}
     </div>
     <div className="agent-runtime-list credential-panel">
       <div className="decision-list-head"><b>BINANCE SPOT TESTNET CREDENTIALS</b><span>{credentialSaved ? "ENCRYPTED ON DEVICE" : "NOT CONNECTED"}</span></div>
