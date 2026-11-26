@@ -19,8 +19,6 @@ from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoP
 from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
-from engine.gmgn_api import GMGNReadOnlyClient, summarize_security_evidence, extract_trenches_tokens
-from engine.gmgn_sniper import GMGNSniperAgent
 from engine.crypto_monitor import CryptoPaperMonitor
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
@@ -74,7 +72,7 @@ def _fee_config() -> dict[str, tuple[float, float]]:
 
 
 def _runtime_config(
-    data_dir: str | Path, port: int | None = None, gmgn_api_key: str = "",
+    data_dir: str | Path, port: int | None = None,
     binance_api_key: str = "", binance_api_secret: str = "",
     binance_testnet_orders_enabled: bool = False,
 ):
@@ -212,39 +210,15 @@ def _runtime_config(
     whale_feed = GeckoTerminalWhaleFeed(timeout=8.0, min_notional_usd=100_000.0)
     security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
     news_feed = PublicNewsRSS(timeout=8.0)
-    gmgn_client = GMGNReadOnlyClient(gmgn_api_key, timeout=8.0) if gmgn_api_key.strip() else None
-    gmgn_last_trenches_refresh = 0.0
-    gmgn_last_trending_refresh = 0.0
-    gmgn_retry_after = 0.0
-    gmgn_security_cursor = 0
-    state["gmgn_feed"] = {
-        "status": "READY_TO_CONNECT" if gmgn_client else "NOT_CONFIGURED",
-        "detail": "Official GMGN read-only API key is stored in Android Keystore." if gmgn_client
-            else "Add a GMGN API key from gmgn.ai/ai to enable official token discovery and trending data.",
-        "last_checked_at": None,
-        "trenches_preview": None,
-        "trending_preview": None,
-        "tokens": [],
-        "security_checks": [],
-    }
-    state["gmgn_sniper"] = {
-        "status": "WAITING_FOR_GMGN_FEED", "candidate_count": 0,
-        "blocked_count": 0, "candidates": [], "blocked": [],
-        "execution_enabled": False,
-    }
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
     def agent_feed_loop() -> None:
-        nonlocal gmgn_last_trenches_refresh, gmgn_last_trending_refresh
-        nonlocal gmgn_retry_after, gmgn_security_cursor
         while not stop_event.is_set():
             try:
                 discovered = discovery_feed.discover(limit=8)
-                prior_gmgn_tokens = state.get("gmgn_feed", {}).get("tokens", [])
-                gmgn_token_count = len(prior_gmgn_tokens) if isinstance(prior_gmgn_tokens, list) else 0
                 state["agents"]["SCANNER"] = {
-                    "status": "CONNECTED" if discovered or gmgn_token_count else "CONNECTED_NO_NEW_TOKENS",
-                    "detail": f"DEX Screener enriched {len(discovered)} recent pools; official GMGN Trenches supplied {gmgn_token_count} parsed Solana tokens. The independent dynamic top-52 cross-exchange REST scan targets a one-second cycle."
+                    "status": "CONNECTED" if discovered else "CONNECTED_NO_NEW_TOKENS",
+                    "detail": f"DEX Screener enriched {len(discovered)} recent pools. The independent dynamic top-52 cross-exchange REST scan targets a one-second cycle."
                 }
                 whale_trades = []
                 whale_errors = 0
@@ -274,175 +248,35 @@ def _runtime_config(
                     except Exception as exc:
                         security_results.append({"status":"FEED_ERROR", "error":type(exc).__name__,
                                                  "symbol":token.get("symbol"), "chain":token.get("chain_id")})
-                gmgn_security_results = []
-                gmgn_security_errors = 0
-                gmgn_now = time.monotonic()
-                gmgn_trenches_due = gmgn_client is not None and gmgn_now - gmgn_last_trenches_refresh >= 300
-                gmgn_trending_due = gmgn_client is not None and gmgn_now - gmgn_last_trending_refresh >= 300
-                gmgn_market_refresh_due = gmgn_trenches_due or gmgn_trending_due
-                gmgn_rate_limited = gmgn_now < gmgn_retry_after
-                if gmgn_client is not None and not gmgn_market_refresh_due and not gmgn_rate_limited:
-                    gmgn_chain_map = {
-                        "solana": "sol", "ethereum": "eth", "bsc": "bsc",
-                        "base": "base", "arbitrum": "arbitrum", "avalanche": "avalanche",
-                    }
-                    previous_gmgn_tokens = state.get("gmgn_feed", {}).get("tokens", [])
-                    security_candidates = list(discovered)
-                    if isinstance(previous_gmgn_tokens, list):
-                        security_candidates.extend(previous_gmgn_tokens)
-                    unique_candidates = []
-                    seen_security_addresses = set()
-                    for token in security_candidates:
-                        gmgn_chain = str(token.get("chain") or "").lower() or gmgn_chain_map.get(str(token.get("chain_id", "")).lower())
-                        address = str(token.get("token_address", "")).strip()
-                        if not gmgn_chain or not address or address in seen_security_addresses:
-                            continue
-                        seen_security_addresses.add(address)
-                        unique_candidates.append((token, gmgn_chain, address))
-                    if unique_candidates:
-                        batch_size = min(4, len(unique_candidates))
-                        for offset in range(batch_size):
-                            token, gmgn_chain, address = unique_candidates[
-                                (gmgn_security_cursor + offset) % len(unique_candidates)
-                            ]
-                            try:
-                                evidence = gmgn_client.token_security(gmgn_chain, address)
-                                assessment = summarize_security_evidence(evidence, gmgn_chain)
-                                gmgn_security_results.append({
-                                    "symbol": token.get("symbol"), "chain": gmgn_chain,
-                                    "token_address": address, "assessment": assessment,
-                                    "checked_at": datetime.now(timezone.utc).isoformat(),
-                                })
-                            except Exception as exc:
-                                gmgn_security_errors += 1
-                                gmgn_security_results.append({
-                                    "symbol": token.get("symbol"), "chain": gmgn_chain,
-                                    "status": "GMGN_SECURITY_ERROR", "error": type(exc).__name__,
-                                })
-                        gmgn_security_cursor = (gmgn_security_cursor + batch_size) % len(unique_candidates)
-                previous_security_checks = state.get("gmgn_feed", {}).get("security_checks", [])
-                security_by_address = {
-                    str(item.get("token_address", "")).lower(): item
-                    for item in previous_security_checks
-                    if isinstance(item, dict) and item.get("token_address")
-                } if isinstance(previous_security_checks, list) else {}
-                for item in gmgn_security_results:
-                    if item.get("assessment") and item.get("token_address"):
-                        security_by_address[str(item["token_address"]).lower()] = item
-                gmgn_security_checks = list(security_by_address.values())[-50:]
-                gmgn_tokens_for_sniper = state.get("gmgn_feed", {}).get("tokens", [])
-                state["gmgn_sniper"] = GMGNSniperAgent().rank(
-                    gmgn_tokens_for_sniper if isinstance(gmgn_tokens_for_sniper, list) else [],
-                    gmgn_security_checks,
-                )
                 risk_count = sum(item.get("status") == "RISK_FLAGS_FOUND" for item in security_results)
                 error_count = sum(item.get("status") == "FEED_ERROR" for item in security_results)
-                checked_count = sum(item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"} for item in security_results)
-                gmgn_security_success_count = sum("assessment" in item for item in gmgn_security_checks)
-                gmgn_security_flag_count = sum(
-                    len(item.get("assessment", {}).get("risk_flags", []))
-                    for item in gmgn_security_checks
+                checked_count = sum(
+                    item.get("status") not in {"FEED_ERROR", "UNSUPPORTED_CHAIN", "INVALID_CONTRACT_ADDRESS"}
+                    for item in security_results
                 )
-                gmgn_security_unknown_count = sum(
-                    item.get("assessment", {}).get("status") == "INSUFFICIENT_EVIDENCE"
-                    for item in gmgn_security_checks
-                )
-                total_security_checks = checked_count + gmgn_security_success_count
-                total_security_errors = error_count + gmgn_security_errors
-                gmgn_tokens_for_rug = state.get("gmgn_feed", {}).get("tokens", [])
-                gmgn_token_count_for_rug = len(gmgn_tokens_for_rug) if isinstance(gmgn_tokens_for_rug, list) else 0
-                total_discovered_for_rug = len(discovered) + gmgn_token_count_for_rug
-                if total_discovered_for_rug == 0:
+                if not discovered:
                     rug_status = "WAITING_FOR_TOKENS"
-                elif total_security_checks == 0 and not supported_candidates and gmgn_token_count_for_rug == 0:
+                elif checked_count == 0 and not supported_candidates:
                     rug_status = "UNSUPPORTED_TOKENS"
-                elif total_security_checks == 0:
-                    rug_status = "WAITING_FOR_SECURITY_CHECKS"
-                elif (total_security_errors or gmgn_security_unknown_count) and total_security_checks:
+                elif error_count and checked_count:
                     rug_status = "PARTIAL"
-                elif total_security_errors:
+                elif error_count:
                     rug_status = "FEED_ERROR"
+                elif checked_count == 0:
+                    rug_status = "WAITING_FOR_SECURITY_CHECKS"
                 else:
                     rug_status = "CONNECTED"
                 state["agents"]["RUG"] = {
                     "status": rug_status,
-                    "detail": (f"DEX Screener discovered {len(discovered)} tokens and GMGN has {gmgn_token_count_for_rug} Trenches tokens: {len(supported_candidates)} DEX tokens have a supported EVM chain and valid contract address; "
+                    "detail": (f"DEX Screener discovered {len(discovered)} tokens: {len(supported_candidates)} have a supported EVM chain and valid contract address; "
                                f"{unsupported_count} are unsupported or have invalid addresses. GoPlus checked {checked_count}/"
                                f"{min(len(supported_candidates), 5)}; {risk_count} returned explicit risk flags and {error_count} requests failed. "
-                               f"GMGN returned {gmgn_security_success_count}/"
-                               f"{len(gmgn_security_results)} security responses, with {gmgn_security_flag_count} explicit risk flags and "
-                               f"{gmgn_security_unknown_count} insufficient-evidence assessments. "
                                "No result is a safety guarantee; missing fields remain unknown."),
                     "checked_tokens": security_results[:5],
-                    "gmgn_security_checks": gmgn_security_checks[:5],
                     "risk_flags": [item for item in security_results if item.get("risks")][:5],
-                    "gmgn_risk_flags": [
-                        {"symbol": item.get("symbol"), "chain": item.get("chain"),
-                         "risk_flags": item.get("assessment", {}).get("risk_flags", [])}
-                        for item in gmgn_security_checks
-                        if item.get("assessment", {}).get("risk_flags")
-                    ][:5],
                     "unsupported_tokens": unsupported_count,
                     "errors": error_count,
                 }
-                if gmgn_client is not None:
-                    if gmgn_rate_limited:
-                        state["gmgn_feed"]["status"] = "RATE_LIMITED"
-                        state["gmgn_feed"]["detail"] = "GMGN requests are paused during the rate-limit cooldown; no retries are sent during this window."
-                    elif gmgn_market_refresh_due:
-                        try:
-                            previous_feed = state.get("gmgn_feed", {})
-                            trenches = gmgn_client.trenches("sol", limit=30) if gmgn_trenches_due else None
-                            trending = gmgn_client.trending("sol", "1h", limit=20) if gmgn_trending_due else None
-                            gmgn_tokens = extract_trenches_tokens(trenches, "sol", limit=30) if trenches is not None else previous_feed.get("tokens", [])
-                            if gmgn_trenches_due:
-                                gmgn_last_trenches_refresh = time.monotonic()
-                            if gmgn_trending_due:
-                                gmgn_last_trending_refresh = time.monotonic()
-                            state["gmgn_feed"] = {
-                                "status": "CONNECTED",
-                                "detail": "Official GMGN read-only feed is active. Trenches and trending refresh every five minutes; token-security checks are staggered between refreshes to respect the Free-plan rate budget.",
-                                "last_checked_at": datetime.now(timezone.utc).isoformat(),
-                                "trenches_preview": __import__("json").dumps(trenches, ensure_ascii=False)[:5000] if trenches is not None else previous_feed.get("trenches_preview"),
-                                "trending_preview": __import__("json").dumps(trending, ensure_ascii=False)[:5000] if trending is not None else previous_feed.get("trending_preview"),
-                                "security_preview": __import__("json").dumps(gmgn_security_results, ensure_ascii=False)[:5000] if gmgn_security_results else previous_feed.get("security_preview"),
-                                "security_errors": gmgn_security_errors,
-                                "tokens": gmgn_tokens,
-                                "security_checks": gmgn_security_checks,
-                            }
-                        except Exception as exc:
-                            error_text = str(exc)
-                            if "PLAN_UPGRADE_REQUIRED" in error_text:
-                                gmgn_retry_after = float("inf")
-                                error_status = "PLAN_UPGRADE_REQUIRED"
-                            elif "429" in error_text or "RATE_LIMIT" in error_text:
-                                cooldown_seconds = 300.0
-                                if "RESET_AT:" in error_text:
-                                    try:
-                                        reset_text = error_text.split("RESET_AT:", 1)[1].split(":", 1)[0]
-                                        cooldown_seconds = max(1.0, min(300.0, float(reset_text) - time.time()))
-                                    except (TypeError, ValueError):
-                                        cooldown_seconds = 300.0
-                                gmgn_retry_after = time.monotonic() + cooldown_seconds
-                                error_status = "RATE_LIMITED"
-                            else:
-                                gmgn_retry_after = time.monotonic() + 300
-                                error_status = "API_ERROR"
-                            previous_feed = state.get("gmgn_feed", {})
-                            state["gmgn_feed"] = {
-                                **previous_feed,
-                                "status": error_status,
-                                "detail": "GMGN requests are paused for five minutes after an API error to avoid repeated requests or extending a rate-limit ban.",
-                                "last_checked_at": datetime.now(timezone.utc).isoformat(),
-                                "error": error_text[:120],
-                                "security_errors": gmgn_security_errors,
-                            }
-                    elif gmgn_security_results:
-                        state["gmgn_feed"]["status"] = "CONNECTED"
-                        state["gmgn_feed"]["last_checked_at"] = datetime.now(timezone.utc).isoformat()
-                        state["gmgn_feed"]["security_preview"] = __import__("json").dumps(gmgn_security_checks, ensure_ascii=False)[:5000]
-                        state["gmgn_feed"]["security_errors"] = gmgn_security_errors
-                        state["gmgn_feed"]["security_checks"] = gmgn_security_checks
                 headlines = news_feed.headlines(limit=20)
                 hype_result = HypeAgent().score(headlines)
                 state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
@@ -461,7 +295,6 @@ def _runtime_config(
             snapshot["integration_readiness"] = build_readiness(
                 phone_engine_running=state.get("engine") == "running",
                 verified_fee_exchanges=tuple(fees.keys()),
-                gmgn_read_only_status=str(state.get("gmgn_feed", {}).get("status", "NOT_CONFIGURED")),
             )
             return snapshot
 
@@ -615,7 +448,7 @@ def _runtime_config(
 
 
 def start_embedded(
-    data_dir: str, port: int = 8766, gmgn_api_key: str = "",
+    data_dir: str, port: int = 8766,
     binance_recovery_json: str = "", binance_api_key: str = "",
     binance_api_secret: str = "", binance_testnet_orders_enabled: bool = False,
 ) -> dict:
@@ -627,7 +460,7 @@ def start_embedded(
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         try:
             stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
-                data_dir, port, gmgn_api_key, binance_api_key,
+                data_dir, port, binance_api_key,
                 binance_api_secret, binance_testnet_orders_enabled,
             )
         except Exception:
