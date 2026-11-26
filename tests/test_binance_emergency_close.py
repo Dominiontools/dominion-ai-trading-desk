@@ -126,7 +126,7 @@ def test_does_not_claim_flat_when_exchange_reports_partial_market_execution():
 def test_does_not_claim_flat_when_residual_balance_remains():
     client = FakeClient()
     client.market_response = {"status": "FILLED", "executedQty": "0.0009"}
-    with pytest.raises(RuntimeError, match="Residual base asset"):
+    with pytest.raises(RuntimeError, match="did not fill the full requested quantity"):
         run(client)
 
 
