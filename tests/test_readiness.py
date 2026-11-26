@@ -27,6 +27,7 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         crypto_testnet_orders_verified=True,
         binance_emergency_handling_verified=True,
         verified_fee_exchanges=("Binance", "Bitget", "HTX", "OKX"),
+        cross_exchange_scan_verified=True,
         agent_workflow_verified=True,
     )
     assert result["overall_status"] == "READY_FOR_FINAL_REVIEW"
