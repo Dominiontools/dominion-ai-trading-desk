@@ -194,23 +194,33 @@ class CryptoPaperMonitor:
         duplicates = len(keys) != len(set(keys))
         exchanges_seen = {quote.exchange for quote in quotes}
         coverage: dict[str, set[str]] = {}
+        fresh_coverage: dict[str, set[str]] = {}
+        fresh_quotes = []
         for quote in quotes:
             coverage.setdefault(quote.symbol, set()).add(quote.exchange)
+            age = (finished - quote.timestamp).total_seconds()
+            if 0 <= age <= self.max_quote_age_seconds:
+                fresh_quotes.append(quote)
+                fresh_coverage.setdefault(quote.symbol, set()).add(quote.exchange)
         comparable_symbols = sorted(
-            symbol for symbol, venues in coverage.items() if len(venues) >= 2
+            symbol for symbol, venues in fresh_coverage.items() if len(venues) >= 2
         )
-        quote_by_key = {(quote.symbol, quote.exchange): quote for quote in quotes}
+        quote_by_key = {(quote.symbol, quote.exchange): quote for quote in fresh_quotes}
+        fresh_exchanges = {quote.exchange for quote in fresh_quotes}
         record.update({
             "venue_errors": venue_errors,
             "available_exchanges": sorted(exchanges_seen),
+            "fresh_exchanges": sorted(fresh_exchanges),
             "collection_duration_ms": round(duration_ms, 3),
             "quote_count": len(quotes),
-            "symbols_with_quotes": len(coverage),
+            "fresh_quote_count": len(fresh_quotes),
+            "symbols_with_any_quotes": len(coverage),
+            "symbols_with_quotes": len(fresh_coverage),
             "symbols_with_two_venues": len(comparable_symbols),
             "comparable_symbols": comparable_symbols,
             "quotes_by_exchange": {
-                venue: sum(quote.exchange == venue for quote in quotes)
-                for venue in sorted(exchanges_seen)
+                venue: sum(quote.exchange == venue for quote in fresh_quotes)
+                for venue in sorted(fresh_exchanges)
             },
             "quotes_preview": [
                 {
@@ -234,11 +244,11 @@ class CryptoPaperMonitor:
         if duplicates:
             record.update(status="BLOCKED", reason="DUPLICATE_EXCHANGE_SYMBOL_QUOTES")
             return self._write(record)
-        if len(exchanges_seen) < 2 or not comparable_symbols:
+        if len(fresh_exchanges) < 2 or not comparable_symbols:
             record.update(
                 status="BLOCKED",
-                reason="INSUFFICIENT_INDEPENDENT_MARKET_QUOTES",
-                error="At least two independent exchanges must quote the same symbol.",
+                reason="INSUFFICIENT_FRESH_INDEPENDENT_MARKET_QUOTES",
+                error="At least two independent exchanges must provide fresh quotes for the same symbol.",
             )
             return self._write(record)
 
@@ -247,13 +257,8 @@ class CryptoPaperMonitor:
             # Keep quote comparison visible even when fees are not configured.
             # These are explicitly gross price gaps, never net-profit signals.
             fresh_by_symbol: dict[str, list] = {}
-            for quote in quotes:
-                try:
-                    age = (finished - quote.timestamp).total_seconds()
-                except (AttributeError, TypeError):
-                    continue
-                if 0 <= age <= self.max_quote_age_seconds:
-                    fresh_by_symbol.setdefault(quote.symbol, []).append(quote)
+            for quote in fresh_quotes:
+                fresh_by_symbol.setdefault(quote.symbol, []).append(quote)
             gross_gaps = []
             for symbol, symbol_quotes in fresh_by_symbol.items():
                 for buy in symbol_quotes:
