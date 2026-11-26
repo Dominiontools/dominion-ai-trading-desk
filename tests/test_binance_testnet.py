@@ -211,3 +211,64 @@ def test_account_commission_is_signed_and_pinned_to_spot_testnet(monkeypatch):
     assert params["symbol"] == ["BTCUSDT"]
     assert params["signature"]
     assert captured["headers"]["X-MBX-APIKEY"] == "test-api-key"
+
+
+def test_market_sell_uses_spot_testnet_and_requires_order_gate(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url, headers=headers)
+        return {"status": "FILLED"}
+    client = make_client(monkeypatch, transport, enabled=True)
+    result = client.place_market_sell(
+        symbol="btcusdt", quantity="0.001", client_order_id="emergency123"
+    )
+    params = parse_qs(urlsplit(captured["url"]).query)
+    assert result["status"] == "FILLED"
+    assert captured["method"] == "POST"
+    assert urlsplit(captured["url"]).netloc == "testnet.binance.vision"
+    assert urlsplit(captured["url"]).path == "/api/v3/order"
+    assert params["symbol"] == ["BTCUSDT"]
+    assert params["side"] == ["SELL"]
+    assert params["type"] == ["MARKET"]
+    assert params["quantity"] == ["0.001"]
+    assert params["newClientOrderId"] == ["emergency123"]
+    assert params["signature"]
+    assert captured["headers"]["X-MBX-APIKEY"] == "test-api-key"
+
+
+def test_market_sell_is_blocked_without_explicit_enable(monkeypatch):
+    client = make_client(monkeypatch, lambda *args: pytest.fail("network must not be called"))
+    with pytest.raises(PermissionError, match="disabled"):
+        client.place_market_sell(
+            symbol="BTCUSDT", quantity="0.001", client_order_id="emergency123"
+        )
+
+
+def test_open_orders_list_response_is_supported(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url)
+        return [{"symbol": "BTCUSDT", "side": "BUY"}]
+    client = make_client(monkeypatch, transport)
+    result = client.account_open_orders(symbol="BTCUSDT")
+    assert result == [{"symbol": "BTCUSDT", "side": "BUY"}]
+    assert captured["method"] == "GET"
+    assert urlsplit(captured["url"]).path == "/api/v3/openOrders"
+
+
+def test_emergency_cancel_allows_only_filled_bot_entry(monkeypatch):
+    calls = []
+    def transport(method, url, headers, timeout):
+        calls.append((method, url))
+        if method == "GET":
+            return {"status": "FILLED"}
+        return {"listStatusType": "ALL_DONE"}
+    client = make_client(monkeypatch, transport, enabled=True)
+    result = client.cancel_filled_otoco_for_emergency(
+        symbol="BTCUSDT", list_client_order_id="dominion123"
+    )
+    assert result["listStatusType"] == "ALL_DONE"
+    assert calls[0][0] == "GET"
+    assert calls[1][0] == "DELETE"
+    params = parse_qs(urlsplit(calls[1][1]).query)
+    assert params["listClientOrderId"] == ["dominion123"]
