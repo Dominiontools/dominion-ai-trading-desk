@@ -163,7 +163,7 @@ def test_multi_market_scan_blocks_without_two_venues_for_any_pair(tmp_path):
     )
     result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
     assert result["status"] == "BLOCKED"
-    assert result["reason"] == "INSUFFICIENT_INDEPENDENT_MARKET_QUOTES"
+    assert result["reason"] == "INSUFFICIENT_FRESH_INDEPENDENT_MARKET_QUOTES"
 
 
 def test_multi_market_scan_requires_fee_configuration_for_seen_venues(tmp_path):
@@ -213,4 +213,48 @@ def test_multi_market_scan_reports_partial_feed_without_hiding_healthy_venues(tm
     assert result["venue_errors"]["OKX"].startswith("TimeoutError")
     assert result["symbols_with_two_venues"] == 2
     assert result["execution_blocked"] is True
+    assert result["orders_enabled"] is False
+
+
+def test_multi_market_scan_blocks_when_all_same_symbol_quotes_are_stale(tmp_path):
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    stale_quotes = [
+        ExchangeQuote("Binance", "BTCUSDT", 99.9, 100.0, now - timedelta(seconds=5), 2, 2),
+        ExchangeQuote("Bitget", "BTCUSDT", 101.0, 101.1, now - timedelta(seconds=6), 2, 2),
+    ]
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(stale_quotes), decision_log=tmp_path / "stale.jsonl",
+        costs_by_exchange=FEES, clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT"])
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "INSUFFICIENT_FRESH_INDEPENDENT_MARKET_QUOTES"
+    assert result["symbols_with_any_quotes"] == 1
+    assert result["symbols_with_quotes"] == 0
+    assert result["symbols_with_two_venues"] == 0
+    assert result["fresh_quote_count"] == 0
+    assert result["orders_enabled"] is False
+
+
+def test_multi_market_scan_uses_fresh_coverage_when_stale_and_fresh_quotes_mix(tmp_path):
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    quotes = [
+        ExchangeQuote("Binance", "BTCUSDT", 99.9, 100.0, now, 2, 2),
+        ExchangeQuote("Bitget", "BTCUSDT", 101.0, 101.1, now, 2, 2),
+        ExchangeQuote("HTX", "BTCUSDT", 102.0, 102.1, now - timedelta(seconds=8), 2, 2),
+    ]
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(quotes), decision_log=tmp_path / "mixed.jsonl",
+        costs_by_exchange=FEES, clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT"])
+    assert result["symbols_with_any_quotes"] == 1
+    assert result["symbols_with_quotes"] == 1
+    assert result["symbols_with_two_venues"] == 1
+    assert result["fresh_quote_count"] == 2
+    assert result["quotes_by_exchange"] == {"Binance": 1, "Bitget": 1}
     assert result["orders_enabled"] is False
