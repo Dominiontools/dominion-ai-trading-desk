@@ -16,12 +16,8 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert ".remove(BINANCE_ORDERS_ENABLED)" in script
     assert "getBinanceTestnetAccount" in script
     assert "loadForNativeUse" in script
-    assert "saveGmgnApiKey" in script
-    assert "gmgnApiKeyStatus" in script
-    assert "clearGmgnApiKey" in script
-    assert "loadGmgnApiKeyForNativeUse" in script
-    assert 'remove(IV).remove(CIPHERTEXT)' in script
-    assert 'remove(GMGN_IV).remove(GMGN_CIPHERTEXT)' in script
+    assert "Gmgn" not in script
+    assert "GMGN" not in script
     assert 'prefs.edit().clear()' not in script
     assert "payload.indexOf('\\n')" in script
     assert "engine.binance_android" in script
@@ -32,12 +28,13 @@ def test_android_credential_vault_is_keystore_backed_and_not_readable_from_js():
     assert "Log." not in script
 
 
-def test_android_python_bundle_includes_official_gmgn_read_only_and_sniper_modules():
+def test_android_python_bundle_excludes_unused_gmgn_integration():
     script = Path("scripts/configure-android-local-api.py").read_text()
-    assert '"gmgn_api.py"' in script
-    assert '"gmgn_sniper.py"' in script
+    assert "gmgn_api.py" not in script
+    assert "gmgn_sniper.py" not in script
     assert 'callAttr("start_embedded"' in script
-    assert 'loadGmgnApiKeyForNativeUse' in script
+    assert "Gmgn" not in script
+    assert "GMGN" not in script
 
 
 def test_android_python_bundle_includes_restart_safe_binance_lifecycle_module():
