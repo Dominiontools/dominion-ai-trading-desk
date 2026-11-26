@@ -317,6 +317,11 @@ def _runtime_config(
                 try:
                     refreshed_policy = refresh_public_fee_policy()
                     refreshed_fees = refreshed_policy.get("fees", {})
+                    personal_policy_fees, personal_policy_sources = load_fee_policy()
+                    if (personal_policy_sources.get("Binance", {}).get("rate_type")
+                            == "personal_account_rate"):
+                        refreshed_fees["Binance"] = personal_policy_fees["Binance"]
+                        refreshed_policy.setdefault("sources", {})["Binance"] = personal_policy_sources["Binance"]
                     if isinstance(refreshed_fees, dict):
                         fees.clear()
                         fees.update(refreshed_fees)
