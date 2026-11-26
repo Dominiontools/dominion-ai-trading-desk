@@ -15,6 +15,7 @@ def build_readiness(
     ctrader_demo_orders_verified: bool = False,
     crypto_testnet_authorized: bool = False,
     crypto_testnet_orders_verified: bool = False,
+    binance_emergency_handling_verified: bool = False,
     verified_fee_exchanges: tuple[str, ...] = (),
     agent_workflow_verified: bool = False,
     gmgn_read_only_status: str = "NOT_CONFIGURED",
@@ -58,6 +59,13 @@ def build_readiness(
                       else "BINANCE_ROUTER_AND_RISK_CONTEXT_READY_TESTNET_EXECUTION_PENDING",
             "detail": "A Binance Spot Testnet BUY-only signal router, default-deny 0.5%/2% risk planner, verified USDT account-context provider, durable UTC daily-loss ledger, and protected OTOCO request path are built and unit-tested. The router requires a fresh Binance quote, verified symbol filters and taker fees, confirmed account trading permission, reconciled open-position state, and a verified daily-loss ledger. Confirmed stop-loss exits are conservatively charged at planned risk and deduplicated across restarts. Android startup now performs a read-only account/risk snapshot. The strategy router is now wired into the Android strategy loop behind an explicit off-by-default Testnet automation setting. The setting must be enabled in the app; the account must confirm trading permission; and an authorized end-to-end Testnet order/exit/restart test is still outstanding. Uncertain submissions halt new entries and require operator review; automatic emergency flattening of a filled but unprotected Binance position is not yet implemented. Live trading remains disabled. Bitget and HTX are public market-data sources only in this stage; their execution adapters are not required.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
+        },
+        {
+            "id": "binance_emergency_handling",
+            "title": "Verify emergency handling for an unprotected Binance Testnet fill",
+            "status": "VERIFIED" if binance_emergency_handling_verified else "NOT_IMPLEMENTED_OR_NOT_TESTED",
+            "detail": "The current Binance lifecycle halts and requires operator review when protection is uncertain, including a partial fill. Automatic emergency market-flattening is not implemented. This gate requires a deterministic, restart-safe, Testnet-only close path and failure-injection tests before final acceptance.",
+            "owner": "DEVELOPMENT_AND_TESTNET_VALIDATION",
         },
         {
             "id": "gmgn_read_only",
