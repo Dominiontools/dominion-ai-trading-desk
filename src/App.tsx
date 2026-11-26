@@ -402,13 +402,15 @@ function CryptoMonitorPanel() {
       <div className="crypto-summary">
         <div><small>AUTOMATION</small><b>{binanceExecution?.enabled === true ? "ENABLED" : "OFF"}</b></div>
         <div><small>RISK CONTEXT</small><b>{binanceRiskContext?.verified === true ? "VERIFIED" : "BLOCKED / NOT CHECKED"}</b></div>
-        <div><small>USDT EQUITY</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.equity_quote) : "—"}</b></div>
-        <div><small>AVAILABLE USDT</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.available_quote) : "—"}</b></div>
-        <div><small>DAILY LOSS BUDGET USED</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.daily_loss_quote) : "—"}</b></div>
-        <div><small>OPEN / UNMANAGED POSITIONS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.open_positions) : "—"}</b></div>
+        <div><small>ACCOUNT USDT EQUITY</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.actual_equity_quote ?? binanceRiskContext.equity_quote) : "—"}</b></div>
+        <div><small>RISK CAPITAL (CAPPED)</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.equity_quote) : "—"}</b></div>
+        <div><small>AVAILABLE RISK CAPITAL</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.available_quote) : "—"}</b></div>
+        <div><small>DAILY LOSS USED</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.daily_loss_quote) : "—"}</b></div>
+        <div><small>OPEN POSITIONS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.open_positions) : "—"}</b></div>
+        <div><small>EXCHANGE OPEN ORDERS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.exchange_open_orders ?? 0) : "—"}</b></div>
         <div><small>JOURNALED ORDER LISTS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.journaled_order_lists) : "—"}</b></div>
       </div>
-      <div className="panel-foot">Read-only Testnet account and recovery check. This snapshot does not enable orders. Any non-zero non-USDT Spot holding counts toward the one-position limit. Unknown account, recovery or daily-loss state blocks execution.</div>
+      <div className="panel-foot">Read-only Testnet account and recovery check; it does not enable orders. Seeded non-USDT Testnet inventory is not treated as an open trade. Reconciled bot positions and account-wide active orders occupy the one-position limit. Risk capital is capped at 20 USDT. Unknown account, recovery or daily-loss state blocks execution.</div>
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 10)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
