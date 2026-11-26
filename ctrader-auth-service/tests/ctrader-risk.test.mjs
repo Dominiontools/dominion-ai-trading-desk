@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   calculateDailyRisk,
   classifyPartialClose,
+  planPartialClose,
   estimateRoundTripCommission,
   moneyScale,
   sizeVolume,
@@ -140,4 +141,17 @@ test("partial close reconciliation fails closed for invalid or undersized broker
   assert.equal(classifyPartialClose({ ...base, remainingVolume: 500 }).status, "REMAINDER_BELOW_MINIMUM");
   assert.throws(() => classifyPartialClose({ ...base, remainingVolume: 12000 }), /INVALID_PARTIAL_CLOSE_RECONCILIATION/);
   assert.throws(() => classifyPartialClose({ ...base, remainingVolume: Number.NaN }), /INVALID_PARTIAL_CLOSE_RECONCILIATION/);
+});
+
+test("partial close plan resumes the exact outstanding target after a worker restart", () => {
+  const initial = planPartialClose({ currentVolume: 10000, minVolume: 1000, stepVolume: 1000 });
+  assert.deepEqual(initial, { action: "PARTIAL_CLOSE", requestedVolume: 5000, resumesPendingTarget: false });
+  const resumed = planPartialClose({ currentVolume: 7000, minVolume: 1000, stepVolume: 1000, pendingTargetVolume: 2000 });
+  assert.deepEqual(resumed, { action: "PARTIAL_CLOSE", requestedVolume: 2000, resumesPendingTarget: true });
+});
+
+test("partial close plan uses a full exit when broker minimums prevent a valid scale-out", () => {
+  const result = planPartialClose({ currentVolume: 1500, minVolume: 1000, stepVolume: 500 });
+  assert.deepEqual(result, { action: "FULL_CLOSE", requestedVolume: 1500, resumesPendingTarget: false });
+  assert.throws(() => planPartialClose({ currentVolume: Number.POSITIVE_INFINITY, minVolume: 1000, stepVolume: 1000 }), /INVALID_PARTIAL_CLOSE_PLAN/);
 });
