@@ -89,6 +89,20 @@ def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
         "orders_enabled": False,
         "environment": "BINANCE_SPOT_TESTNET",
     }
+    emergency_candidates = [
+        item for item in unresolved
+        if isinstance(item, dict)
+        and item.get("state") == "UNPROTECTED_PARTIAL_FILL"
+    ] if isinstance(unresolved, list) else []
+    if emergency_candidates:
+        state["agents"]["EXIT"] = {
+            "status": "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL",
+            "detail": (
+                "Binance confirmed a partial entry without protection. New entries are halted. "
+                "The one-shot emergency close is available only after explicit operator approval; "
+                "the monitor will not submit or cancel orders."
+            ),
+        }
     if halted:
         state["binance_testnet_execution"].update({
             "status": "HALTED_REQUIRES_REVIEW",
@@ -104,10 +118,11 @@ def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
             "status": "PAUSED_REQUIRES_REVIEW",
             "detail": "No new Testnet entries are allowed while a protected order or position is unresolved.",
         }
-        state["agents"]["EXIT"] = {
-            "status": "RECONCILIATION_REQUIRED",
-            "detail": "Exchange order state needs review. Existing exchange-held protection is not assumed safe until confirmed.",
-        }
+        if not emergency_candidates:
+            state["agents"]["EXIT"] = {
+                "status": "RECONCILIATION_REQUIRED",
+                "detail": "Exchange order state needs review. Existing exchange-held protection is not assumed safe until confirmed.",
+            }
     elif any(item.get("state") == "PROTECTED" and item.get("safe") is True
              for item in orders if isinstance(item, dict)):
         state["agents"]["EXIT"] = {
