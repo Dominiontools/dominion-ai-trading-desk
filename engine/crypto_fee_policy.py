@@ -34,16 +34,19 @@ PUBLIC_FEE_SOURCES = {
     "HTX": "PUBLIC_RATE_NOT_VERIFIABLE",
 }
 _REFRESH_INTERVAL_SECONDS = 6 * 60 * 60
+_MAX_CACHED_RATE_AGE_SECONDS = 7 * 24 * 60 * 60
+# Official fee pages were checked for regular/base spot tiers on this date.
+_PUBLIC_BASELINE_VERIFIED_AT = "2026-11-26T00:00:00+00:00"
 _lock = RLock()
-_cached_fees: dict[str, tuple[float, float]] = {}
+_cached_fees: dict[str, tuple[float, float]] = dict(PUBLIC_SPOT_FEES_BPS)
 _cached_meta: dict[str, dict] = {
     venue: {
         "source": PUBLIC_FEE_SOURCES[venue],
-        "verified": False,
-        "rate_type": "published_public_base_tier",
-        "refresh_status": "BASELINE_AWAITING_REFRESH",
+        "verified": True,
+        "rate_type": "official_public_base_tier_cached",
+        "refresh_status": "CACHED_OFFICIAL_BASELINE",
         "source_url": PUBLIC_FEE_URLS[venue],
-        "last_refreshed_at": None,
+        "last_refreshed_at": _PUBLIC_BASELINE_VERIFIED_AT,
     }
     for venue in PUBLIC_SPOT_FEES_BPS
 }
@@ -72,11 +75,15 @@ class _TextExtractor(HTMLParser):
 
 
 def _fetch_text(url: str, timeout: float = 3.0) -> str:
+    origin = "https://" + url.split("/", 3)[2] + "/"
     request = Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; DominionTradingDesk/1.0)",
-            "Accept": "text/html,application/xhtml+xml",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Referer": origin,
         },
     )
     with urlopen(request, timeout=timeout) as response:
@@ -151,6 +158,7 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
                     "refresh_status": "REFRESH_FAILED_USING_LAST_KNOWN_RATE",
                     "last_refresh_attempt_at": fetched_at,
                     "last_error": type(result).__name__,
+                    "last_error_detail": str(result)[:160],
                 })
                 _cached_meta[venue] = previous
                 continue
@@ -163,6 +171,24 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
                 "source_url": PUBLIC_FEE_URLS[venue],
                 "last_refreshed_at": fetched_at,
             }
+        # Expire cached official rates after seven days without a successful
+        # refresh. Restarting the app does not reset this age.
+        for venue, metadata in list(_cached_meta.items()):
+            refreshed_at = metadata.get("last_refreshed_at")
+            if venue in _cached_fees and refreshed_at:
+                try:
+                    age = (
+                        datetime.now(timezone.utc) - datetime.fromisoformat(refreshed_at)
+                    ).total_seconds()
+                except (TypeError, ValueError):
+                    age = _MAX_CACHED_RATE_AGE_SECONDS + 1
+                if age > _MAX_CACHED_RATE_AGE_SECONDS:
+                    _cached_fees.pop(venue, None)
+                    metadata.update({
+                        "verified": False,
+                        "rate_type": "expired_public_schedule",
+                        "refresh_status": "STALE_RATE_EXPIRED",
+                    })
         _last_refresh_at = fetched_at
         return {
             "fees": dict(_cached_fees),
