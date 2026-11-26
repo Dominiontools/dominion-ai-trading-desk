@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from typing import Callable
 from urllib.parse import urlencode
@@ -140,14 +140,26 @@ class PublicCryptoFeeds:
         venue_names = {"binance": "Binance", "bitget": "Bitget", "htx": "HTX", "okx": "OKX"}
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = [(method.__name__, pool.submit(method, symbol)) for method in methods]
+        pool = ThreadPoolExecutor(max_workers=4)
+        futures = [(method.__name__, pool.submit(method, symbol)) for method in methods]
+        try:
+            completed, pending = wait(
+                [future for _venue, future in futures],
+                timeout=self.timeout + 1.0,
+            )
             for venue, future in futures:
+                if future not in completed:
+                    failures[venue_names[venue]] = "TimeoutError: venue exceeded the shared snapshot deadline"
+                    future.cancel()
+                    continue
                 try:
-                    quotes.append(future.result(timeout=self.timeout + 1.0))
+                    quotes.append(future.result())
                 except Exception as exc:
                     detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
                     failures[venue_names[venue]] = f"{type(exc).__name__}: {detail}"
+        finally:
+            # Do not let the executor context manager wait for a stalled venue.
+            pool.shutdown(wait=False, cancel_futures=True)
         return quotes, failures
 
     def snapshot(self, symbol: str) -> list[ExchangeQuote]:
@@ -283,14 +295,26 @@ class PublicCryptoFeeds:
         }
         failures: dict[str, str] = {}
         quotes: list[ExchangeQuote] = []
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {name: pool.submit(method, requested) for name, method in methods.items()}
+        pool = ThreadPoolExecutor(max_workers=4)
+        futures = {name: pool.submit(method, requested) for name, method in methods.items()}
+        try:
+            completed, pending = wait(
+                list(futures.values()),
+                timeout=self.timeout + 1.0,
+            )
             for venue, future in futures.items():
+                if future not in completed:
+                    failures[venue] = "TimeoutError: venue exceeded the shared snapshot deadline"
+                    future.cancel()
+                    continue
                 try:
-                    quotes.extend(future.result(timeout=self.timeout + 1.0))
+                    quotes.extend(future.result())
                 except Exception as exc:
                     detail = str(exc).replace("\\n", " ")[:180] or type(exc).__name__
                     failures[venue] = f"{type(exc).__name__}: {detail}"
+        finally:
+            # Return the partial snapshot without waiting for stalled network calls.
+            pool.shutdown(wait=False, cancel_futures=True)
         return quotes, failures
 
     def snapshot_many(self, symbols: tuple[str, ...] | list[str]) -> list[ExchangeQuote]:
