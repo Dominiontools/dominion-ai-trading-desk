@@ -232,11 +232,15 @@ class BinanceSpotTestnetClient:
             raise RuntimeError("Binance ticker response is malformed or mismatched.")
         return result
 
-    def account_open_orders(self, *, symbol: str) -> list[dict]:
-        pair = symbol.strip().upper()
-        if not pair.isalnum() or not 5 <= len(pair) <= 20:
-            raise ValueError("Invalid trading symbol.")
-        result = self._signed("GET", "/api/v3/openOrders", {"symbol": pair})
+    def account_open_orders(self, *, symbol: str | None = None) -> list[dict]:
+        """Read active orders account-wide, or for one symbol, without side effects."""
+        params: dict[str, str] = {}
+        if symbol is not None:
+            pair = symbol.strip().upper()
+            if not pair.isalnum() or not 5 <= len(pair) <= 20:
+                raise ValueError("Invalid trading symbol.")
+            params["symbol"] = pair
+        result = self._signed("GET", "/api/v3/openOrders", params)
         if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
             raise RuntimeError("Binance open-orders response is malformed.")
         return result
