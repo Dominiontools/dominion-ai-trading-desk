@@ -126,6 +126,26 @@ def _percent_pair(text: str, venue: str) -> tuple[float, float]:
     return values
 
 
+def _expire_cached_rates_locked(now: datetime | None = None) -> None:
+    """Remove public rates whose last successful verification is over seven days old."""
+    current = now or datetime.now(timezone.utc)
+    for venue, metadata in list(_cached_meta.items()):
+        refreshed_at = metadata.get("last_refreshed_at")
+        if venue not in _cached_fees or not refreshed_at:
+            continue
+        try:
+            age = (current - datetime.fromisoformat(refreshed_at)).total_seconds()
+        except (TypeError, ValueError):
+            age = _MAX_CACHED_RATE_AGE_SECONDS + 1
+        if age > _MAX_CACHED_RATE_AGE_SECONDS:
+            _cached_fees.pop(venue, None)
+            metadata.update({
+                "verified": False,
+                "rate_type": "expired_public_schedule",
+                "refresh_status": "STALE_RATE_EXPIRED",
+            })
+
+
 def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
     """Refresh official public schedules; preserve last-known rates on fetch errors.
 
@@ -171,24 +191,8 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
                 "source_url": PUBLIC_FEE_URLS[venue],
                 "last_refreshed_at": fetched_at,
             }
-        # Expire cached official rates after seven days without a successful
-        # refresh. Restarting the app does not reset this age.
-        for venue, metadata in list(_cached_meta.items()):
-            refreshed_at = metadata.get("last_refreshed_at")
-            if venue in _cached_fees and refreshed_at:
-                try:
-                    age = (
-                        datetime.now(timezone.utc) - datetime.fromisoformat(refreshed_at)
-                    ).total_seconds()
-                except (TypeError, ValueError):
-                    age = _MAX_CACHED_RATE_AGE_SECONDS + 1
-                if age > _MAX_CACHED_RATE_AGE_SECONDS:
-                    _cached_fees.pop(venue, None)
-                    metadata.update({
-                        "verified": False,
-                        "rate_type": "expired_public_schedule",
-                        "refresh_status": "STALE_RATE_EXPIRED",
-                    })
+        # Expiry is also checked by load_fee_policy on cold starts.
+        _expire_cached_rates_locked()
         _last_refresh_at = fetched_at
         return {
             "fees": dict(_cached_fees),
@@ -201,6 +205,7 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
 def load_fee_policy() -> tuple[dict[str, tuple[float, float]], dict]:
     """Return the latest public rates and any explicitly verified Binance override."""
     with _lock:
+        _expire_cached_rates_locked()
         # Use only currently verified cache entries. Do not re-seed the static
         # module baseline here: refresh_public_fee_policy removes entries once
         # their seven-day verification window expires.
