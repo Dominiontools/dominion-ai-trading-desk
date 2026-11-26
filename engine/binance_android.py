@@ -149,3 +149,81 @@ def account_risk_snapshot(
                 "quote_asset": "USDT",
             },
         }, separators=(",", ":"))
+
+def emergency_close_after_native_approval(
+    api_key: str, api_secret: str, journal_path: str, daily_loss_path: str,
+    symbol: str, list_client_order_id: str, native_confirmation: bool,
+) -> str:
+    """Run one Testnet emergency close after the Android native dialog approves it.
+
+    The WebView cannot pass an approval flag. TradingEnginePlugin calls this
+    only from the positive action of its native, symbol-and-order-specific
+    confirmation dialog. Exchange state is queried again after that approval.
+    """
+    if native_confirmation is not True:
+        return json.dumps({"status": "APPROVAL_REQUIRED", "halted": True,
+                           "orders_enabled": False})
+    pair = str(symbol or "").strip().upper()
+    order_id = str(list_client_order_id or "").strip()
+    if (not api_key or not api_secret or not pair.isalnum()
+            or not 5 <= len(pair) <= 20 or not order_id
+            or len(order_id) > 20 or not order_id.isascii()):
+        return json.dumps({"status": "INVALID_EMERGENCY_REQUEST", "halted": True,
+                           "orders_enabled": False})
+    try:
+        from pathlib import Path
+        from .binance_daily_loss import BinanceDailyLossLedger
+        from .binance_lifecycle import BinanceProtectedLifecycle
+        from .risk_execution import BinanceTestnetRiskGate
+
+        client = BinanceSpotTestnetClient(api_key, api_secret, allow_orders=True)
+        if not client.allow_orders:
+            raise PermissionError("Testnet order actions are disabled.")
+        account = client.account()
+        if account.get("canTrade") is not True:
+            raise PermissionError("The Testnet account has no trading permission.")
+
+        ledger = BinanceDailyLossLedger(Path(daily_loss_path))
+        lifecycle = BinanceProtectedLifecycle(
+            BinanceTestnetRiskGate(), client,
+            journal_path=Path(journal_path), daily_loss_ledger=ledger,
+        )
+        if lifecycle._journal_invalid or order_id not in lifecycle._submitted_ids:
+            raise PermissionError("The order is not present in the valid local lifecycle journal.")
+        if lifecycle._submitted_symbols.get(order_id) != pair:
+            raise PermissionError("The symbol does not match the journaled order.")
+        previous = lifecycle.last_result or {}
+        if previous.get("order_list_id") == order_id and previous.get("status") in {
+            "EMERGENCY_CLOSE_PENDING", "EMERGENCY_CLOSE_UNCONFIRMED"
+        }:
+            raise PermissionError("An emergency close was already attempted; manual reconciliation is required.")
+
+        # Confirm that the exact bot entry still needs operator intervention.
+        exchange_state = client.reconcile_protected_buy_otoco(
+            symbol=pair, list_client_order_id=order_id,
+        )
+        if not isinstance(exchange_state, dict) or exchange_state.get("action_required") is not True:
+            raise PermissionError("Fresh exchange state does not show an emergency-close requirement.")
+        ticker = client.ticker_price(symbol=pair)
+        reference_price = str(ticker.get("price", ""))
+        price = Decimal(reference_price)
+        if not price.is_finite() or price <= 0:
+            raise ValueError("The latest Testnet reference price is invalid.")
+
+        result = lifecycle.emergency_flatten(
+            symbol=pair, list_client_order_id=order_id,
+            reference_price=reference_price, operator_approved=True,
+        )
+        result["environment"] = "BINANCE_SPOT_TESTNET"
+        result["orders_enabled"] = True
+        return json.dumps(result, separators=(",", ":"))
+    except Exception as error:
+        return json.dumps({
+            "status": "EMERGENCY_CLOSE_BLOCKED",
+            "halted": True,
+            "operator_action_required": True,
+            "orders_enabled": False,
+            "reason": type(error).__name__,
+            "environment": "BINANCE_SPOT_TESTNET",
+        }, separators=(",", ":"))
+
