@@ -278,3 +278,23 @@ def test_stale_venue_does_not_require_fee_configuration(tmp_path):
     assert "missing_fee_exchanges" not in result
     assert result["fresh_exchanges"] == ["Binance", "Bitget"]
     assert result["orders_enabled"] is False
+
+def test_unverified_fee_venue_is_excluded_without_blocking_verified_pairs(tmp_path):
+    now = datetime.now(timezone.utc)
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(make_multi_quotes(now)),
+        decision_log=tmp_path / "partial-fees.jsonl",
+        costs_by_exchange={"Binance": (0, 1), "Bitget": (0, 1)},
+        clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
+
+    assert result["status"] == "PARTIAL_FEE_COVERAGE_PAPER_OPPORTUNITY"
+    assert result["fee_verified_exchanges"] == ["Binance", "Bitget"]
+    assert result["missing_fee_exchanges"] == ["HTX"]
+    assert result["opportunities_count"] >= 1
+    assert {item["buy_exchange"] for item in result["opportunities"]} == {"Binance"}
+    assert {item["sell_exchange"] for item in result["opportunities"]} == {"Bitget"}
+    assert {item["symbol"] for item in result["opportunities"]} == {"BTCUSDT"}
+    assert result["execution_blocked"] is True
+    assert result["orders_enabled"] is False
