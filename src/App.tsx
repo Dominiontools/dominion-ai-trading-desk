@@ -368,6 +368,12 @@ function CryptoMonitorPanel({ settingsOnly = false }: { settingsOnly?: boolean }
   const agentStates = status?.agents && typeof status.agents === "object"
     ? status.agents as Record<string, { status?: unknown; detail?: unknown }>
     : {};
+  const candidateQueue = Array.isArray(status?.candidate_queue)
+    ? status.candidate_queue.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
+  const agentCoordination = status?.agent_coordination && typeof status.agent_coordination === "object"
+    ? status.agent_coordination as Record<string, unknown>
+    : null;
   const readiness = status?.integration_readiness && typeof status.integration_readiness === "object"
     ? status.integration_readiness as { overall_status?: unknown; verified_tasks?: unknown; total_tasks?: unknown; tasks?: unknown }
     : null;
@@ -522,6 +528,22 @@ function CryptoMonitorPanel({ settingsOnly = false }: { settingsOnly?: boolean }
         <small>{String(agent.detail || "")}</small>
       </div>)}
       {Object.keys(agentStates).length === 0 && <div className="decision-empty"><div><b>Agent runtime not connected</b><span>Start the phone engine to retrieve actual agent states.</span></div></div>}
+    </div>
+    <div className="decision-list">
+      <div className="decision-list-head"><b>SHARED CANDIDATE QUEUE</b><span>{candidateQueue.length} recent · {String(agentCoordination?.status || "WAITING")}</span></div>
+      <div className="panel-foot">Scanner opportunities, newly discovered tokens and Binance strategy decisions are recorded in one queue. A candidate is not an order approval; each execution route still has its own safety checks.</div>
+      {candidateQueue.length === 0
+        ? <div className="decision-empty"><div><b>No candidates recorded yet</b><span>New scanner opportunities and discovered tokens will appear here when their feeds update.</span></div></div>
+        : candidateQueue.slice(0, 12).map((item, index) => <div className="decision-row" key={String(item.candidate_id || index)}>
+            <div>
+              <b>{String(item.symbol || "Unknown")} · {String(item.candidate_type || "CANDIDATE").replaceAll("_", " ")}</b>
+              <small>{item.buy_exchange && item.sell_exchange
+                ? "Buy " + String(item.buy_exchange) + " → Sell " + String(item.sell_exchange)
+                : String(item.chain || item.execution_route || item.reason || "Candidate evidence recorded")}</small>
+            </div>
+            <span>{String(item.status || "UNKNOWN").replaceAll("_", " ")}</span>
+            <small>{item.net_edge_bps === undefined ? "" : "Net " + Number(item.net_edge_bps).toFixed(1) + " bps"}</small>
+          </div>)}
     </div>
     <div className="decision-list">
       <div className="decision-list-head"><b>LIVE TOP-OF-BOOK QUOTES</b><span>{latestQuotes.length} venues</span></div>
