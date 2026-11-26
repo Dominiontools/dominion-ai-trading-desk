@@ -139,3 +139,14 @@
   .execution-mode-label { display: none; }
   .execution-mode-option { padding: 0 7px; font-size: 9px; }
 }
+
+
+/* Dedicated Settings navigation and view */
+.sidebar .nav{width:100%;border:0;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:13px}
+.sidebar .nav:disabled{opacity:.42;cursor:default}
+.settings-nav-label{margin-top:22px}
+.settings-page .ctrader-engine-panel{margin-top:0}
+.settings-page .crypto-monitor{margin-top:14px}
+.settings-page .credential-panel input{display:block;width:100%;margin:10px 0;padding:11px 12px;border:1px solid #2a3a52;border-radius:8px;background:#0b1524;color:#e5edf8;font:inherit;font-size:12px}
+.settings-page .credential-panel input:focus{outline:2px solid rgba(224,177,95,.35);border-color:#c99b55}
+@media(max-width:700px){.settings-page .topbar{align-items:flex-start;flex-direction:column}}
