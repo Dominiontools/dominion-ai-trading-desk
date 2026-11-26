@@ -69,7 +69,7 @@ def test_binance_personal_rate_requires_explicit_verification(monkeypatch):
     monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", "7.5")
     monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", "8.5")
     monkeypatch.delenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", raising=False)
-    with pytest.raises(RuntimeError, match="explicitly verified"):
+    with pytest.raises(RuntimeError, match="PERSONAL_VERIFIED=YES"):
         service._fee_config()
 
 
