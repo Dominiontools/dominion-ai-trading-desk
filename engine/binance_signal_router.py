@@ -112,9 +112,21 @@ class BinanceTestnetSignalRouter:
             estimated_slippage_bps=self.estimated_slippage_bps,
         )
         order_id = list_client_order_id or ("dom" + uuid4().hex[:17])
-        result = self.lifecycle.submit_and_verify(
-            plan, list_client_order_id=order_id
-        )
+        submission_error = None
+        try:
+            result = self.lifecycle.submit_and_verify(
+                plan, list_client_order_id=order_id
+            )
+        except Exception as exc:
+            last = self.lifecycle.last_result or {}
+            if last.get("order_list_id") != order_id or last.get("status") not in {
+                "SUBMISSION_OR_RECONCILIATION_UNKNOWN",
+                "UNPROTECTED_PARTIAL_FILL",
+                "PROTECTION_UNCONFIRMED",
+            }:
+                raise
+            result = dict(last)
+            submission_error = type(exc).__name__
         emergency_result = None
         if result.get("protected") is not True and result.get("operator_action_required") is True:
             try:
@@ -151,6 +163,7 @@ class BinanceTestnetSignalRouter:
                 else result.get("operator_action_required") is True
             ),
             "emergency_close": emergency_result,
+            "submission_error_type": submission_error,
             "plan": {
                 "quantity": plan.quantity,
                 "entry": plan.limit_price,
