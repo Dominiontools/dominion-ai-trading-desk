@@ -57,6 +57,24 @@ def _fee_config() -> dict[str, tuple[float, float]]:
     return fees
 
 
+def _record_candidate(state: dict, candidate: dict) -> None:
+    """Upsert a bounded, shared candidate record across scanner and agent threads."""
+    candidate_id = str(candidate.get("candidate_id", "")).strip()
+    if not candidate_id:
+        return
+    with _runtime_lock:
+        queue = state.get("candidate_queue")
+        if not isinstance(queue, list):
+            queue = []
+        for index, existing in enumerate(queue):
+            if isinstance(existing, dict) and existing.get("candidate_id") == candidate_id:
+                queue[index] = {**existing, **candidate}
+                break
+        else:
+            queue.insert(0, candidate)
+        state["candidate_queue"] = queue[:100]
+
+
 
 
 def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
@@ -307,6 +325,8 @@ def _runtime_config(
         },
         "last_cycle_at": None,
         "last_error": None,
+        "candidate_queue": [],
+        "agent_coordination": {"status": "WAITING_FOR_FEEDS", "mode": "PAPER_ONLY", "orders_enabled": False},
         "strategy_engine": {"status": "STARTING", "strategy": "MTF_CONFLUENCE", "profile": strategy_profile, "score_threshold": score_threshold, "detail": "Waiting for completed execution/context candles and a fresh Binance quote."},
         "agents": {
             "SCANNER": {"status": "RUNNING", "detail": "Public crypto price-gap scanner runs with the phone monitor."},
@@ -445,15 +465,56 @@ def _runtime_config(
                     "note": "Discovery, whale, rug and hype evidence is coordinated for review. DEX token orders are not routed to Binance Spot.",
                 }
                 rug_coordination = coordinated_agents.get("RUG", {})
+                now_text = datetime.now(timezone.utc).isoformat()
+                security_by_address = {
+                    str(item.get("token_address", "")).lower(): item
+                    for item in security_results if item.get("token_address")
+                }
+                for token in discovered:
+                    token_address = str(token.get("token_address", "")).strip()
+                    token_security = security_by_address.get(token_address.lower())
+                    if token_security and token_security.get("risks"):
+                        candidate_status = "BLOCKED_RISK_FLAGS"
+                    elif token_security:
+                        candidate_status = "REVIEW_REQUIRED_INCOMPLETE_EVIDENCE"
+                    elif not GoPlusSecurityFeed.supports_contract(
+                        token.get("chain_id", ""), token_address
+                    ):
+                        candidate_status = "BLOCKED_UNSUPPORTED_SECURITY_CHAIN"
+                    else:
+                        candidate_status = "WAITING_FOR_SECURITY_EVIDENCE"
+                    _record_candidate(state, {
+                        "candidate_id": f"token:{str(token.get('chain_id', '')).lower()}:{token_address.lower()}",
+                        "candidate_type": "DEX_TOKEN_DISCOVERY",
+                        "symbol": str(token.get("symbol", ""))[:24],
+                        "chain": str(token.get("chain_id", ""))[:32],
+                        "token_address": token_address[:128],
+                        "pair_address": str(token.get("pair_address", ""))[:128],
+                        "source": "DEXSCREENER",
+                        "status": candidate_status,
+                        "risk_gate": "BLOCKED_OR_REVIEW_REQUIRED",
+                        "execution_route": "NO_DEX_EXECUTOR_CONNECTED",
+                        "security_evidence": token_security,
+                        "last_seen_at": now_text,
+                    })
+                state["agent_coordination"] = {
+                    **coordination,
+                    "status": "COORDINATED",
+                    "last_cycle_at": now_text,
+                    "token_execution": "NOT_CONNECTED_NO_DEX_EXECUTOR",
+                    "note": "Discovery, whale, rug and hype evidence is coordinated for review. DEX token orders are not routed to Binance Spot.",
+                }
+                queue_count = len(state.get("candidate_queue", []))
                 state["agents"]["DESK MANAGER"] = {
                     "status": "RUNNING",
                     "detail": (
                         "Shared coordinator consumed Whale and Hype feed results and "
-                        f"Rug evidence ({rug_coordination.get('status', 'UNKNOWN')}). "
+                        f"Rug evidence ({rug_coordination.get('status', 'UNKNOWN')}); "
+                        f"{queue_count} recent candidates are in the shared queue. "
                         "Unknown safety evidence remains blocked; no DEX token order is sent."
                     ),
                 }
-                state["agent_feed_last_cycle"] = datetime.now(timezone.utc).isoformat()
+                state["agent_feed_last_cycle"] = now_text
                 state["agent_feed_error"] = None
             except Exception as exc:
                 state["agent_feed_error"] = type(exc).__name__
@@ -564,6 +625,24 @@ def _runtime_config(
                     "mode": "PAPER_ONLY",
                     "orders_enabled": False,
                 }
+                for opportunity in scan.get("opportunities", []):
+                    symbol = str(opportunity.get("symbol", "")).upper()
+                    buy_exchange = str(opportunity.get("buy_exchange", "")).lower()
+                    sell_exchange = str(opportunity.get("sell_exchange", "")).lower()
+                    _record_candidate(state, {
+                        "candidate_id": f"arb:{symbol}:{buy_exchange}:{sell_exchange}",
+                        "candidate_type": "CROSS_EXCHANGE_ARBITRAGE",
+                        "symbol": symbol,
+                        "buy_exchange": buy_exchange,
+                        "sell_exchange": sell_exchange,
+                        "net_edge_bps": opportunity.get("net_edge_bps"),
+                        "estimated_cost_bps": opportunity.get("estimated_cost_bps"),
+                        "status": "PAPER_OPPORTUNITY_AWAITING_MULTI_EXCHANGE_EXECUTION",
+                        "risk_gate": "NOT_ROUTED",
+                        "execution_blocked": True,
+                        "execution_block_reason": "MULTI_EXCHANGE_EXECUTION_KEYS_AND_FUNDS_NOT_CONNECTED",
+                        "last_seen_at": cycle_started.isoformat(),
+                    })
                 state["last_error"] = None
             except Exception as exc:
                 state["last_error"] = type(exc).__name__
@@ -630,6 +709,29 @@ def _runtime_config(
                             now=cycle_now,
                         )
                     event = result.get("event", result.get("status", "UNKNOWN"))
+                    if event in {"TESTNET_ORDER", "TESTNET_BLOCKED", "TESTNET_POSITION_OPEN",
+                                 "PAPER_ENTRY", "PAPER_EXIT", "ENTRY_BLOCKED"}:
+                        candidate_stamp = execution_candles[-1].timestamp.isoformat()
+                        candidate_status = {
+                            "TESTNET_ORDER": "TESTNET_ORDER_PROTECTED",
+                            "TESTNET_BLOCKED": "TESTNET_BLOCKED",
+                            "TESTNET_POSITION_OPEN": "POSITION_LIMIT_ACTIVE",
+                            "PAPER_ENTRY": "PAPER_ENTRY_ACCEPTED",
+                            "PAPER_EXIT": "PAPER_POSITION_CLOSED",
+                            "ENTRY_BLOCKED": "RISK_BLOCKED",
+                        }.get(event, str(event))
+                        _record_candidate(state, {
+                            "candidate_id": f"binance:{symbol}:{candidate_stamp}",
+                            "candidate_type": "BINANCE_DIRECTIONAL_SPOT",
+                            "symbol": symbol,
+                            "side": result.get("side") or result.get("position", {}).get("side"),
+                            "score": result.get("score"),
+                            "status": candidate_status,
+                            "risk_gate": "APPROVED" if event in {"TESTNET_ORDER", "PAPER_ENTRY"} else "BLOCKED_OR_POSITION_MANAGED",
+                            "execution_route": "BINANCE_SPOT_TESTNET" if event.startswith("TESTNET_") else "PAPER",
+                            "reason": result.get("reason") or result.get("signal_reason") or event,
+                            "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                        })
                     state["strategy_engine"] = {
                         "status": str(event), "strategy": "MTF_CONFLUENCE",
                         "profile": strategy_profile, "symbol": symbol,
