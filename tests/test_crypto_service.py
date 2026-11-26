@@ -346,3 +346,34 @@ def test_fee_config_rejects_non_finite_values(monkeypatch, value):
     monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", "YES")
     with pytest.raises(RuntimeError, match="finite"):
         service._fee_config()
+
+def test_scanner_readiness_requires_all_four_fresh_exchange_feeds():
+    scanner = {
+        "status": "NO_QUALIFYING_OPPORTUNITY",
+        "symbols_scanned": 52,
+        "fresh_quote_count": 104,
+        "symbols_with_two_venues": 52,
+        "available_exchanges": ["Binance", "Bitget", "HTX", "OKX"],
+        "fresh_exchanges": ["Binance", "Bitget", "HTX", "OKX"],
+        "venue_errors": {},
+        "reason": "No fresh, depth-backed price gap cleared verified fees.",
+    }
+    assert service._cross_exchange_scan_verified(scanner) is True
+
+    # All four may have returned something, but a stale-only venue must not
+    # make the full scanner look verified.
+    scanner["fresh_exchanges"] = ["Binance", "Bitget", "OKX"]
+    assert service._cross_exchange_scan_verified(scanner) is False
+
+
+def test_scanner_readiness_rejects_missing_fee_qualification():
+    scanner = {
+        "status": "NO_QUALIFYING_OPPORTUNITY",
+        "symbols_scanned": 52,
+        "fresh_quote_count": 104,
+        "symbols_with_two_venues": 52,
+        "fresh_exchanges": ["Binance", "Bitget", "HTX", "OKX"],
+        "venue_errors": {},
+        "reason": "FEE_CONFIG_MISSING",
+    }
+    assert service._cross_exchange_scan_verified(scanner) is False
