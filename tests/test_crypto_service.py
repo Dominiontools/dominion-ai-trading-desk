@@ -173,9 +173,10 @@ def test_embedded_service_exposes_only_safe_binance_recovery_summary(tmp_path, m
         "api_secret": "must-not-leak",
         "risk_context": {
             "verified": True, "status": "VERIFIED", "quote_asset": "USDT",
-            "equity_quote": "105.00", "available_quote": "100.00",
-            "daily_loss_quote": "2.50", "open_positions": 0,
-            "journaled_order_lists": 1, "private_payload": "must-not-leak",
+            "equity_quote": "20", "available_quote": "20",
+            "actual_equity_quote": "105.00", "risk_capital_cap_quote": "20",
+            "daily_loss_quote": "0.25", "open_positions": 0,
+            "exchange_open_orders": 0, "journaled_order_lists": 1, "private_payload": "must-not-leak",
         },
     })
     started = service.start_embedded(str(tmp_path), port=0,
@@ -198,7 +199,7 @@ def test_embedded_service_exposes_only_safe_binance_recovery_summary(tmp_path, m
             "verified": True, "status": "VERIFIED", "quote_asset": "USDT",
             "equity_quote": "105.00", "available_quote": "100.00",
             "daily_loss_quote": "2.50", "open_positions": 0,
-            "journaled_order_lists": 1, "orders_enabled": False,
+            "exchange_open_orders": 0, "journaled_order_lists": 1, "orders_enabled": False,
             "environment": "BINANCE_SPOT_TESTNET",
         }
     finally:
