@@ -25,7 +25,7 @@ PUBLIC_SPOT_FEES_BPS: dict[str, tuple[float, float]] = {
 PUBLIC_FEE_URLS = {
     "Binance": "https://www.binance.com/en/fee/trading",
     "Bitget": "https://www.bitget.com/fee/",
-    "OKX": "https://www.okx.com/fees",
+    "OKX": "https://www.okx.com/en-gb/help/important-notice-consolidation-token-pairs",
 }
 PUBLIC_FEE_SOURCES = {
     "Binance": "BINANCE_PUBLIC_STANDARD_SPOT",
@@ -96,13 +96,13 @@ def _percent_pair(text: str, venue: str) -> tuple[float, float]:
         tail = normalized[marker.end():marker.end() + 1800]
         pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s*/\s*(\d+(?:\.\d+)?)\s*%", tail)
     elif venue == "Bitget":
-        marker = re.search(r"VIP\s*0|VIP0|Regular", normalized, re.IGNORECASE)
+        marker = re.search(r"Spot fee rates|VIP\s*0|VIP0|Regular", normalized, re.IGNORECASE)
         if not marker:
-            raise ValueError("Bitget VIP0 fee row not found.")
-        tail = normalized[marker.end():marker.end() + 1800]
+            raise ValueError("Bitget public spot fee table not found.")
+        tail = normalized[marker.end():marker.end() + 4000]
         pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s*/\s*(\d+(?:\.\d+)?)\s*%", tail)
         if not pair:
-            # The fee page may render maker and taker as adjacent columns.
+            # Some page versions render maker and taker as adjacent columns.
             pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s+(\d+(?:\.\d+)?)\s*%", tail)
     else:
         marker = re.search(r"Regular", normalized, re.IGNORECASE)
