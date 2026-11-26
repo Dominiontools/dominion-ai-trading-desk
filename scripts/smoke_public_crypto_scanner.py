@@ -56,7 +56,11 @@ def main() -> int:
         "collection_duration_ms": result.get("collection_duration_ms"),
         "opportunities_count": result.get("opportunities_count", 0),
         "fee_refresh_status": {
-            venue: meta.get("refresh_status")
+            venue: {
+                "status": meta.get("refresh_status"),
+                "error": meta.get("last_error"),
+                "detail": meta.get("last_error_detail"),
+            }
             for venue, meta in fee_policy.get("sources", {}).items()
         },
         "orders_enabled": False,
