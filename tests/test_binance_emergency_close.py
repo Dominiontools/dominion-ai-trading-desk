@@ -58,7 +58,11 @@ class FakeClient:
             from decimal import Decimal
             remaining = Decimal(self.balances[0]["free"]) - Decimal(self.market_response["executedQty"])
             self.balances[0]["free"] = format(max(remaining, Decimal("0")), "f")
-        return dict(self.market_response)
+        response = dict(self.market_response)
+        response.setdefault("symbol", symbol)
+        response.setdefault("side", "SELL")
+        response.setdefault("clientOrderId", client_order_id)
+        return response
 
 
 def run(client):
