@@ -33,21 +33,6 @@ background work under severe resource pressure; force-stopping the app, turning
 off the phone, or losing internet will stop useful monitoring. After a reboot
 or force-stop, open the app and start the engine again.
 
-## GMGN official read-only connection
-
-The Android app includes an optional official GMGN OpenAPI read-only connector.
-
-1. Follow GMGN's official API-key setup at https://gmgn.ai/ai. GMGN's setup guide uses an Ed25519 key pair: submit the public key to create your API key.
-2. Keep the Ed25519 private key private and out of chat. Dominion's current read-only connector needs only the GMGN API key; it does not need the private key.
-3. In the Android app, open **GMGN Official API · Read Only**.
-4. Enter the API key and save it. Android Keystore encrypts the key on the device.
-5. Stop and restart the phone engine so the native service loads the saved key.
-6. Check the **GMGN Token Discovery** panel. It reports the latest connection state and bounded response previews for Solana Trenches and 1-hour trending data.
-
-The connector uses GMGN's official OpenAPI exist-auth requests. It does not use browser scraping or unofficial endpoints. Only read-only token-discovery and trending requests are wired. No GMGN wallet private key, swap, sniper order, copy trade, withdrawal or live transaction is enabled. Never paste API secrets or wallet private keys into chat.
-
-A GMGN key is an external prerequisite: without one, the panel correctly reports `NOT_CONFIGURED`. A successful API response is evidence that read-only access works; it is not evidence that tokens are safe or profitable.
-
 ## Fee configuration
 
 The scanner intentionally does not guess exchange fees. Until you verify your
