@@ -149,3 +149,63 @@ def test_android_risk_snapshot_blocks_when_account_lacks_trade_permission(monkey
     assert result["halted"] is True
     assert result["risk_context"]["verified"] is False
     assert result["orders_enabled"] is False
+
+def test_native_emergency_close_requires_native_confirmation(monkeypatch, tmp_path):
+    from engine import binance_android
+
+    class NeverConstructClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("Exchange client must not be created without native approval.")
+
+    monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", NeverConstructClient)
+    result = json.loads(binance_android.emergency_close_after_native_approval(
+        "test-key", "test-secret", str(tmp_path / "journal.json"),
+        str(tmp_path / "loss.jsonl"), "BTCUSDT", "dominion123", False,
+    ))
+    assert result["status"] == "APPROVAL_REQUIRED"
+    assert result["orders_enabled"] is False
+
+
+def test_native_emergency_close_rechecks_exchange_state_before_any_close(monkeypatch, tmp_path):
+    from engine import binance_android
+
+    calls = {"reconcile": 0, "ticker": 0}
+
+    class ReadOnlyUntilApprovalClient:
+        def __init__(self, api_key, api_secret, *, allow_orders):
+            assert allow_orders is True
+            self.allow_orders = True
+
+        def account(self):
+            return {"canTrade": True}
+
+        def reconcile_protected_buy_otoco(self, *, symbol, list_client_order_id):
+            calls["reconcile"] += 1
+            assert symbol == "BTCUSDT"
+            assert list_client_order_id == "dominion123"
+            return {"state": "PROTECTED", "protected": True, "action_required": False}
+
+        def ticker_price(self, *, symbol):
+            calls["ticker"] += 1
+            raise AssertionError("Ticker must not be read when no emergency action is required.")
+
+    monkeypatch.setenv("DOMINION_ENABLE_BINANCE_TESTNET_ORDERS", "YES")
+    monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", ReadOnlyUntilApprovalClient)
+    journal = tmp_path / "binance-lifecycle.json"
+    journal.write_text(json.dumps({
+        "version": 1,
+        "submitted_ids": ["dominion123"],
+        "submitted_symbols": {"dominion123": "BTCUSDT"},
+        "submitted_risk_quote": {"dominion123": "0.10"},
+        "halted": True,
+        "last_result": {"status": "RECONCILIATION_REQUIRED", "halted": True},
+    }), encoding="utf-8")
+
+    result = json.loads(binance_android.emergency_close_after_native_approval(
+        "test-key", "test-secret", str(journal),
+        str(tmp_path / "daily-loss.jsonl"), "BTCUSDT", "dominion123", True,
+    ))
+    assert result["status"] == "EMERGENCY_CLOSE_BLOCKED"
+    assert result["orders_enabled"] is False
+    assert calls == {"reconcile": 1, "ticker": 0}
+
