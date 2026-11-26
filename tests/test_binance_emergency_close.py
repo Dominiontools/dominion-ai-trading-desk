@@ -119,7 +119,7 @@ def test_never_sells_more_than_entry_fill_and_flags_residual_dust():
 def test_does_not_claim_flat_when_exchange_reports_partial_market_execution():
     client = FakeClient()
     client.market_response = {"status": "PARTIALLY_FILLED", "executedQty": "0.0005"}
-    with pytest.raises(RuntimeError, match="not confirmed FILLED"):
+    with pytest.raises(RuntimeError, match="matching confirmed FILLED"):
         run(client)
 
 
