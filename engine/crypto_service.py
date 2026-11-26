@@ -292,9 +292,24 @@ def _runtime_config(
         with _runtime_lock:
             snapshot = dict(state)
             snapshot["paper_trading"] = paper_desk.snapshot()
+            scanner = snapshot.get("arbitrage_scanner")
+            scanner = scanner if isinstance(scanner, dict) else {}
+            available_exchanges = set(scanner.get("available_exchanges", []))
+            venue_errors = scanner.get("venue_errors")
+            scanner_verified = (
+                scanner.get("status") in {"PAPER_OPPORTUNITY", "NO_QUALIFYING_OPPORTUNITY"}
+                and scanner.get("symbols_scanned", 0) >= 52
+                and len(available_exchanges) == 4
+                and not venue_errors
+                and not scanner.get("reason") in {
+                    "FEE_CONFIG_MISSING", "INSUFFICIENT_INDEPENDENT_MARKET_QUOTES",
+                    "BATCH_MARKET_DATA_FETCH_FAILED",
+                }
+            )
             snapshot["integration_readiness"] = build_readiness(
                 phone_engine_running=state.get("engine") == "running",
                 verified_fee_exchanges=tuple(fees.keys()),
+                cross_exchange_scan_verified=scanner_verified,
             )
             return snapshot
 
