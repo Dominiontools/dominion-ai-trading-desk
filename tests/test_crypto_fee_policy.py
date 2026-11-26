@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timedelta, timezone
 import pytest
 import engine.crypto_fee_policy as fee_policy
 from engine.crypto_fee_policy import (
@@ -13,7 +14,6 @@ def isolate_fee_cache():
     original_fees = dict(fee_policy._cached_fees)
     original_meta = copy.deepcopy(fee_policy._cached_meta)
     original_refresh = fee_policy._last_refresh_at
-    fee_policy._cached_fees.clear()
     yield
     fee_policy._cached_fees.clear()
     fee_policy._cached_fees.update(original_fees)
@@ -69,12 +69,26 @@ def test_failed_public_fee_refresh_keeps_last_known_rates_and_marks_failure():
     assert "HTX" not in result["fees"]
 
 
-def test_cold_start_with_unavailable_public_schedules_returns_no_qualifiable_rates():
+def test_cold_start_retains_recent_official_baselines_when_refresh_is_unavailable():
     def unavailable(_url):
         raise OSError("offline")
 
     result = refresh_public_fee_policy(fetch_text=unavailable)
-    assert result["fees"] == {}
-    assert result["sources"]["Binance"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
-    assert result["sources"]["Bitget"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
-    assert result["sources"]["OKX"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
+    assert result["fees"] == PUBLIC_SPOT_FEES_BPS
+    for venue in ("Binance", "Bitget", "OKX"):
+        assert result["sources"][venue]["verified"] is True
+        assert result["sources"][venue]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
+
+
+def test_public_fee_baseline_expires_after_seven_days_without_refresh():
+    fee_policy._cached_meta["Binance"]["last_refreshed_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=8)
+    ).isoformat()
+
+    def unavailable(_url):
+        raise OSError("offline")
+
+    result = refresh_public_fee_policy(fetch_text=unavailable)
+    assert "Binance" not in result["fees"]
+    assert result["sources"]["Binance"]["verified"] is False
+    assert result["sources"]["Binance"]["refresh_status"] == "STALE_RATE_EXPIRED"
