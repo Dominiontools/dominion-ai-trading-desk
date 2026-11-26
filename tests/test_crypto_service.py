@@ -341,6 +341,8 @@ def test_runtime_refuses_testnet_mode_when_credentials_are_missing(tmp_path, mon
 
 @pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf"])
 def test_fee_config_rejects_non_finite_values(monkeypatch, value):
-    monkeypatch.setenv("DOMINION_FEE_BINANCE_TAKER_BPS", value)
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", value)
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", "8")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", "YES")
     with pytest.raises(RuntimeError, match="finite"):
         service._fee_config()
