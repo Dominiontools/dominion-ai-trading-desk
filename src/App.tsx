@@ -61,6 +61,7 @@ export default function App() {
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / SETTINGS</div><h1>Trading settings</h1></div>
         <span className="muted">Separate configuration for Forex/Gold and Crypto</span>
+        <button type="button" className="view-switcher" onClick={() => setActiveView("overview")}><Gauge size={15}/> Overview</button>
       </header>
       <div className="notice"><ShieldCheck size={18}/><div><b>Strategy and connection settings</b><span>Forex/Gold uses the cTrader demo engine. Crypto uses continuous cross-exchange scanning and Binance Spot Testnet. Live-money trading remains locked.</span></div></div>
       <CTraderEngineControls />
@@ -78,6 +79,7 @@ export default function App() {
             </button>
           </div>
           <span className="muted">cTrader demo engine · Crypto paper / testnet monitor</span>
+          <button type="button" className="view-switcher" onClick={() => setActiveView("settings")}><Settings size={15}/> Settings</button>
         </div>
       </header>
 
