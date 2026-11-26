@@ -258,3 +258,23 @@ def test_multi_market_scan_uses_fresh_coverage_when_stale_and_fresh_quotes_mix(t
     assert result["fresh_quote_count"] == 2
     assert result["quotes_by_exchange"] == {"Binance": 1, "Bitget": 1}
     assert result["orders_enabled"] is False
+
+def test_stale_venue_does_not_require_fee_configuration(tmp_path):
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    quotes = [
+        ExchangeQuote("Binance", "BTCUSDT", 99.9, 100.0, now, 2, 2),
+        ExchangeQuote("Bitget", "BTCUSDT", 101.0, 101.1, now, 2, 2),
+        ExchangeQuote("HTX", "BTCUSDT", 102.0, 102.1, now - timedelta(seconds=8), 2, 2),
+    ]
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(quotes), decision_log=tmp_path / "stale-venue.jsonl",
+        costs_by_exchange={"Binance": (0, 1), "Bitget": (0, 1)},
+        clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT"])
+    assert result["status"] == "PAPER_OPPORTUNITY"
+    assert result["missing_fee_exchanges"] if "missing_fee_exchanges" in result else True
+    assert result["fresh_exchanges"] == ["Binance", "Bitget"]
+    assert result["orders_enabled"] is False
