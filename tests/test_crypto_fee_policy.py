@@ -109,3 +109,15 @@ def test_expired_public_fee_baseline_is_not_reintroduced_by_policy_loader():
     assert "Binance" not in fees
     assert sources["Binance"]["verified"] is False
     assert sources["Binance"]["refresh_status"] == "STALE_RATE_EXPIRED"
+
+
+def test_policy_loader_expires_stale_baseline_even_before_network_refresh():
+    fee_policy._cached_meta["Binance"]["last_refreshed_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=8)
+    ).isoformat()
+
+    fees, sources = load_fee_policy()
+
+    assert "Binance" not in fees
+    assert sources["Binance"]["verified"] is False
+    assert sources["Binance"]["refresh_status"] == "STALE_RATE_EXPIRED"
