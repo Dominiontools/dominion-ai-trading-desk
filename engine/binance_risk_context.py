@@ -13,6 +13,8 @@ from decimal import Decimal, InvalidOperation
 
 from .risk_execution import SpotRiskContext
 
+MAX_TESTNET_RISK_CAPITAL_USDT = Decimal("20")
+
 
 @dataclass(frozen=True)
 class BinanceRiskSnapshot:
@@ -22,6 +24,9 @@ class BinanceRiskSnapshot:
     quote_asset: str
     journaled_order_lists: int
     recovery_status: str
+    actual_equity_quote: Decimal
+    risk_capital_cap_quote: Decimal
+    exchange_open_orders: int
 
 
 class BinanceRiskContextProvider:
@@ -61,20 +66,8 @@ class BinanceRiskContextProvider:
         equity = free + locked
         if equity <= 0:
             raise PermissionError("Quote-asset equity is not positive.")
-        unmanaged_assets = []
-        for item in balances:
-            if not isinstance(item, dict) or item.get("asset") == self.quote_asset:
-                continue
-            asset = str(item.get("asset", "")).strip().upper()
-            if not asset:
-                raise ValueError("A Binance balance has no asset symbol.")
-            asset_total = (
-                self._amount(item.get("free"), f"{asset} free balance")
-                + self._amount(item.get("locked"), f"{asset} locked balance")
-            )
-            if asset_total > 0:
-                unmanaged_assets.append(asset)
-
+        # Seeded Testnet inventory is not proof of an active position.
+        # Enforce the limit from reconciled bot state and account-wide active orders.
         recovery = self.lifecycle.reconcile_after_restart()
         if (not isinstance(recovery, dict) or recovery.get("halted") is not False
                 or recovery.get("operator_action_required") is True):
@@ -82,25 +75,39 @@ class BinanceRiskContextProvider:
         orders = recovery.get("orders", [])
         if not isinstance(orders, list):
             raise ValueError("Binance recovery order summary is malformed.")
-        open_positions = 0
+        journaled_positions = 0
         for item in orders:
             if not isinstance(item, dict) or item.get("safe") is not True:
                 raise PermissionError("An existing Binance order is not safely reconciled.")
             if item.get("state") == "PROTECTED":
-                open_positions += 1
-        # Any non-quote holding is treated as an unmanaged open position.
-        # This prevents the bot from ignoring manual or externally opened Spot
-        # holdings when enforcing its one-position policy.
-        open_positions += len(unmanaged_assets)
-        if open_positions > 1:
-            raise PermissionError("More than one managed or unmanaged Spot holding is present.")
+                journaled_positions += 1
 
+        open_orders_reader = getattr(self.client, "account_open_orders", None)
+        if not callable(open_orders_reader):
+            raise PermissionError("Binance account-wide open orders cannot be verified.")
+        exchange_orders = open_orders_reader()
+        if not isinstance(exchange_orders, list):
+            raise ValueError("Binance account-wide open-orders response is malformed.")
+        for item in exchange_orders:
+            if (not isinstance(item, dict)
+                    or not isinstance(item.get("symbol"), str)
+                    or not item["symbol"].isalnum()
+                    or item.get("side") not in {"BUY", "SELL"}
+                    or item.get("status") not in {"NEW", "PARTIALLY_FILLED"}):
+                raise ValueError("Binance account-wide open-orders response is malformed.")
+
+        # OTOCO protection legs and a journaled position occupy one slot.
+        open_positions = 1 if journaled_positions or exchange_orders else 0
+        if journaled_positions > 1:
+            raise PermissionError("More than one journaled Binance position is present.")
         daily_loss = self.daily_loss_ledger.loss_for_day(now=now)
         if not isinstance(daily_loss, Decimal) or not daily_loss.is_finite() or daily_loss < 0:
             raise ValueError("Daily realized-loss ledger returned an invalid value.")
+        risk_equity = min(equity, MAX_TESTNET_RISK_CAPITAL_USDT)
+        risk_available = min(free, MAX_TESTNET_RISK_CAPITAL_USDT)
         context = SpotRiskContext(
-            equity_quote=equity,
-            available_quote=free,
+            equity_quote=risk_equity,
+            available_quote=risk_available,
             daily_loss_quote=daily_loss,
             open_positions=open_positions,
             emergency_stop=False,
@@ -112,4 +119,7 @@ class BinanceRiskContextProvider:
             quote_asset=self.quote_asset,
             journaled_order_lists=len(orders),
             recovery_status=str(recovery.get("status", "UNKNOWN")),
+            actual_equity_quote=equity,
+            risk_capital_cap_quote=MAX_TESTNET_RISK_CAPITAL_USDT,
+            exchange_open_orders=len(exchange_orders),
         )
