@@ -43,3 +43,19 @@ No Binance Testnet order has been placed by this implementation. Actual demo-ord
 Bitget and HTX remain public market-data sources in the agreed scope. Their private/demo execution adapters are not prerequisites for this release stage. cTrader remains a separate demo route and still requires trading-scope authorization before a broker-confirmed demo-order test.
 
 Live-money trading remains locked.
+
+
+## Emergency flattening (Spot Testnet only)
+
+When the router receives a known unprotected or partially filled entry result, it now attempts the separate emergency-close workflow:
+
+1. The lifecycle writes an emergency-close-pending record and deterministic client order ID to its durable journal before exchange actions.
+2. For a partial entry, it cancels the remaining OTOCO entry and requires the entry to be terminal and the order list to report `ALL_DONE`.
+3. For a filled entry, it inspects both OTOCO exits. It cancels the list only if either exit is still active, then re-queries both legs and requires terminal statuses.
+4. It checks that no other SELL order is open for the symbol and that base-asset funds are unlocked.
+5. It sizes the market sell from the confirmed free base balance, capped at the bot entry's exchange-reported executed quantity and rounded down to `MARKET_LOT_SIZE`.
+6. It checks the market minimum notional using a fresh Testnet ticker price, submits one uniquely identified MARKET SELL, requires the matching order response to be `FILLED` for the full requested quantity, and checks the remaining base balance.
+
+Any missing response, open order, locked balance, filter problem, partial market execution, residual asset, or uncertain cancellation leaves execution halted for operator review. The emergency client ID is derived deterministically from the bot order-list ID; an ambiguous request is never blindly resubmitted. A confirmed flat result still leaves new entries halted until the operator reviews the event.
+
+This workflow does not use production Binance hosts or live credentials. It has not yet been verified with an actual Binance Spot Testnet order; automated tests and the final end-to-end Testnet exercise remain required.
