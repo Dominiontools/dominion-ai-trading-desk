@@ -272,3 +272,28 @@ def test_emergency_cancel_allows_only_filled_bot_entry(monkeypatch):
     assert calls[1][0] == "DELETE"
     params = parse_qs(urlsplit(calls[1][1]).query)
     assert params["listClientOrderId"] == ["dominion123"]
+
+def test_account_open_orders_reads_all_symbols_when_symbol_is_omitted(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url, headers=headers)
+        return [{"symbol": "BTCUSDT", "side": "SELL", "status": "NEW"}]
+    client = make_client(monkeypatch, transport)
+    result = client.account_open_orders()
+    params = parse_qs(urlsplit(captured["url"]).query)
+    assert result[0]["symbol"] == "BTCUSDT"
+    assert captured["method"] == "GET"
+    assert urlsplit(captured["url"]).path == "/api/v3/openOrders"
+    assert "symbol" not in params
+    assert params["signature"]
+    assert captured["headers"]["X-MBX-APIKEY"] == "test-api-key"
+
+
+def test_account_open_orders_preserves_symbol_filter(monkeypatch):
+    captured = {}
+    def transport(method, url, headers, timeout):
+        captured.update(method=method, url=url)
+        return []
+    client = make_client(monkeypatch, transport)
+    assert client.account_open_orders(symbol="btcusdt") == []
+    assert parse_qs(urlsplit(captured["url"]).query)["symbol"] == ["BTCUSDT"]
