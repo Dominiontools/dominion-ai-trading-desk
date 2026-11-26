@@ -5,8 +5,11 @@ No credentials, private endpoints, order methods, or wallet access are used.
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.crypto_fee_policy import refresh_public_fee_policy
 from engine.crypto_feeds import PublicCryptoFeeds
