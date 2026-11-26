@@ -8,6 +8,7 @@ for querying Binance during recovery.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -219,6 +220,67 @@ class BinanceProtectedLifecycle:
                 }
                 self._persist_state()
                 raise
+
+    def emergency_flatten(
+        self, *, symbol: str, list_client_order_id: str, reference_price: str
+    ) -> dict[str, Any]:
+        """Durably record and attempt one emergency flatten for a known bot order."""
+        from engine.binance_emergency_close import emergency_flatten_otoco
+
+        with self._lock:
+            pair = symbol.strip().upper()
+            if list_client_order_id not in self._submitted_ids:
+                raise PermissionError("Emergency close is limited to a journaled bot order.")
+            if self._submitted_symbols.get(list_client_order_id) != pair:
+                raise PermissionError("Emergency close symbol does not match the journal.")
+            if not getattr(self._client, "allow_orders", False):
+                raise PermissionError("Binance Testnet order actions are disabled.")
+
+            emergency_id = "em" + hashlib.sha256(
+                list_client_order_id.encode("ascii", errors="strict")
+            ).hexdigest()[:18]
+            # Write-ahead state is durable before any cancellation or market order.
+            self._halted = True
+            self._last_result = {
+                "status": "EMERGENCY_CLOSE_PENDING",
+                "protected": False,
+                "halted": True,
+                "order_list_id": list_client_order_id,
+                "emergency_client_order_id": emergency_id,
+                "operator_action_required": True,
+            }
+            self._persist_state()
+            try:
+                result = emergency_flatten_otoco(
+                    self._client,
+                    symbol=pair,
+                    list_client_order_id=list_client_order_id,
+                    emergency_client_order_id=emergency_id,
+                    reference_price=reference_price,
+                )
+                self._last_result = {
+                    **result,
+                    "halted": True,
+                    "protected": False,
+                    "order_list_id": list_client_order_id,
+                    "operator_action_required": False,
+                    "detail": (
+                        str(result.get("detail")) if result.get("detail")
+                        else "Position is confirmed flat. Trading remains halted for operator review."
+                    ),
+                }
+            except Exception as exc:
+                self._last_result = {
+                    "status": "EMERGENCY_CLOSE_UNCONFIRMED",
+                    "protected": False,
+                    "halted": True,
+                    "order_list_id": list_client_order_id,
+                    "emergency_client_order_id": emergency_id,
+                    "error_type": type(exc).__name__,
+                    "operator_action_required": True,
+                }
+            self._persist_state()
+            return dict(self._last_result)
 
     def reconcile_existing(self, *, symbol: str, list_client_order_id: str) -> dict[str, Any]:
         """Refresh one order but preserve the aggregate state of every journaled order."""
