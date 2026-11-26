@@ -171,13 +171,14 @@ def test_router_never_reports_protected_when_lifecycle_cannot_confirm_it():
     lifecycle.protected = False
     result = router.submit_setup(
         setup, quote, context=context, fees=fees,
-        account_snapshot_verified=True, daily_loss_verified=True, now=now,
+        account_snapshot_verified=True, daily_loss_verified=True,
+        list_client_order_id="dominion123", now=now,
     )
     assert result["protected"] is False
     assert result["halted"] is True
     assert result["operator_action_required"] is False
     assert result["emergency_close"]["status"] == "EMERGENCY_FLAT_CONFIRMED"
-    assert lifecycle.emergency_call == ("BTCUSDT", "dom" + "dominion123"[:17], "100.0")
+    assert lifecycle.emergency_call == ("BTCUSDT", "dominion123", "100.0")
 
 
 
