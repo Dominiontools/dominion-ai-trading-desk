@@ -86,8 +86,10 @@ def test_native_emergency_close_requires_android_switch_and_explicit_dialog_appr
     native_dialog = script.index("new AlertDialog.Builder(getActivity())", active_engine_guard)
     assert active_engine_guard < native_switch_guard < native_dialog
     guard = script.index("if (!vault.binanceTestnetOrdersEnabled())")
+    worker_engine_guard = script.index("if (!TradingEngineService.isRunning())", native_dialog)
     credential_load = script.index("credentials = vault.loadForNativeUse();", guard)
-    assert guard < credential_load
+    python_close = script.index('callAttr("emergency_close_after_native_approval"', credential_load)
+    assert native_dialog < worker_engine_guard < guard < credential_load < python_close
     assert 'callAttr("emergency_close_after_native_approval"' in script
     assert "An uncertain submission will NOT be retried." in script
 
