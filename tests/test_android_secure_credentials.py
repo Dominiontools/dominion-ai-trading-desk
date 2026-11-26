@@ -81,6 +81,10 @@ def test_native_emergency_close_requires_android_switch_and_explicit_dialog_appr
     assert "vault.binanceTestnetOrdersEnabled()" in script
     assert "TradingEngineService.isRunning()" in script
     assert "local trading engine must be running" in script
+    active_engine_guard = script.index("if (!TradingEngineService.isRunning())")
+    native_switch_guard = script.index("if (!new CredentialVault(getContext()).binanceTestnetOrdersEnabled())")
+    native_dialog = script.index("new AlertDialog.Builder(getActivity())", active_engine_guard)
+    assert active_engine_guard < native_switch_guard < native_dialog
     guard = script.index("if (!vault.binanceTestnetOrdersEnabled())")
     credential_load = script.index("credentials = vault.loadForNativeUse();", guard)
     assert guard < credential_load
