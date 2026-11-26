@@ -102,7 +102,7 @@ class CryptoPaperMonitor:
             }
             for q in quotes
         ]
-        missing_fees = sorted(fresh_exchanges.difference(self.costs_by_exchange))
+        missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
         if missing_fees:
             record.update(
                 status="BLOCKED", reason="FEE_CONFIG_MISSING",
@@ -252,7 +252,7 @@ class CryptoPaperMonitor:
             )
             return self._write(record)
 
-        missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
+        missing_fees = sorted(fresh_exchanges.difference(self.costs_by_exchange))
         if missing_fees:
             # Keep quote comparison visible even when fees are not configured.
             # These are explicitly gross price gaps, never net-profit signals.
