@@ -473,6 +473,10 @@ def test_testnet_partial_fill_surfaces_emergency_close_for_operator_approval_onl
     })
     assert result["halted"] is True
     assert state["orders_enabled"] is False
+    assert result["emergency_candidates"] == [{
+        "symbol": "BTCUSDT", "order_list_id": "private-id",
+        "state": "UNPROTECTED_PARTIAL_FILL",
+    }]
     assert state["agents"]["EXIT"]["status"] == "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL"
     assert "explicit operator approval" in state["agents"]["EXIT"]["detail"]
 
