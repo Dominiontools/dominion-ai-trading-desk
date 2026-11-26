@@ -67,3 +67,21 @@ test("closeAndVerify returns the actual remaining volume after a close timeout",
   assert.equal(result.remainingVolume, 250);
   assert.equal(result.closeRequestError, "Error");
 });
+
+test("closeAndVerify fails closed when reconciliation contains duplicate position IDs", async () => {
+  const session = {
+    async closePosition() {},
+    async reconcile() {
+      return {
+        positions: [
+          { positionId: 42, tradeData: { volume: 300 } },
+          { positionId: 42, tradeData: { volume: 200 } },
+        ],
+      };
+    },
+  };
+  await assert.rejects(
+    () => closeAndVerify(session, 42, 1000),
+    /POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION/,
+  );
+});
