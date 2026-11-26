@@ -28,13 +28,15 @@ The risk-context provider treats any non-zero non-USDT Spot balance as an unmana
 
 ## Emergency boundary
 
+A partial entry fill is explicitly classified as `UNPROTECTED_PARTIAL_FILL`. The lifecycle does not report it as protected, does not submit another entry, persists the halt across restarts, and requires operator review. Regression tests cover this state.
+
 The Binance lifecycle currently fails closed when protection cannot be confirmed. It halts new entries and reports that operator action is required. **Automatic market flattening of an unexpected filled-but-unprotected Binance Testnet position is not yet implemented.** Do not treat the Binance route as fully end-to-end accepted until that emergency path is implemented and tested.
 
 The separate cTrader demo engine does include emergency close handling for bot-owned positions found without protective SL/TP, and closes bot-owned positions when its daily-loss stop is reached. That cTrader capability does not apply to Binance.
 
 ## Verification status
 
-The latest repository CI workflow and Android debug APK workflow both passed on commit `39ecde1e6fa83f627be620231f1f3e1df0acce00`. These are build and automated-test results; they do not prove a real Binance Testnet order has been placed or that the complete exchange lifecycle has been accepted.
+The latest completed CI and Android debug APK workflows passed on commit `01a360b96a99994cc4ccd3fa6c98c1bfbd3f27df`. A further partial-fill regression-test commit has since been added; its CI and APK workflows must pass before that newer commit is considered verified. These are build and automated-test results; they do not prove a real Binance Testnet order has been placed or that the complete exchange lifecycle has been accepted.
 
 No Binance Testnet order has been placed by this implementation. Actual demo-order verification requires the user to enable the Testnet switch in the Android app and use a valid Binance Spot Testnet key with Spot trading permission. No production keys or live orders are part of this route.
 
