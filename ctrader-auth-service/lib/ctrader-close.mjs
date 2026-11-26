@@ -4,6 +4,20 @@
  * close response is lost, reconcile before deciding whether another close is
  * needed; the broker's position state is authoritative.
  */
+/** Validate a broker snapshot and return one unambiguous position match. */
+export function findReconciledPosition(reconciled, positionId) {
+  if (!reconciled || !Array.isArray(reconciled.positions)) {
+    throw new Error("POSITION_CLOSE_RECONCILIATION_INVALID");
+  }
+  const matches = reconciled.positions.filter(
+    (item) => Number(item?.positionId) === Number(positionId),
+  );
+  if (matches.length > 1) {
+    throw new Error("POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION");
+  }
+  return matches[0] ?? null;
+}
+
 export async function closeAndVerify(session, positionId, volume) {
   if (!Number.isSafeInteger(Number(positionId)) || Number(positionId) <= 0 ||
       !(Number.isFinite(Number(volume)) && Number(volume) > 0)) {
@@ -19,19 +33,8 @@ export async function closeAndVerify(session, positionId, volume) {
   }
 
   const reconciled = await session.reconcile();
-  if (!reconciled || !Array.isArray(reconciled.positions)) {
-    throw new Error("POSITION_CLOSE_RECONCILIATION_INVALID");
-  }
-
-  const matchingPositions = reconciled.positions.filter(
-    (item) => Number(item?.positionId) === Number(positionId),
-  );
-  // Duplicate IDs make the broker snapshot ambiguous; never report a flat or
-  // partial position from an inconsistent reconciliation response.
-  if (matchingPositions.length > 1) {
-    throw new Error("POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION");
-  }
-  const remaining = matchingPositions[0];
+  // Broker state is authoritative; malformed or ambiguous snapshots fail closed.
+  const remaining = findReconciledPosition(reconciled, positionId);
   if (!remaining) {
     return { closed: true, remainingVolume: 0, closeRequestError };
   }
