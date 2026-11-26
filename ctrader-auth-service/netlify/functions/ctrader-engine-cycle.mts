@@ -122,6 +122,25 @@ async function saveStatus(store: ReturnType<typeof getStore>, status: RecordData
   });
 }
 
+async function closeAndVerify(
+  session: CTraderDemoSession,
+  positionId: number,
+  volume: number,
+): Promise<{ closed: boolean; remainingVolume: number; remaining?: RecordData }> {
+  if (!(positionId > 0) || !(volume > 0) || !Number.isFinite(volume)) {
+    throw new Error("INVALID_POSITION_CLOSE_REQUEST");
+  }
+  await session.closePosition(positionId, volume);
+  const reconciled = await session.reconcile();
+  const remaining = reconciled.positions.find((item) => number(item.positionId) === positionId);
+  if (!remaining) return { closed: true, remainingVolume: 0 };
+  const remainingVolume = number((remaining.tradeData as RecordData | undefined)?.volume);
+  if (!(remainingVolume > 0) || !Number.isFinite(remainingVolume)) {
+    throw new Error("POSITION_CLOSE_RECONCILIATION_VOLUME_INVALID");
+  }
+  return { closed: false, remaining, remainingVolume };
+}
+
 async function manageBotPosition(
   session: CTraderDemoSession,
   store: ReturnType<typeof getStore>,
@@ -431,22 +450,41 @@ export async function executeCycle(): Promise<RecordData> {
           return manualUnprotected;
         }
         if (!(positionId > 0) || !(volume > 0)) throw new Error("UNPROTECTED_POSITION_CANNOT_BE_CLOSED");
-        await session.closePosition(positionId, volume);
+        const closeResult = await closeAndVerify(session, positionId, volume);
+        if (!closeResult.closed) {
+          const pending = {
+            status: "EMERGENCY_CLOSE_PENDING",
+            reason: "BROKER_POSITION_REMAINS_OPEN_AFTER_UNPROTECTED_CLOSE_REQUEST",
+            positionId, remainingVolume: closeResult.remainingVolume, mode: "DEMO_ONLY",
+          };
+          await saveStatus(store, pending);
+          await appendEvent(store, pending);
+          return pending;
+        }
         await store.delete("account/active-position");
-        const emergency = { status: "EMERGENCY_CLOSE_SENT", reason: "OPEN_POSITION_MISSING_PROTECTIVE_SL_TP", positionId, mode: "DEMO_ONLY" };
+        const emergency = { status: "EMERGENCY_CLOSE_CONFIRMED", reason: "BROKER_RECONCILIATION_CONFIRMED_UNPROTECTED_POSITION_CLOSED", positionId, mode: "DEMO_ONLY" };
         await saveStatus(store, emergency);
         await appendEvent(store, emergency);
         return emergency;
       }
       if (daily.dailyLossFraction >= dailyLossLimitFraction && isDominionPosition) {
-        await session.closePosition(positionId, volume);
+        const closeResult = await closeAndVerify(session, positionId, volume);
+        if (!closeResult.closed) {
+          const pending = {
+            status: "DAILY_STOP_POSITION_CLOSE_PENDING",
+            reason: "BROKER_POSITION_REMAINS_OPEN_AFTER_DAILY_STOP_CLOSE_REQUEST",
+            positionId, remainingVolume: closeResult.remainingVolume,
+            dailyLossPct: daily.dailyLossFraction * 100, mode: "DEMO_ONLY",
+          };
+          await saveStatus(store, pending);
+          await appendEvent(store, pending);
+          return pending;
+        }
         await store.delete("account/active-position");
         const dailyClose = {
-          status: "DAILY_STOP_POSITION_CLOSE_SENT",
-          reason: "DAILY_LOSS_LIMIT_REACHED",
-          positionId,
-          dailyLossPct: daily.dailyLossFraction * 100,
-          mode: "DEMO_ONLY",
+          status: "DAILY_STOP_POSITION_CLOSE_CONFIRMED",
+          reason: "BROKER_RECONCILIATION_CONFIRMED_DAILY_STOP_POSITION_CLOSED",
+          positionId, dailyLossPct: daily.dailyLossFraction * 100, mode: "DEMO_ONLY",
         };
         await saveStatus(store, dailyClose);
         await appendEvent(store, dailyClose);
