@@ -16,9 +16,10 @@ class FakeClient:
         ]
         self.orders = {
             "entryE": {"status": "FILLED", "executedQty": "0.001"},
-            "entryT": {"status": "CANCELED"},
-            "entryS": {"status": "CANCELED"},
+            "entryT": {"status": "NEW"},
+            "entryS": {"status": "NEW"},
         }
+        self.cancel_success = True
         self.open_orders = []
         self.market_response = {"status": "FILLED", "executedQty": "0.001"}
 
@@ -28,6 +29,9 @@ class FakeClient:
 
     def cancel_filled_otoco_for_emergency(self, *, symbol, list_client_order_id):
         self.calls.append(("cancel-list", list_client_order_id))
+        if self.cancel_success:
+            self.orders["entryT"] = {"status": "CANCELED"}
+            self.orders["entryS"] = {"status": "CANCELED"}
         return {"listStatusType": "ALL_DONE"}
 
     def account_open_orders(self, *, symbol):
@@ -76,7 +80,7 @@ def test_emergency_close_cancels_bracket_then_sells_and_verifies_flat():
 
 def test_refuses_to_sell_when_either_protective_leg_is_not_terminal():
     client = FakeClient()
-    client.orders["entryS"] = {"status": "NEW"}
+    client.cancel_success = False
     with pytest.raises(RuntimeError, match="not both confirmed terminal"):
         run(client)
     assert not any(call[0] == "market-sell" for call in client.calls)
