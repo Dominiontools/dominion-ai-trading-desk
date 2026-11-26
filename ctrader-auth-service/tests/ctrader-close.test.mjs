@@ -44,3 +44,26 @@ test("closeAndVerify fails closed when broker reconciliation is malformed", asyn
   };
   await assert.rejects(() => closeAndVerify(session, 42, 10), /POSITION_CLOSE_RECONCILIATION_INVALID/);
 });
+
+test("closeAndVerify trusts broker reconciliation when the close response times out but the position is flat", async () => {
+  const session = {
+    async closePosition() { throw new Error("socket timed out"); },
+    async reconcile() { return { positions: [] }; },
+  };
+  const result = await closeAndVerify(session, 42, 1000);
+  assert.equal(result.closed, true);
+  assert.equal(result.closeRequestError, "Error");
+});
+
+test("closeAndVerify returns the actual remaining volume after a close timeout", async () => {
+  const session = {
+    async closePosition() { throw new Error("socket timed out"); },
+    async reconcile() {
+      return { positions: [{ positionId: 42, tradeData: { volume: 250 } }] };
+    },
+  };
+  const result = await closeAndVerify(session, 42, 1000);
+  assert.equal(result.closed, false);
+  assert.equal(result.remainingVolume, 250);
+  assert.equal(result.closeRequestError, "Error");
+});
