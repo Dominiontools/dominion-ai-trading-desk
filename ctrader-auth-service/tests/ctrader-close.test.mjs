@@ -9,7 +9,7 @@ test("closeAndVerify reports flat only after broker reconciliation removes the p
     async reconcile() { calls.push(["reconcile"]); return { positions: [] }; },
   };
   assert.deepEqual(await closeAndVerify(session, 42, 1000), {
-    closed: true, remainingVolume: 0,
+    closed: true, remainingVolume: 0, closeRequestError: null,
   });
   assert.deepEqual(calls, [["close", 42, 1000], ["reconcile"]]);
 });
