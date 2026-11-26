@@ -51,7 +51,9 @@ class FakeClient:
     def place_market_sell(self, *, symbol, quantity, client_order_id):
         self.calls.append(("market-sell", quantity, client_order_id))
         if self.market_response.get("status") == "FILLED":
-            self.balances[0]["free"] = "0"
+            from decimal import Decimal
+            remaining = Decimal(self.balances[0]["free"]) - Decimal(quantity)
+            self.balances[0]["free"] = format(max(remaining, Decimal("0")), "f")
         return dict(self.market_response)
 
 
@@ -96,14 +98,14 @@ def test_refuses_to_sell_when_base_asset_is_still_locked():
     assert not any(call[0] == "market-sell" for call in client.calls)
 
 
-def test_rounds_quantity_down_to_market_lot_step():
+def test_never_sells_more_than_entry_fill_and_flags_residual_dust():
     client = FakeClient()
     client.balances[0]["free"] = "0.00109"
     client.market_response = {"status": "FILLED", "executedQty": "0.001"}
-    result = run(client)
+    with pytest.raises(RuntimeError, match="Residual base asset"):
+        run(client)
     sell = next(call for call in client.calls if call[0] == "market-sell")
     assert sell[1] == "0.001"
-    assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
 
 
 def test_does_not_claim_flat_when_exchange_reports_partial_market_execution():
