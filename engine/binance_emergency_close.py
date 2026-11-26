@@ -124,6 +124,17 @@ def emergency_flatten_otoco(
     locked = _decimal(matches[0].get("locked"), "locked base balance", allow_zero=True)
     if locked != 0:
         raise RuntimeError("Base asset remains locked after exit cancellation.")
+    if free == 0:
+        return {
+            "status": "EMERGENCY_FLAT_CONFIRMED",
+            "symbol": pair,
+            "base_asset": base_asset,
+            "sold_quantity": "0",
+            "remaining_base_balance": "0",
+            "emergency_client_order_id": emergency_client_order_id,
+            "operator_action_required": False,
+            "detail": "The exchange-reported balance is already flat; no market sell was submitted.",
+        }
     # Never liquidate unrelated holdings: cap the sell at this bot entry's
     # exchange-confirmed executed quantity, then round down to market step.
     owned_available = min(free, executed)
