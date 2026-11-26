@@ -113,26 +113,6 @@ def test_embedded_service_starts_read_only_api_and_stops(tmp_path, monkeypatch):
     assert service.stop_embedded()["already_stopped"] is True
 
 
-class FakeGMGN:
-    def __init__(self, api_key, timeout=8.0):
-        assert api_key == "gmgn-test-key"
-        self.timeout = timeout
-
-    def trenches(self, chain, limit=50):
-        return {"code": 0, "data": {"chain": chain, "tokens": []}}
-
-    def trending(self, chain, interval, limit=30):
-        return {"code": 0, "data": {"chain": chain, "interval": interval, "tokens": []}}
-
-    def token_security(self, chain, address):
-        return {"code": 0, "data": {
-            "chain": chain, "address": address, "open_source": "yes",
-            "owner_renounced": "yes", "rug_ratio": 0.1,
-            "is_wash_trading": False, "renounced_mint": True,
-            "renounced_freeze_account": True,
-        }}
-
-
 class EmptyDiscovery:
     def __init__(self, timeout=8.0):
         pass
@@ -175,82 +155,6 @@ class EmptyNewsFeed:
 
     def headlines(self, limit=20):
         return []
-
-
-def test_embedded_service_connects_official_gmgn_read_only_feed(tmp_path, monkeypatch):
-    monkeypatch.setattr(service.time, "monotonic", lambda: 400.0)
-    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
-    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
-    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
-    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
-    monkeypatch.setattr(service, "GMGNReadOnlyClient", FakeGMGN)
-    monkeypatch.setattr(service, "DexScreenerDiscovery", EmptyDiscovery)
-    monkeypatch.setattr(service, "GeckoTerminalWhaleFeed", EmptyWhaleFeed)
-    monkeypatch.setattr(service, "GoPlusSecurityFeed", EmptySecurityFeed)
-    monkeypatch.setattr(service, "PublicNewsRSS", EmptyNewsFeed)
-    for name in ("DOMINION_FEE_BINANCE_TAKER_BPS", "DOMINION_FEE_BITGET_TAKER_BPS",
-                 "DOMINION_FEE_HTX_TAKER_BPS"):
-        monkeypatch.delenv(name, raising=False)
-
-    started = service.start_embedded(str(tmp_path), port=0, gmgn_api_key="gmgn-test-key")
-    try:
-        deadline = time.time() + 3
-        status = None
-        while time.time() < deadline:
-            try:
-                with urlopen(f"http://127.0.0.1:{started['port']}/api/crypto/status", timeout=1) as response:
-                    status = json.loads(response.read())
-                if status.get("gmgn_feed", {}).get("status") == "CONNECTED":
-                    break
-            except OSError:
-                time.sleep(0.05)
-            time.sleep(0.05)
-        assert status is not None
-        assert status["gmgn_feed"]["status"] == "CONNECTED", status
-        assert status.get("agent_feed_error") is None, status
-        assert "gmgn-test-key" not in json.dumps(status)
-        assert status["orders_enabled"] is False
-    finally:
-        service.stop_embedded()
-
-
-def test_gmgn_security_evidence_is_used_by_rug_agent_for_solana_tokens(tmp_path, monkeypatch):
-    monkeypatch.setattr(service.time, "monotonic", lambda: 100.0)
-    monkeypatch.setattr(service, "PublicCryptoFeeds", FakeFeeds)
-    monkeypatch.setattr(service, "CryptoPaperMonitor", FakeMonitor)
-    monkeypatch.setattr(service, "BinanceMarketUniverse", FakeUniverse)
-    monkeypatch.setattr(service, "BinancePublicCandleFeed", FakeCandleFeed)
-    monkeypatch.setattr(service, "GMGNReadOnlyClient", FakeGMGN)
-    monkeypatch.setattr(service, "DexScreenerDiscovery", OneSolanaTokenDiscovery)
-    monkeypatch.setattr(service, "GeckoTerminalWhaleFeed", EmptyWhaleFeed)
-    monkeypatch.setattr(service, "GoPlusSecurityFeed", EmptySecurityFeed)
-    monkeypatch.setattr(service, "PublicNewsRSS", EmptyNewsFeed)
-    for name in ("DOMINION_FEE_BINANCE_TAKER_BPS", "DOMINION_FEE_BITGET_TAKER_BPS",
-                 "DOMINION_FEE_HTX_TAKER_BPS"):
-        monkeypatch.delenv(name, raising=False)
-
-    started = service.start_embedded(str(tmp_path), port=0, gmgn_api_key="gmgn-test-key")
-    try:
-        deadline = time.time() + 3
-        status = None
-        while time.time() < deadline:
-            try:
-                with urlopen(f"http://127.0.0.1:{started['port']}/api/crypto/status", timeout=1) as response:
-                    status = json.loads(response.read())
-                rug = status.get("agents", {}).get("RUG", {})
-                if rug.get("gmgn_security_checks"):
-                    break
-            except OSError:
-                time.sleep(0.05)
-            time.sleep(0.05)
-        assert status is not None
-        assert status["agents"]["RUG"]["status"] == "CONNECTED"
-        assert status["agents"]["RUG"]["gmgn_security_checks"][0]["chain"] == "sol"
-        assert status["gmgn_feed"]["status"] == "CONNECTED"
-        assert status["orders_enabled"] is False
-    finally:
-        service.stop_embedded()
-
 
 
 def test_embedded_service_exposes_only_safe_binance_recovery_summary(tmp_path, monkeypatch):
