@@ -152,6 +152,33 @@ async function manageBotPosition(
     return { status: "BOT_POSITION_STATE_INCOMPLETE", reason: "BROKER_POSITION_REMAINS_PROTECTED_NO_NEW_ENTRY", positionId, mode: "DEMO_ONLY" };
   }
 
+  if (activePosition.emergencyClosePending === true) {
+    const retry = await closeAndVerify(session, positionId, volume);
+    if (!retry.closed) {
+      const pending = {
+        status: "EMERGENCY_CLOSE_PENDING",
+        reason: "BROKER_RECONCILIATION_CONFIRMED_POSITION_STILL_OPEN",
+        positionId, remainingVolume: retry.remainingVolume, mode: "DEMO_ONLY",
+      };
+      await store.setJSON("account/active-position", {
+        ...activePosition, emergencyClosePending: true,
+        remainingVolume: retry.remainingVolume,
+      });
+      await saveStatus(store, pending);
+      await appendEvent(store, pending);
+      return pending;
+    }
+    await store.delete("account/active-position");
+    const confirmed = {
+      status: "EMERGENCY_CLOSE_CONFIRMED",
+      reason: "RETRY_CLOSE_RECONCILED_BROKER_POSITION_AS_FLAT",
+      positionId, brokerConfirmed: true, mode: "DEMO_ONLY",
+    };
+    await saveStatus(store, confirmed);
+    await appendEvent(store, confirmed);
+    return confirmed;
+  }
+
   const light = symbols.find((item) => number(item.symbolId) === symbolId);
   if (!light) return { status: "BOT_POSITION_SYMBOL_MISSING", positionId, mode: "DEMO_ONLY" };
   const symbolName = normalizeSymbol(light.symbolName);
@@ -742,8 +769,38 @@ export async function executeCycle(): Promise<RecordData> {
         const protectedPartial = number(partialPosition.stopLoss) > 0 &&
           number(partialPosition.takeProfit) > 0;
         if (!protectedPartial && partialId > 0 && partialVolume > 0) {
-          await session.closePosition(partialId, partialVolume);
-          throw new Error("PARTIAL_FILL_UNPROTECTED_EMERGENCY_CLOSE_SENT");
+          const closeResult = await closeAndVerify(session, partialId, partialVolume);
+          if (closeResult.closed) {
+            const confirmed = {
+              status: "PARTIAL_FILL_UNPROTECTED_CLOSE_CONFIRMED",
+              reason: "UNPROTECTED_PARTIAL_FILL_CLOSED_AND_BROKER_CONFIRMED_FLAT",
+              positionId: partialId, symbol: best.symbolName,
+              brokerConfirmed: true, mode: "DEMO_ONLY",
+            };
+            await saveStatus(store, confirmed);
+            await appendEvent(store, confirmed);
+            return confirmed;
+          }
+          const pendingPosition = {
+            positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
+            side: best.setup.side, entryPrice: number(partialPosition.price ?? entryPrice),
+            initialRiskDistance: Math.abs(number(partialPosition.price ?? entryPrice) - stopLoss),
+            target2R, target3R: takeProfit, partialTaken: false, breakEvenSet: false,
+            minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
+            estimatedRoundTripCommission: sized.commission, emergencyClosePending: true,
+            remainingVolume: closeResult.remainingVolume, openedAt: new Date().toISOString(),
+            clientOrderId,
+          };
+          await store.setJSON("account/active-position", pendingPosition);
+          const pending = {
+            status: "PARTIAL_FILL_UNPROTECTED_CLOSE_PENDING",
+            reason: "BROKER_RECONCILIATION_CONFIRMED_POSITION_REMAINS_OPEN",
+            positionId: partialId, symbol: best.symbolName,
+            remainingVolume: closeResult.remainingVolume, mode: "DEMO_ONLY",
+          };
+          await saveStatus(store, pending);
+          await appendEvent(store, pending);
+          return pending;
         }
         if (protectedPartial) {
           const partialStatus = {
@@ -759,8 +816,38 @@ export async function executeCycle(): Promise<RecordData> {
           };
           const partialEntryPrice = number(partialPosition.price ?? entryPrice);
           if (Math.abs(partialEntryPrice - entryPrice) > slippagePrice + point) {
-            await session.closePosition(partialId, partialVolume);
-            throw new Error("PARTIAL_FILL_EXCEEDED_SLIPPAGE_CAP_EMERGENCY_CLOSE_SENT");
+            const closeResult = await closeAndVerify(session, partialId, partialVolume);
+            if (closeResult.closed) {
+              const confirmed = {
+                status: "PARTIAL_FILL_SLIPPAGE_CLOSE_CONFIRMED",
+                reason: "SLIPPAGE_CAP_BREACHED_AND_BROKER_CONFIRMED_FLAT",
+                positionId: partialId, symbol: best.symbolName,
+                brokerConfirmed: true, mode: "DEMO_ONLY",
+              };
+              await saveStatus(store, confirmed);
+              await appendEvent(store, confirmed);
+              return confirmed;
+            }
+            const pendingPosition = {
+              positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
+              side: best.setup.side, entryPrice: partialEntryPrice,
+              initialRiskDistance: Math.abs(partialEntryPrice - stopLoss),
+              target2R, target3R: takeProfit, partialTaken: false, breakEvenSet: false,
+              minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
+              estimatedRoundTripCommission: sized.commission, emergencyClosePending: true,
+              remainingVolume: closeResult.remainingVolume, openedAt: new Date().toISOString(),
+              clientOrderId,
+            };
+            await store.setJSON("account/active-position", pendingPosition);
+            const pending = {
+              status: "PARTIAL_FILL_SLIPPAGE_CLOSE_PENDING",
+              reason: "SLIPPAGE_CAP_BREACHED_AND_BROKER_POSITION_REMAINS_OPEN",
+              positionId: partialId, symbol: best.symbolName,
+              remainingVolume: closeResult.remainingVolume, mode: "DEMO_ONLY",
+            };
+            await saveStatus(store, pending);
+            await appendEvent(store, pending);
+            return pending;
           }
           await store.setJSON("account/active-position", {
             positionId: partialId, symbol: best.symbolName, symbolId: best.symbolId,
@@ -850,9 +937,43 @@ export async function executeCycle(): Promise<RecordData> {
     };
     const confirmedEntryPrice = number(position.price ?? entryPrice);
     if (Math.abs(confirmedEntryPrice - entryPrice) > slippagePrice + point) {
-      await session.closePosition(positionId, number((position.tradeData as RecordData).volume));
+      const positionState = {
+        positionId, symbol: best.symbolName, symbolId: best.symbolId,
+        side: best.setup.side, entryPrice: confirmedEntryPrice,
+        initialRiskDistance: Math.abs(confirmedEntryPrice - stopLoss),
+        initialStopLoss: stopLoss, target2R: preview.target2R,
+        target3R: preview.target3R, partialTaken: false, breakEvenSet: false,
+        minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
+        estimatedRoundTripCommission: sized.commission,
+        openedAt: new Date().toISOString(), clientOrderId,
+      };
+      const closeResult = await closeAndVerify(
+        session, positionId, number((position.tradeData as RecordData).volume),
+      );
+      if (!closeResult.closed) {
+        await store.setJSON("account/active-position", {
+          ...positionState, emergencyClosePending: true,
+          remainingVolume: closeResult.remainingVolume,
+        });
+        const pending = {
+          status: "BROKER_FILL_SLIPPAGE_CLOSE_PENDING",
+          reason: "SLIPPAGE_CAP_BREACHED_AND_BROKER_POSITION_REMAINS_OPEN",
+          positionId, symbol: best.symbolName,
+          remainingVolume: closeResult.remainingVolume, mode: "DEMO_ONLY",
+        };
+        await saveStatus(store, pending);
+        await appendEvent(store, pending);
+        return pending;
+      }
       await store.delete("account/active-position");
-      throw new Error("BROKER_FILL_EXCEEDED_SLIPPAGE_CAP_EMERGENCY_CLOSE_SENT");
+      const confirmed = {
+        status: "BROKER_FILL_SLIPPAGE_CLOSE_CONFIRMED",
+        reason: "SLIPPAGE_CAP_BREACHED_AND_BROKER_CONFIRMED_FLAT",
+        positionId, symbol: best.symbolName, brokerConfirmed: true, mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, confirmed);
+      await appendEvent(store, confirmed);
+      return confirmed;
     }
     await store.setJSON("account/active-position", {
       positionId,
