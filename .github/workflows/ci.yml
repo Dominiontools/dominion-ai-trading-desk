@@ -34,3 +34,15 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest
+
+  live-public-market-smoke:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[live-smoke]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run read-only public 52-market scanner smoke check
+        run: python scripts/smoke_public_crypto_scanner.py
