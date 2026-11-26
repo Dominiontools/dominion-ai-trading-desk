@@ -1,11 +1,8 @@
 name: Build Android APK
 
 on:
+  # APK generation is manual-only so development commits never create an installable build.
   workflow_dispatch:
-  push:
-    branches:
-      - feat/android-app
-      - feat/complete-demo-trading-engine
 
 permissions:
   contents: read
