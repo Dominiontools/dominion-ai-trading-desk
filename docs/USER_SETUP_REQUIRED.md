@@ -2,18 +2,7 @@
 
 This list is intentionally separate from code completion. Do not send API secrets, private keys, OAuth codes, or passwords in ChatGPT.
 
-## 1. GMGN read-only feed
-
-- Create an official GMGN API key at https://gmgn.ai/ai.
-- GMGN's setup process uses an Ed25519 key pair; submit the public key when creating the API key.
-- Keep the private key secure and offline. Dominion's current read-only connector needs only the API key.
-- Enter the API key in the Android app's **GMGN Official API · Read Only** panel.
-- Save it in Android Keystore and restart the phone engine.
-- Confirm the GMGN feed status becomes `CONNECTED`.
-
-No GMGN wallet swaps or trading orders are currently enabled.
-
-## 2. Binance Spot Testnet account
+## 1. Binance Spot Testnet account
 
 - Create a Spot Testnet API key from the official Binance Spot Testnet environment.
 - Enable Spot trading permission for the Testnet key; keep withdrawals disabled.
@@ -24,13 +13,13 @@ No GMGN wallet swaps or trading orders are currently enabled.
 
 The Android strategy loop is now wired to the protected Testnet router, but no actual Testnet order has yet been placed or verified. Automatic emergency market-flattening for an unprotected fill is not implemented; an uncertain protection state halts new entries and requires manual review.
 
-## 3. Bitget and HTX public market data — no setup required
+## 2. Bitget and HTX public market data — no setup required
 
 Bitget and HTX are included as public market-data sources only in this release stage. Their public feeds do not require private API keys, deposits, demo-account setup, or trading permissions.
 
 No Bitget Demo API key or HTX Demo API key is required from the user. No Bitget or HTX execution adapter is part of the current acceptance checklist. Cross-exchange observations from these feeds are informational/paper analysis only; do not present a price spread as guaranteed net arbitrage profit. Where account-specific trading fees cannot be verified, fee-adjusted execution must remain blocked.
 
-## 4. cTrader / Pepperstone demo
+## 3. cTrader / Pepperstone demo
 
 - The existing view-only authorization is preserved.
 - The cTrader app must have the required Spotware approval and trading scope.
