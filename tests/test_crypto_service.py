@@ -44,24 +44,47 @@ class FakeCandleFeed:
         raise RuntimeError("offline test fixture")
 
 
-def test_fee_config_is_empty_without_user_verified_values(monkeypatch):
-    for name in ("DOMINION_FEE_BINANCE_TAKER_BPS", "DOMINION_FEE_BITGET_TAKER_BPS",
-                 "DOMINION_FEE_HTX_TAKER_BPS"):
+def test_fee_config_uses_public_standard_rates_and_leaves_htx_unconfigured(monkeypatch):
+    for name in (
+        "DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS",
+        "DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS",
+        "DOMINION_FEE_BINANCE_PERSONAL_VERIFIED",
+    ):
         monkeypatch.delenv(name, raising=False)
-    assert service._fee_config() == {}
+    assert service._fee_config() == {
+        "Binance": (10.0, 10.0),
+        "Bitget": (10.0, 10.0),
+        "OKX": (8.0, 10.0),
+    }
 
 
-def test_fee_config_reads_all_three_explicit_values(monkeypatch):
-    monkeypatch.setenv("DOMINION_FEE_BINANCE_TAKER_BPS", "10")
-    monkeypatch.setenv("DOMINION_FEE_BITGET_TAKER_BPS", "12")
-    monkeypatch.setenv("DOMINION_FEE_HTX_TAKER_BPS", "8")
-    assert service._fee_config() == {"Binance": (10.0, 10.0),
-                                     "Bitget": (12.0, 12.0), "HTX": (8.0, 8.0)}
+def test_binance_verified_personal_rate_overrides_public_fallback(monkeypatch):
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", "7.5")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", "8.5")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", "YES")
+    assert service._fee_config()["Binance"] == (7.5, 8.5)
 
 
-def test_fee_config_rejects_negative_fee(monkeypatch):
-    monkeypatch.setenv("DOMINION_FEE_BINANCE_TAKER_BPS", "-1")
-    with pytest.raises(RuntimeError):
+def test_binance_personal_rate_requires_explicit_verification(monkeypatch):
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", "7.5")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", "8.5")
+    monkeypatch.delenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", raising=False)
+    with pytest.raises(RuntimeError, match="explicitly verified"):
+        service._fee_config()
+
+
+def test_binance_personal_rate_requires_both_maker_and_taker(monkeypatch):
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", "7.5")
+    monkeypatch.delenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", raising=False)
+    with pytest.raises(RuntimeError, match="both"):
+        service._fee_config()
+
+
+def test_binance_personal_rate_rejects_non_finite_values(monkeypatch):
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_MAKER_BPS", "nan")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_TAKER_BPS", "8")
+    monkeypatch.setenv("DOMINION_FEE_BINANCE_PERSONAL_VERIFIED", "YES")
+    with pytest.raises(RuntimeError, match="finite"):
         service._fee_config()
 
 
