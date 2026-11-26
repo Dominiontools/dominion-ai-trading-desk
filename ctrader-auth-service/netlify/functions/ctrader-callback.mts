@@ -25,7 +25,7 @@ function html(title: string, message: string, status = 200, headers: Record<stri
 }
 
 function cookieHeader(value: string, maxAge: number) {
-  return `${STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=${STATE_COOKIE_PATH}; HttpOnly; Secure; SameSite=Lax`;
+  return `${STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`;
 }
 
 function readCookie(request: Request, name: string): string | null {
@@ -170,6 +170,7 @@ export default async (request: Request, context: { deploy: { context: string } }
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const oauthError = url.searchParams.get("error");
+  const returnedState = url.searchParams.get("state");
   const requestedMode = url.searchParams.get("mode") === "trading" ? "trading" : "view-only";
   const clearCookie = cookieHeader("", 0);
 
@@ -202,6 +203,9 @@ export default async (request: Request, context: { deploy: { context: string } }
         redirect_uri: REDIRECT_URI,
         scope: requestedMode === "trading" ? "trading" : "accounts",
         product: "web",
+        // cTrader documentation does not list state as a returned parameter;
+        // validate it when echoed and retain the secure cookie fallback.
+        state: nonce,
       }).toString();
 
       return new Response(null, {
@@ -216,7 +220,10 @@ export default async (request: Request, context: { deploy: { context: string } }
     }
 
     stage = "validating browser session";
-    const nonce = readCookie(request, STATE_COOKIE);
+    const cookieNonce = readCookie(request, STATE_COOKIE);
+    const nonce = returnedState && /^[A-Za-z0-9_-]{40,60}$/.test(returnedState)
+      ? returnedState
+      : cookieNonce;
     if (!nonce || !/^[A-Za-z0-9_-]{40,60}$/.test(nonce)) {
       return html("Authorization session missing", "The browser authorization session was not preserved. Start again from Dominion AI Trading Desk in the same browser.", 400, { "set-cookie": clearCookie });
     }
