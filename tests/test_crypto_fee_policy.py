@@ -36,6 +36,12 @@ def test_parse_official_public_base_tier_fee_rows():
         "<table><tr><td>Regular</td><td>0.0800%</td><td>0.1000%</td></tr></table>",
         "OKX",
     ) == (8.0, 10.0)
+    assert _percent_pair(
+        "<table><tr><td>Prime 0</td><td>0.2000%</td><td>0.2000%</td></tr></table>",
+        "HTX",
+    ) == (20.0, 20.0)
+    with pytest.raises(ValueError, match="Prime 0"):
+        _percent_pair("Log in to view your fee rates. Prime Levels Spot Fee Rates", "HTX")
 
 
 def test_public_fee_refresh_updates_only_when_official_row_is_parsed():
@@ -43,6 +49,7 @@ def test_public_fee_refresh_updates_only_when_official_row_is_parsed():
         "https://www.binance.com/en/fee/trading": "<p>Regular User</p><p>0.090% / 0.100%</p>",
         "https://www.bitget.com/fee/": "<p>Spot fee rates</p><p>0.10% / 0.10%</p>",
         "https://www.okx.com/en-gb/help/important-notice-consolidation-token-pairs": "<p>Regular</p><p>0.0800% 0.1000%</p>",
+        "https://www.htx.com/en-us/fee/?feeType=trading": "<p>Log in to view your fee rates.</p><p>Prime Levels Spot Fee Rates</p>",
     }
     result = refresh_public_fee_policy(fetch_text=lambda url: pages[url])
     assert result["fees"]["Binance"] == (9.0, 10.0)
