@@ -56,7 +56,7 @@ def test_failed_public_fee_refresh_keeps_last_known_rates_and_marks_failure():
     pages = {
         "https://www.binance.com/en/fee/trading": "<p>Regular User</p><p>0.100% / 0.100%</p>",
         "https://www.bitget.com/fee/": "<p>VIP0</p><p>0.10% / 0.10%</p>",
-        "https://www.okx.com/fees": "<p>Regular</p><p>0.0800% 0.1000%</p>",
+        "https://www.okx.com/en-gb/help/important-notice-consolidation-token-pairs": "<p>Regular</p><p>0.0800% 0.1000%</p>",
     }
     refresh_public_fee_policy(fetch_text=lambda url: pages[url])
 
