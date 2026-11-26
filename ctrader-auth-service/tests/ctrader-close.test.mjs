@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { closeAndVerify } from "../lib/ctrader-close.mjs";
+import { closeAndVerify, findReconciledPosition } from "../lib/ctrader-close.mjs";
 
 test("closeAndVerify reports flat only after broker reconciliation removes the position", async () => {
   const calls = [];
@@ -84,4 +84,14 @@ test("closeAndVerify fails closed when reconciliation contains duplicate positio
     () => closeAndVerify(session, 42, 1000),
     /POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION/,
   );
+});
+
+
+test("findReconciledPosition rejects malformed and duplicate broker snapshots", () => {
+  assert.throws(() => findReconciledPosition({}, 42), /POSITION_CLOSE_RECONCILIATION_INVALID/);
+  assert.throws(() => findReconciledPosition({ positions: [
+    { positionId: 42, tradeData: { volume: 300 } },
+    { positionId: 42, tradeData: { volume: 200 } },
+  ] }, 42), /POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION/);
+  assert.equal(findReconciledPosition({ positions: [] }, 42), null);
 });
