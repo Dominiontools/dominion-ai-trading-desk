@@ -104,6 +104,12 @@ def emergency_flatten_otoco(
             tp = sl = {"status": "CANCELED"}
         elif entry.get("status") == "FILLED":
             entry_status = "FILLED"
+            executed = _decimal(
+                entry.get("executedQty", "0"), "entry executed quantity",
+                allow_zero=True,
+            )
+            if executed == 0:
+                raise RuntimeError("Filled entry has no confirmed executed quantity.")
         else:
             raise RuntimeError("Partial entry cancellation is uncertain; refusing market sell.")
     if entry_status == "FILLED":
