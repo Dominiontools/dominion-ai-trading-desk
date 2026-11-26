@@ -98,7 +98,7 @@ def configure_python_sources() -> None:
                  "crypto_api.py", "crypto_service.py", "crypto_strategy.py",
                  "paper_workflow.py", "strategies.py", "confluence_strategy.py", "market_data.py",
                  "specialist_agents.py", "agent_feeds.py", "positions.py",
-                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_lifecycle.py", "binance_android.py", "binance_market_rules.py", "binance_signal_router.py", "binance_daily_loss.py", "binance_risk_context.py", "crypto_universe.py", "gmgn_api.py", "gmgn_sniper.py"):
+                 "risk.py", "quotes.py", "readiness.py", "binance_testnet.py", "risk_execution.py", "binance_protection.py", "binance_lifecycle.py", "binance_android.py", "binance_market_rules.py", "binance_signal_router.py", "binance_daily_loss.py", "binance_risk_context.py", "crypto_universe.py"):
         shutil.copy2(ROOT / "engine" / name, source / name)
 
 
@@ -273,18 +273,12 @@ public class TradingEngineService extends Service {
                     binanceOrdersEnabled = false;
                 }
             }
-            String gmgnApiKey = "";
-            try {
-                gmgnApiKey = new CredentialVault(getApplicationContext()).loadGmgnApiKeyForNativeUse();
-            } catch (Exception ignored) {
-                // GMGN is optional; the rest of the paper engine must still start.
-            }
             String binanceApiKey = binanceOrdersEnabled && binanceCredentials != null ? binanceCredentials[0] : "";
             String binanceApiSecret = binanceOrdersEnabled && binanceCredentials != null ? binanceCredentials[1] : "";
             PyObject result;
             try {
                 result = module.callAttr("start_embedded",
-                    getFilesDir().getAbsolutePath(), 8766, gmgnApiKey, binanceRecoveryJson,
+                    getFilesDir().getAbsolutePath(), 8766, binanceRecoveryJson,
                     binanceApiKey, binanceApiSecret, binanceOrdersEnabled);
             } finally {
                 if (binanceCredentials != null) {
