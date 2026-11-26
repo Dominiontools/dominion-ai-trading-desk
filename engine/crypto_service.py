@@ -390,6 +390,8 @@ def _runtime_config(
                     "quote_count": scan.get("quote_count", 0),
                     "fresh_quote_count": scan.get("fresh_quote_count", 0),
                     "fresh_exchanges": scan.get("fresh_exchanges", []),
+                    "fee_verified_exchanges": scan.get("fee_verified_exchanges", []),
+                    "missing_fee_exchanges": scan.get("missing_fee_exchanges", []),
                     "quotes_by_exchange": scan.get("quotes_by_exchange", {}),
                     "opportunities": scan.get("opportunities", []),
                     "opportunities_count": scan.get("opportunities_count", 0),
