@@ -5,10 +5,10 @@ This specification records the user's requested operating model. It is an implem
 ## Current implementation status on the development branch
 
 - **Implemented in code, not deployed or broker-tested:** separate cTrader demo trading authorization, encrypted token separation, scheduled demo execution cycle, broker-side SL/TP verification, risk sizing, daily stop, break-even, 2R scale-out and 3R runner management.
-- **Implemented in code, paper-only:** Android multi-timeframe crypto confluence strategy and dynamic top-52 liquid USDT cross-exchange batch REST monitor.
-- **Implemented in code, awaiting user's GMGN API key:** official GMGN read-only Solana Trenches, trending and token-security connector, with Android Keystore storage, GMGN security evidence routed into the Rug agent, and a paper-only sniper candidate filter. No GMGN trading route is enabled.
+- **Implemented in code, not yet Testnet-verified:** Android multi-timeframe crypto confluence strategy, Binance Spot Testnet BUY-only protected-order router, account/risk context, durable daily-loss ledger, restart reconciliation and emergency flatten handling.
+- **Public market-data and token-integrity feeds:** Binance, Bitget, HTX, OKX, DEX Screener, GeckoTerminal, GoPlus and public RSS.
 - **Implemented in code, not yet broker-tested:** cTrader demo strategy settings for timeframe profile, watchlist, confluence threshold, London/New York session filter, and bounded risk controls.
-- **Still outstanding:** crypto exchange testnet order lifecycle, shared cross-division position/risk lock, full independent division controls, all eight agents connected to verified feeds/workflows, GMGN wallet/order integration, broader custom indicator/rule builder, and broker/exchange integration tests.
+- **Still outstanding:** actual Binance Spot Testnet order/exit/emergency-close and restart verification, cTrader trading-scope authorization and Pepperstone demo tests, shared cross-division position/risk lock, full independent division controls, all eight agents connected to verified feeds/workflows, broader custom indicator/rule builder, and broker/exchange integration tests.
 - No new Netlify deployment has been started and this development engine has not placed a trade.
 
 ## 1. Shared desk, independent market divisions
@@ -74,7 +74,7 @@ For Crypto, the user's 40% equity-per-trade setting is treated only as an upper 
 4. Final security and operational review.
 5. Live-money mode remains disabled until the demo lifecycle is verified, the required broker/exchange approvals and trading scopes are in place, and the user explicitly approves live-money activation.
 
-The currently saved Pepperstone cTrader authorization is view-only. It must remain untouched. A separate trading-scope authorization is required before cTrader demo order tests can be run. The current crypto credential vault is storage groundwork; its order adapter is not yet connected to the Android service.
+The currently saved Pepperstone cTrader authorization is view-only. It must remain untouched. A separate trading-scope authorization is required before cTrader demo order tests can be run. The Android app contains a Binance Spot Testnet order adapter behind an explicit OFF-by-default switch; live-money execution remains disabled.
 
 ## 6. Completion criteria
 
