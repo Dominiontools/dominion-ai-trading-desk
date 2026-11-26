@@ -198,12 +198,14 @@ def emergency_flatten_otoco(
         symbol=pair, quantity=format(quantity, "f"),
         client_order_id=emergency_client_order_id,
     )
-    if not isinstance(order, dict) or order.get("status") != "FILLED":
-        raise RuntimeError("Emergency market sell is not confirmed FILLED; do not resubmit.")
+    if (not isinstance(order, dict) or order.get("status") != "FILLED"
+            or order.get("symbol") != pair or order.get("side") != "SELL"
+            or order.get("clientOrderId") != emergency_client_order_id):
+        raise RuntimeError("Emergency market sell response is not a matching confirmed FILLED order.")
 
     executed_sell = _decimal(order.get("executedQty", "0"), "market sell executed quantity", allow_zero=True)
-    if executed_sell <= 0 or executed_sell > quantity:
-        raise RuntimeError("Emergency market sell execution quantity is invalid.")
+    if executed_sell != quantity:
+        raise RuntimeError("Emergency market sell did not fill the full requested quantity.")
     after = client.account()
     after_balances = after.get("balances") if isinstance(after, dict) else None
     if not isinstance(after_balances, list):
