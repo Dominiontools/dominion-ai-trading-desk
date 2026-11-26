@@ -65,14 +65,14 @@ def build_readiness(
             "status": "ORDERS_VERIFIED" if crypto_testnet_orders_verified
                       else "AUTHORIZED_NOT_TESTED" if crypto_testnet_authorized
                       else "BINANCE_ROUTER_AND_RISK_CONTEXT_READY_TESTNET_EXECUTION_PENDING",
-            "detail": "A Binance Spot Testnet BUY-only signal router, default-deny 0.5%/2% risk planner, verified USDT account-context provider, durable UTC daily-loss ledger, and protected OTOCO request path are built and unit-tested. The router requires a fresh Binance quote, verified symbol filters and taker fees, confirmed account trading permission, reconciled open-position state, and a verified daily-loss ledger. Confirmed stop-loss exits are conservatively charged at planned risk and deduplicated across restarts. Android startup now performs a read-only account/risk snapshot. The strategy router is now wired into the Android strategy loop behind an explicit off-by-default Testnet automation setting. The setting must be enabled in the app; the account must confirm trading permission; and an authorized end-to-end Testnet order/exit/restart test is still outstanding. Uncertain submissions halt new entries and require operator review; automatic emergency flattening of a filled but unprotected Binance position is not yet implemented. Live trading remains disabled. Bitget and HTX are public market-data sources only in this stage; their execution adapters are not required.",
+            "detail": "A Binance Spot Testnet BUY-only signal router, default-deny 0.5%/2% risk planner, verified USDT account-context provider, durable UTC daily-loss ledger, and protected OTOCO request path are built and unit-tested. The router requires a fresh Binance quote, verified symbol filters and taker fees, confirmed account trading permission, reconciled open-position state, and a verified daily-loss ledger. Confirmed stop-loss exits are conservatively charged at planned risk and deduplicated across restarts. Android startup now performs a read-only account/risk snapshot. The strategy router is now wired into the Android strategy loop behind an explicit off-by-default Testnet automation setting. The setting must be enabled in the app; the account must confirm trading permission; and an authorized end-to-end Testnet order/exit/restart test is still outstanding. Uncertain submissions halt new entries and require operator review. A separate fail-closed, restart-safe emergency flatten path is implemented and covered by automated tests; an actual Binance Spot Testnet emergency-close exercise and end-to-end failure-injection verification remain outstanding. Live trading remains disabled. Bitget and HTX are public market-data sources only in this stage; their execution adapters are not required.",
             "owner": "USER_CREDENTIALS_AND_DEVELOPMENT",
         },
         {
             "id": "binance_emergency_handling",
             "title": "Verify emergency handling for an unprotected Binance Testnet fill",
-            "status": "VERIFIED" if binance_emergency_handling_verified else "NOT_IMPLEMENTED_OR_NOT_TESTED",
-            "detail": "The current Binance lifecycle halts and requires operator review when protection is uncertain, including a partial fill. Automatic emergency market-flattening is not implemented. This gate requires a deterministic, restart-safe, Testnet-only close path and failure-injection tests before final acceptance.",
+            "status": "VERIFIED" if binance_emergency_handling_verified else "IMPLEMENTED_TESTS_PASSED_TESTNET_VERIFICATION_PENDING",
+            "detail": "A deterministic, restart-safe, fail-closed Binance Spot Testnet emergency market-close path is implemented and covered by automated tests. It cancels and reconciles the bot-owned protective bracket before a single balance-capped market close, then verifies the remaining balance. Actual Binance Spot Testnet exercise and end-to-end failure-injection verification are still required before acceptance.",
             "owner": "DEVELOPMENT_AND_TESTNET_VALIDATION",
         },
         {
@@ -83,7 +83,7 @@ def build_readiness(
                       else "RATE_LIMITED" if gmgn_read_only_status == "RATE_LIMITED"
                       else "PLAN_UPGRADE_REQUIRED" if gmgn_read_only_status == "PLAN_UPGRADE_REQUIRED"
                       else "VERIFYING" if gmgn_read_only_status == "READY_TO_CONNECT"
-                      else "NEEDS_API_KEY",
+                      else "OPTIONAL_NOT_CONNECTED",
             "detail": "GMGN's official read-only Solana Trenches and trending connector is implemented. It requires a GMGN API key and a successful read-only response. GMGN wallet signing, swaps and live orders are not enabled.",
             "owner": "USER_CONFIGURATION_AND_DEVELOPMENT",
         },
