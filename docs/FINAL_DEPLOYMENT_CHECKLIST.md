@@ -8,7 +8,8 @@ This project follows the user's one-deployment rule. Do not connect Git, change 
 - Project: `dominion-ai-trading-desk-p7cp`
 - Site ID: `c6f3a9e8-24b3-483f-a084-58400e569983`
 - Base directory: `ctrader-auth-service`
-- Build command: `echo 'Building isolated cTrader authorization callback'`
+- Base directory: `ctrader-auth-service`
+- Build command: `echo 'Building Dominion cTrader demo service'`
 - Publish directory: `public`
 - Functions directory: `netlify/functions`
 - Production branch for the final release: `feat/complete-demo-trading-engine`
@@ -44,12 +45,12 @@ The secret must be available to Functions/runtime. Do not put it in frontend bui
 1. Confirm all GitHub Actions checks pass on `feat/complete-demo-trading-engine`.
 2. Complete the code, dependency, OAuth, CORS, access-control and security review.
 3. Verify the old account still contains the encrypted view-only cTrader token record.
-4. Configure the shared HMAC secret in both Netlify projects.
+4. Configure the same secret `DOMINION_CONTROL_API_SECRET` in both Netlify projects (Functions/Runtime scope). The automated environment-variable update was denied by Netlify permissions, so this remains a manual dashboard setup item.
 5. Confirm the old backend and new dashboard build settings above.
 6. Connect/configure the two projects to the same completed branch without triggering a premature production build.
 7. Perform one coordinated final deployment of both projects.
 8. Verify the new dashboard can read the old backend's view-only and trading status endpoints.
-9. Complete separate cTrader demo trading authorization after Spotware grants the required permission.
+9. Confirm the exact p7cp callback URI is registered in the Spotware developer application; then complete separate cTrader demo trading authorization after Spotware grants the required permission.
 10. Reconcile the demo account read-only first. The user must then explicitly enable demo automation in the dashboard.
 
 ## Hard safety conditions
