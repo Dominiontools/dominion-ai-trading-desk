@@ -6,6 +6,7 @@ from engine.crypto_fee_policy import (
     PUBLIC_SPOT_FEES_BPS,
     _percent_pair,
     refresh_public_fee_policy,
+    load_fee_policy,
 )
 
 
@@ -92,3 +93,19 @@ def test_public_fee_baseline_expires_after_seven_days_without_refresh():
     assert "Binance" not in result["fees"]
     assert result["sources"]["Binance"]["verified"] is False
     assert result["sources"]["Binance"]["refresh_status"] == "STALE_RATE_EXPIRED"
+
+
+def test_expired_public_fee_baseline_is_not_reintroduced_by_policy_loader():
+    fee_policy._cached_meta["Binance"]["last_refreshed_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=8)
+    ).isoformat()
+
+    def unavailable(_url):
+        raise OSError("offline")
+
+    refresh_public_fee_policy(fetch_text=unavailable)
+    fees, sources = load_fee_policy()
+
+    assert "Binance" not in fees
+    assert sources["Binance"]["verified"] is False
+    assert sources["Binance"]["refresh_status"] == "STALE_RATE_EXPIRED"
