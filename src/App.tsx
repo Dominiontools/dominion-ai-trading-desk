@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
-import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, ShieldCheck, Wallet, Waves } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, Settings, ShieldCheck, Wallet, Waves } from "lucide-react";
 import CTraderEngineControls from "./CTraderEngineControls";
 interface TradingEngineBridge {
   start(): Promise<{ accepted: boolean }>;
@@ -39,6 +39,7 @@ const watch = [
 ];
 
 export default function App() {
+  const [activeView, setActiveView] = useState<"overview" | "settings">("overview");
   const [market, setMarket] = useState<Market>("All markets");
   const filtered = useMemo(() => market === "All markets" ? watch : watch.filter(x => x.group === market), [market]);
 
@@ -46,15 +47,26 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">D</div><div><b>DOMINION</b><span>AI TRADING DESK</span></div></div>
       <div className="side-label">WORKSPACE</div>
-      <a className="nav active"><Gauge size={17}/> Overview</a>
-      <a className="nav"><Radar size={17}/> Market scanner</a>
-      <a className="nav"><Bot size={17}/> Agent control</a>
-      <a className="nav"><Wallet size={17}/> Positions</a>
-      <a className="nav"><Activity size={17}/> Activity log</a>
+      <button type="button" className={"nav " + (activeView === "overview" ? "active" : "")} onClick={() => setActiveView("overview")}><Gauge size={17}/> Overview</button>
+      <button type="button" className="nav" disabled><Radar size={17}/> Market scanner</button>
+      <button type="button" className="nav" disabled><Bot size={17}/> Agent control</button>
+      <button type="button" className="nav" disabled><Wallet size={17}/> Positions</button>
+      <button type="button" className="nav" disabled><Activity size={17}/> Activity log</button>
+      <div className="side-label settings-nav-label">CONFIGURATION</div>
+      <button type="button" className={"nav " + (activeView === "settings" ? "active" : "")} onClick={() => setActiveView("settings")}><Settings size={17}/> Settings</button>
       <div className="side-bottom"><div className="connection-dot"/> Local dashboard<br/><small>Broker connection not configured</small></div>
     </aside>
 
-    <section className="content">
+    {activeView === "settings" ? <section className="content settings-page">
+      <header className="topbar">
+        <div><div className="eyebrow">CONTROL CENTER / SETTINGS</div><h1>Trading settings</h1></div>
+        <span className="muted">Separate configuration for Forex/Gold and Crypto</span>
+      </header>
+      <div className="notice"><ShieldCheck size={18}/><div><b>Strategy and connection settings</b><span>Forex/Gold uses the cTrader demo engine. Crypto uses continuous cross-exchange scanning and Binance Spot Testnet. Live-money trading remains locked.</span></div></div>
+      <CTraderEngineControls />
+      <CryptoMonitorPanel settingsOnly />
+      <footer>DOMINION AI TRADING DESK <span>SETTINGS · DEMO / TESTNET ONLY</span></footer>
+    </section> : <section className="content">
       <header className="topbar">
         <div><div className="eyebrow">CONTROL CENTER / OVERVIEW</div><h1>Trading command center</h1></div>
         <div className="top-actions">
@@ -70,8 +82,6 @@ export default function App() {
       </header>
 
       <div className="notice"><LockKeyhole size={18}/><div><b>Protected development environment</b><span>Live-money orders are disabled. cTrader demo orders require separate trading authorization and explicit automation enablement; crypto remains paper/testnet only.</span></div></div>
-
-      <CTraderEngineControls />
 
       <div className="metric-grid">
         <Metric icon={<CircleDollarSign/>} label="Starting capital" value="$20.00" note="Planned balance · not an account connection"/>
@@ -92,7 +102,7 @@ export default function App() {
       <div className="section-head agent-heading"><div><div className="eyebrow">AUTONOMOUS WORKFORCE</div><h2>Eight-agent components</h2></div><span className="muted">Actual readiness is reported in the runtime panel above</span></div>
       <div className="agent-grid">{agents.map(([name, role, status, Icon], i) => <div className="agent-card" key={name}><div className="agent-top"><div className="agent-icon"><Icon size={18}/></div><span className="agent-state">COMPONENT</span></div><b>{name}</b><small>{role}</small><p>{status}</p></div>)}</div>
       <footer>DOMINION AI TRADING DESK <span>FOUNDATION BUILD · DEMO ONLY · v0.1.0</span></footer>
-    </section>
+    </section>}
   </main>;
 }
 
@@ -101,7 +111,7 @@ function Metric({ icon, label, value, note, positive = false }: { icon: ReactNod
 }
 
 
-function CryptoMonitorPanel() {
+function CryptoMonitorPanel({ settingsOnly = false }: { settingsOnly?: boolean }) {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [decisions, setDecisions] = useState<Record<string, unknown>[]>([]);
   const [latestQuotes, setLatestQuotes] = useState<Record<string, unknown>[]>([]);
@@ -380,6 +390,7 @@ function CryptoMonitorPanel() {
         typeof item.symbol === "string" && typeof item.order_list_id === "string")
     : [];
   return <section className="crypto-monitor">
+    {!settingsOnly && <>
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
       <div className="engine-controls-copy"><b>On-device paper engine</b><span>{isNativeApp ? "Runs inside this app as an Android foreground service." : "Install the Android app to control the on-device service."}</span></div>
@@ -390,7 +401,8 @@ function CryptoMonitorPanel() {
       <small className={"engine-control-state " + engineControl}>Phone service: {engineControl === "web" ? "Android app required" : engineControl}</small>
       {engineError && <small className="engine-control-state error" role="status">Engine diagnostic: {engineError}</small>}
     </div>
-    <div className="agent-runtime-list credential-panel">
+    </>}
+    {settingsOnly && <div className="agent-runtime-list credential-panel">
       <div className="decision-list-head"><b>BINANCE SPOT TESTNET CREDENTIALS</b><span>{credentialSaved ? "ENCRYPTED ON DEVICE" : "NOT CONNECTED"}</span></div>
       <div className="panel-foot">Enter Testnet-only API credentials. They are encrypted by Android Keystore and are not sent to a server. Automated demo orders require Spot trading permission on the Testnet key; keep withdrawals disabled and never use production keys.</div>
       <input aria-label="Binance Testnet API key" type="password" autoComplete="off" placeholder={isNativeApp ? "Binance Spot Testnet API key" : "Available in the Android app"} value={testnetApiKey} onChange={event => setTestnetApiKey(event.target.value)} disabled={!isNativeApp || credentialBusy} />
@@ -423,7 +435,8 @@ function CryptoMonitorPanel() {
             (testnetAccount.balances || []).map(balance => <div className="decision-row" key={balance.asset}><b>{balance.asset}</b><span>Free {balance.free}</span><span>Locked {balance.locked}</span></div>)}
         </> : <div className="decision-empty"><div><b>Account check failed</b><span>{testnetAccount.error || "The exchange did not confirm the account."}{testnetAccount.exchange_code ? " (Exchange code " + testnetAccount.exchange_code + ")" : ""}</span></div></div>}
       </div>}
-    </div>
+    </div>}
+    {!settingsOnly && <>
     <div className="crypto-summary">
       <div><small>ENGINE</small><b>{engine}</b></div>
       <div><small>MODE</small><b>{String(status?.mode || "PAPER_ONLY").replaceAll("_", " ")}</b></div>
@@ -436,7 +449,7 @@ function CryptoMonitorPanel() {
       <div><small>PAPER OPPORTUNITIES</small><b>{String(arbitrageScanner?.opportunities_count ?? 0)}</b></div>
       <div><small>MARKET UNIVERSE</small><b>{String(arbitrageUniverse?.status || "Waiting")}</b></div>
       <div><small>SCAN TARGET</small><b>{String(status?.poll_interval_seconds ?? "1")}s · batch REST</b></div>
-      <div><small>STRATEGY PROFILE</small><b>{String(strategyEngine?.profile || "Intraday")} · {String(strategyEngine?.execution_timeframe || "15m")}/{String(strategyEngine?.context_timeframe || "4h")}</b></div>
+      <div><small>CRYPTO SCAN MODEL</small><b>Continuous cross-exchange · {String(status?.poll_interval_seconds ?? "1")}s target</b></div>
     </div>
     <div className="agent-runtime-list">
       <div className="decision-list-head"><b>BINANCE TESTNET · SHARED RISK SNAPSHOT</b><span>{String(binanceExecution?.status || binanceRiskContext?.status || binanceRecovery?.status || "NOT CHECKED")}</span></div>
@@ -535,5 +548,6 @@ function CryptoMonitorPanel() {
       }
     </div>
     <div className="panel-foot">Read-only local connection. Paper mode only; no order controls are available.</div>
+    </>}
   </section>;
 }
