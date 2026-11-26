@@ -6,6 +6,7 @@ These are REST snapshots, not exchange WebSocket streams.
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Callable
@@ -39,14 +40,31 @@ def _symbol_parts(symbol: str) -> tuple[str, str]:
 class PublicCryptoFeeds:
     """Fetch best-bid/best-ask snapshots from four public spot APIs."""
 
-    def __init__(self, fetch_json: JsonFetcher = _http_json, timeout: float = 5.0):
+    def __init__(
+        self, fetch_json: JsonFetcher = _http_json, timeout: float = 5.0,
+        retries: int = 1, retry_delay_seconds: float = 0.2,
+    ):
         if timeout <= 0:
             raise ValueError("Timeout must be positive.")
+        if retries < 0 or retries > 2:
+            raise ValueError("Retries must be between zero and two.")
+        if retry_delay_seconds < 0 or retry_delay_seconds > 2:
+            raise ValueError("Retry delay must be between zero and two seconds.")
         self.fetch_json = fetch_json
         self.timeout = timeout
+        self.retries = retries
+        self.retry_delay_seconds = retry_delay_seconds
 
     def _get(self, url: str) -> object:
-        return self.fetch_json(url, self.timeout)
+        for attempt in range(self.retries + 1):
+            try:
+                return self.fetch_json(url, self.timeout)
+            except (TimeoutError, OSError):
+                if attempt >= self.retries:
+                    raise
+                if self.retry_delay_seconds:
+                    time.sleep(self.retry_delay_seconds * (attempt + 1))
+        raise RuntimeError("Market-data request exhausted its retry policy.")
 
     def binance(self, symbol: str) -> ExchangeQuote:
         pair, _ = _symbol_parts(symbol)
