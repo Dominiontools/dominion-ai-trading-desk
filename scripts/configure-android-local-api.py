@@ -221,6 +221,9 @@ public class TradingEnginePlugin extends Plugin {
                     String[] credentials = null;
                     try {
                         CredentialVault vault = new CredentialVault(getContext());
+                        if (!TradingEngineService.isRunning()) {
+                            throw new SecurityException("The local trading engine stopped before emergency approval was processed.");
+                        }
                         if (!vault.binanceTestnetOrdersEnabled()) {
                             throw new SecurityException("Binance Testnet automation is OFF. Enable it explicitly in the app before requesting an emergency close.");
                         }
