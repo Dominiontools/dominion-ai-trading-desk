@@ -86,7 +86,9 @@ def _fetch_text(url: str, timeout: float = 3.0) -> str:
 
 def _percent_pair(text: str, venue: str) -> tuple[float, float]:
     """Extract only the regular/base-tier maker/taker pair from official text."""
-    normalized = re.sub(r"\s+", " ", text).replace(",", "")
+    extractor = _TextExtractor()
+    extractor.feed(text)
+    normalized = re.sub(r"\s+", " ", extractor.text()).replace(",", "")
     if venue == "Binance":
         marker = re.search(r"Regular User", normalized, re.IGNORECASE)
         if not marker:
