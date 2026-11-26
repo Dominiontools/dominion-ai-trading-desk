@@ -26,6 +26,7 @@ PUBLIC_FEE_URLS = {
     "Binance": "https://www.binance.com/en/fee/trading",
     "Bitget": "https://www.bitget.com/fee/",
     "OKX": "https://www.okx.com/en-gb/help/important-notice-consolidation-token-pairs",
+    "HTX": "https://www.htx.com/en-us/fee/?feeType=trading",
 }
 PUBLIC_FEE_SOURCES = {
     "Binance": "BINANCE_PUBLIC_STANDARD_SPOT",
@@ -111,11 +112,19 @@ def _percent_pair(text: str, venue: str) -> tuple[float, float]:
         if not pair:
             # Some page versions render maker and taker as adjacent columns.
             pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s+(\d+(?:\.\d+)?)\s*%", tail)
-    else:
+    elif venue == "OKX":
         marker = re.search(r"Regular", normalized, re.IGNORECASE)
         if not marker:
             raise ValueError("OKX Regular spot fee row not found.")
         tail = normalized[marker.end():marker.end() + 1800]
+        pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s+(\d+(?:\.\d+)?)\s*%", tail)
+    else:
+        # HTX must expose the explicit Prime 0 spot row on its official page.
+        # A login wall or generic tier headings are not sufficient evidence.
+        marker = re.search(r"Prime\s*0", normalized, re.IGNORECASE)
+        if not marker:
+            raise ValueError("HTX public Prime 0 spot fee row is not accessible.")
+        tail = normalized[marker.end():marker.end() + 900]
         pair = re.search(r"(\d+(?:\.\d+)?)\s*%\s+(\d+(?:\.\d+)?)\s*%", tail)
     if not pair:
         raise ValueError(f"{venue} regular spot maker/taker rates could not be parsed.")
@@ -155,7 +164,7 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
     global _last_refresh_at
     fetched_at = datetime.now(timezone.utc).isoformat()
     results: dict[str, tuple[float, float] | Exception] = {}
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {
             pool.submit(fetch_text, url): venue
             for venue, url in PUBLIC_FEE_URLS.items()
@@ -175,7 +184,11 @@ def refresh_public_fee_policy(fetch_text=_fetch_text) -> dict:
             if isinstance(result, Exception):
                 previous = dict(_cached_meta.get(venue, {}))
                 previous.update({
-                    "refresh_status": "REFRESH_FAILED_USING_LAST_KNOWN_RATE",
+                    "refresh_status": (
+                        "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
+                        if venue in _cached_fees
+                        else "BLOCKED_NO_PUBLIC_BASE_RATE"
+                    ),
                     "last_refresh_attempt_at": fetched_at,
                     "last_error": type(result).__name__,
                     "last_error_detail": str(result)[:160],
