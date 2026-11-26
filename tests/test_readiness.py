@@ -28,26 +28,9 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         binance_emergency_handling_verified=True,
         verified_fee_exchanges=("Binance", "Bitget", "HTX", "OKX"),
         agent_workflow_verified=True,
-        gmgn_read_only_status="CONNECTED",
     )
     assert result["overall_status"] == "READY_FOR_FINAL_REVIEW"
     assert result["live_trading_enabled"] is False
-
-
-def test_gmgn_readiness_requires_a_successful_official_read_only_connection():
-    missing = build_readiness()
-    failed = build_readiness(gmgn_read_only_status="API_ERROR")
-    connected = build_readiness(gmgn_read_only_status="CONNECTED")
-    verifying = build_readiness(gmgn_read_only_status="READY_TO_CONNECT")
-    limited = build_readiness(gmgn_read_only_status="RATE_LIMITED")
-    plan_blocked = build_readiness(gmgn_read_only_status="PLAN_UPGRADE_REQUIRED")
-    assert next(x for x in missing["tasks"] if x["id"] == "gmgn_read_only")["status"] == "OPTIONAL_NOT_CONNECTED"
-    assert next(x for x in limited["tasks"] if x["id"] == "gmgn_read_only")["status"] == "RATE_LIMITED"
-    assert next(x for x in plan_blocked["tasks"] if x["id"] == "gmgn_read_only")["status"] == "PLAN_UPGRADE_REQUIRED"
-    assert next(x for x in verifying["tasks"] if x["id"] == "gmgn_read_only")["status"] == "VERIFYING"
-    assert next(x for x in failed["tasks"] if x["id"] == "gmgn_read_only")["status"] == "API_ERROR"
-    assert next(x for x in connected["tasks"] if x["id"] == "gmgn_read_only")["status"] == "VERIFIED"
-
 
 
 def test_fee_readiness_requires_every_enabled_public_exchange():
@@ -93,22 +76,3 @@ def test_ctrader_partial_close_requires_broker_demo_verification():
     task = next(x for x in verified["tasks"] if x["id"] == "ctrader_partial_close")
     assert task["status"] == "VERIFIED"
 
-
-
-def test_gmgn_is_optional_and_does_not_block_final_readiness():
-    result = build_readiness(
-        phone_device_validated=True,
-        spotware_approved=True,
-        ctrader_demo_authorized=True,
-        ctrader_demo_orders_verified=True,
-        ctrader_partial_close_verified=True,
-        crypto_testnet_authorized=True,
-        crypto_testnet_orders_verified=True,
-        binance_emergency_handling_verified=True,
-        verified_fee_exchanges=("Binance", "Bitget", "HTX", "OKX"),
-        agent_workflow_verified=True,
-    )
-    gmgn = next(x for x in result["tasks"] if x["id"] == "gmgn_read_only")
-    assert gmgn["status"] == "OPTIONAL_NOT_CONNECTED"
-    assert result["overall_status"] == "READY_FOR_FINAL_REVIEW"
-    assert result["live_trading_enabled"] is False
