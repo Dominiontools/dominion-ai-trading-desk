@@ -18,6 +18,7 @@ def build_readiness(
     crypto_testnet_orders_verified: bool = False,
     binance_emergency_handling_verified: bool = False,
     verified_fee_exchanges: tuple[str, ...] = (),
+    cross_exchange_scan_verified: bool = False,
     agent_workflow_verified: bool = False,
 ) -> dict:
     """Return the next actionable integration tasks without claiming completion."""
@@ -73,6 +74,13 @@ def build_readiness(
             "status": "VERIFIED" if binance_emergency_handling_verified else "IMPLEMENTED_TESTS_PASSED_TESTNET_VERIFICATION_PENDING",
             "detail": "A deterministic, restart-safe, fail-closed Binance Spot Testnet emergency market-close path is implemented and covered by automated tests. It cancels and reconciles the bot-owned protective bracket before a single balance-capped market close, then verifies the remaining balance. Actual Binance Spot Testnet exercise and end-to-end failure-injection verification are still required before acceptance.",
             "owner": "DEVELOPMENT_AND_TESTNET_VALIDATION",
+        },
+        {
+            "id": "cross_exchange_scan",
+            "title": "Verify the 52-market cross-exchange scanner",
+            "status": "VERIFIED" if cross_exchange_scan_verified else "PARTIAL_FEEDS_OR_FEES_PENDING",
+            "detail": "The scanner must complete fresh multi-venue quote collection, report venue health, compare matching markets, and use verified fees before a net opportunity can qualify. Gross price gaps without verified fees are informational only; execution remains disabled.",
+            "owner": "DEVELOPMENT_AND_PUBLIC_FEED_VALIDATION",
         },
         {
             "id": "fees",
