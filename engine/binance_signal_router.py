@@ -138,7 +138,11 @@ class BinanceTestnetSignalRouter:
             "environment": "BINANCE_SPOT_TESTNET",
             "symbol": symbol,
             "side": "BUY",
-            "status": result.get("status"),
+            "status": (
+                emergency_result.get("status")
+                if emergency_result is not None
+                else result.get("status")
+            ),
             "protected": result.get("protected") is True,
             "halted": result.get("halted") is True,
             "operator_action_required": (
