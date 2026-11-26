@@ -244,9 +244,53 @@ class CryptoPaperMonitor:
 
         missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
         if missing_fees:
+            # Keep quote comparison visible even when fees are not configured.
+            # These are explicitly gross price gaps, never net-profit signals.
+            fresh_by_symbol: dict[str, list] = {}
+            for quote in quotes:
+                try:
+                    age = (finished - quote.timestamp).total_seconds()
+                except (AttributeError, TypeError):
+                    continue
+                if 0 <= age <= self.max_quote_age_seconds:
+                    fresh_by_symbol.setdefault(quote.symbol, []).append(quote)
+            gross_gaps = []
+            for symbol, symbol_quotes in fresh_by_symbol.items():
+                for buy in symbol_quotes:
+                    for sell in symbol_quotes:
+                        if buy.exchange == sell.exchange:
+                            continue
+                        if buy.ask_size <= 0 or sell.bid_size <= 0 or buy.ask >= sell.bid:
+                            continue
+                        gross = (sell.bid - buy.ask) / buy.ask * 10_000
+                        notional = min(
+                            self.max_notional,
+                            buy.ask * buy.ask_size,
+                            sell.bid * sell.bid_size,
+                        )
+                        if notional <= 0:
+                            continue
+                        gross_gaps.append({
+                            "symbol": symbol,
+                            "buy_exchange": buy.exchange,
+                            "sell_exchange": sell.exchange,
+                            "buy_price": buy.ask,
+                            "sell_price": sell.bid,
+                            "gross_edge_bps": round(gross, 4),
+                            "max_notional_at_top_of_book": round(notional, 8),
+                            "net_edge": None,
+                            "fees_verified": False,
+                        })
+            gross_gaps.sort(key=lambda item: item["gross_edge_bps"], reverse=True)
             record.update(
-                status="BLOCKED", reason="FEE_CONFIG_MISSING",
+                status="PARTIAL_FEED_AWAITING_VERIFIED_FEES" if venue_errors else "AWAITING_VERIFIED_FEES",
+                reason="Market quotes are being compared. Net opportunity qualification is paused until actual fee schedules are verified.",
                 missing_fee_exchanges=missing_fees,
+                gross_price_gaps=gross_gaps[:20],
+                gross_price_gaps_count=len(gross_gaps),
+                opportunities=[],
+                opportunities_count=0,
+                execution_blocked=True,
             )
             return self._write(record)
 
@@ -256,10 +300,11 @@ class CryptoPaperMonitor:
             min_net_edge_bps=self.min_net_edge_bps,
             max_notional=self.max_notional,
         )
+        status_prefix = "PARTIAL_FEED_" if venue_errors else ""
         if opportunities:
             record.update(
-                status="PAPER_OPPORTUNITY",
-                reason="NET_EDGE_THRESHOLD_MET",
+                status=f"{status_prefix}PAPER_OPPORTUNITY",
+                reason="NET_EDGE_THRESHOLD_MET_WITH_PARTIAL_FEED" if venue_errors else "NET_EDGE_THRESHOLD_MET",
                 opportunities=[
                     {
                         "symbol": item.symbol,
@@ -275,11 +320,13 @@ class CryptoPaperMonitor:
                     for item in opportunities[:20]
                 ],
                 opportunities_count=len(opportunities),
+                execution_blocked=True,
             )
         else:
             record.update(
-                status="NO_QUALIFYING_OPPORTUNITY",
+                status=f"{status_prefix}NO_QUALIFYING_OPPORTUNITY",
                 reason="No fresh, depth-backed price gap cleared verified fees, provisional slippage and the minimum net edge.",
                 opportunities_count=0,
+                execution_blocked=True,
             )
         return self._write(record)
