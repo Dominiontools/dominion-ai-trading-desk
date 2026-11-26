@@ -3,7 +3,7 @@
 This adapter is isolated from production exchange hosts. It never reads or
 stores credentials from files; callers provide API credentials at runtime.
 Order placement is disabled unless the caller opts in and the environment
-flag DOMINION_ENABLE_BINANCE_TESTNET_ORDERS is exactly YES. Limit orders only.
+flag DOMINION_ENABLE_BINANCE_TESTNET_ORDERS is exactly YES. Limit and explicitly identified emergency market-sell orders only.
 """
 from __future__ import annotations
 
@@ -220,6 +220,48 @@ class BinanceSpotTestnetClient:
         if working.get("status") == "FILLED":
             raise PermissionError("Refusing to cancel an OTOCO protecting a filled position.")
         return self._signed("DELETE", "/api/v3/orderList", {"symbol": pair, "listClientOrderId": list_client_order_id})
+    def account_open_orders(self, *, symbol: str) -> list[dict]:
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        result = self._signed("GET", "/api/v3/openOrders", {"symbol": pair})
+        if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+            raise RuntimeError("Binance open-orders response is malformed.")
+        return result
+
+    def cancel_filled_otoco_for_emergency(self, *, symbol: str, list_client_order_id: str) -> dict:
+        """Cancel the two exit legs of a filled OTOCO only for emergency flattening."""
+        if not self.allow_orders:
+            raise PermissionError("Binance Testnet order actions are disabled.")
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not list_client_order_id or len(list_client_order_id) > 20:
+            raise ValueError("A valid symbol and order-list client ID are required.")
+        working = self.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "E")
+        if working.get("status") not in {"FILLED", "PARTIALLY_FILLED"}:
+            raise PermissionError("Emergency cancellation requires a filled or partially filled bot entry.")
+        return self._signed("DELETE", "/api/v3/orderList", {
+            "symbol": pair, "listClientOrderId": list_client_order_id
+        })
+
+    def place_market_sell(self, *, symbol: str, quantity: str, client_order_id: str) -> dict:
+        """Place one explicitly identified emergency MARKET SELL on Spot Testnet."""
+        if not self.allow_orders:
+            raise PermissionError("Binance Testnet orders are disabled.")
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        if not client_order_id or len(client_order_id) > 36 or not client_order_id.isascii():
+            raise ValueError("A short ASCII emergency order ID is required.")
+        params = {
+            "symbol": pair, "side": "SELL", "type": "MARKET",
+            "quantity": _positive_decimal(quantity, "quantity"),
+            "newClientOrderId": client_order_id, "newOrderRespType": "FULL",
+        }
+        return self._signed("POST", "/api/v3/order", params)
+
+    def query_account_order_by_client_id(self, *, symbol: str, client_order_id: str) -> dict:
+        return self.query_order_by_client_id(symbol=symbol, client_order_id=client_order_id)
+
     def query_order(self, *, symbol: str, order_id: int) -> dict:
         pair = symbol.strip().upper()
         if not pair.isalnum() or order_id <= 0:
