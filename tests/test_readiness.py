@@ -22,6 +22,7 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         spotware_approved=True,
         ctrader_demo_authorized=True,
         ctrader_demo_orders_verified=True,
+        ctrader_partial_close_verified=True,
         crypto_testnet_authorized=True,
         crypto_testnet_orders_verified=True,
         binance_emergency_handling_verified=True,
