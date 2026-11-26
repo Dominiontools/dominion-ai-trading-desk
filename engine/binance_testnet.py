@@ -40,7 +40,7 @@ class BinanceSpotTestnetClient:
         *,
         allow_orders: bool = False,
         base_url: str = TESTNET_BASE_URL,
-        transport: Callable[[str, str, dict[str, str], float], dict] | None = None,
+        transport: Callable[[str, str, dict[str, str], float], dict | list] | None = None,
         clock_ms: Callable[[], int] | None = None,
         timeout: float = 8.0,
     ):
@@ -61,15 +61,15 @@ class BinanceSpotTestnetClient:
         self.timeout = timeout
 
     @staticmethod
-    def _http(method: str, url: str, headers: dict[str, str], timeout: float) -> dict:
+    def _http(method: str, url: str, headers: dict[str, str], timeout: float) -> dict | list:
         request = Request(url, headers=headers, method=method)
         with urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-            if not isinstance(payload, dict):
+            if not isinstance(payload, (dict, list)):
                 raise RuntimeError("Unexpected Binance response shape.")
             return payload
 
-    def _signed(self, method: str, path: str, params: dict[str, str]) -> dict:
+    def _signed(self, method: str, path: str, params: dict[str, str]) -> dict | list:
         values = dict(params)
         values["timestamp"] = str(self.clock_ms())
         values.setdefault("recvWindow", "5000")
