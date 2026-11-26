@@ -115,6 +115,25 @@ class BinanceTestnetSignalRouter:
         result = self.lifecycle.submit_and_verify(
             plan, list_client_order_id=order_id
         )
+        emergency_result = None
+        if result.get("protected") is not True and result.get("operator_action_required") is True:
+            try:
+                # Fetch a fresh exchange price after the protection check; never
+                # use the earlier strategy quote for emergency min-notional checks.
+                emergency_quote = self.client.ticker_price(symbol=symbol)
+                emergency_price = emergency_quote.get("price")
+                emergency_result = self.lifecycle.emergency_flatten(
+                    symbol=symbol,
+                    list_client_order_id=order_id,
+                    reference_price=str(emergency_price),
+                )
+            except Exception as exc:
+                emergency_result = {
+                    "status": "EMERGENCY_CLOSE_UNCONFIRMED",
+                    "halted": True,
+                    "operator_action_required": True,
+                    "error_type": type(exc).__name__,
+                }
         return {
             "environment": "BINANCE_SPOT_TESTNET",
             "symbol": symbol,
@@ -122,7 +141,12 @@ class BinanceTestnetSignalRouter:
             "status": result.get("status"),
             "protected": result.get("protected") is True,
             "halted": result.get("halted") is True,
-            "operator_action_required": result.get("operator_action_required") is True,
+            "operator_action_required": (
+                emergency_result.get("operator_action_required") is True
+                if emergency_result is not None
+                else result.get("operator_action_required") is True
+            ),
+            "emergency_close": emergency_result,
             "plan": {
                 "quantity": plan.quantity,
                 "entry": plan.limit_price,
