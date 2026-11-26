@@ -454,3 +454,24 @@ def test_testnet_position_monitor_fails_closed_on_malformed_reconciliation():
     assert state["orders_enabled"] is False
     assert state["binance_testnet_execution"]["halted"] is True
     assert state["agents"]["RISK"]["status"] == "BLOCKED"
+
+
+def test_testnet_partial_fill_surfaces_emergency_close_for_operator_approval_only():
+    state = _testnet_monitor_state()
+    result = service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILIATION_REQUIRED", "halted": True,
+        "reconciled": 1,
+        "orders": [{
+            "order_list_id": "private-id", "symbol": "BTCUSDT",
+            "state": "UNPROTECTED_PARTIAL_FILL", "safe": False,
+        }],
+        "unresolved": [{
+            "order_list_id": "private-id",
+            "reason": "EXCHANGE_STATE_REQUIRES_REVIEW",
+            "state": "UNPROTECTED_PARTIAL_FILL",
+        }],
+    })
+    assert result["halted"] is True
+    assert state["orders_enabled"] is False
+    assert state["agents"]["EXIT"]["status"] == "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL"
+    assert "explicit operator approval" in state["agents"]["EXIT"]["detail"]
