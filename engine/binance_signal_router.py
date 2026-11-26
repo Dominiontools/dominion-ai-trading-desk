@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from .binance_lifecycle import BinanceProtectedLifecycle
+from .binance_risk_context import BinanceRiskSnapshot
 from .binance_market_rules import fetch_symbol_rules, fetch_verified_taker_fees
 from .crypto_arbitrage import ExchangeQuote, quote_age_seconds
 from .risk_execution import (
@@ -46,7 +47,11 @@ class BinanceTestnetSignalRouter:
         list_client_order_id: str | None = None,
         now: datetime | None = None,
     ) -> dict:
-        """Route using a fresh BinanceRiskSnapshot rather than caller-made flags."""
+        """Route only with the concrete account-risk snapshot produced by the provider."""
+        if not isinstance(snapshot, BinanceRiskSnapshot):
+            raise PermissionError("A provider-issued BinanceRiskSnapshot is required.")
+        if snapshot.account_snapshot_verified is not True or snapshot.daily_loss_verified is not True:
+            raise PermissionError("Binance account and daily-loss snapshot is not verified.")
         return self.submit_setup(
             setup, quote,
             context=snapshot.context,
