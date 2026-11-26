@@ -102,7 +102,7 @@ class CryptoPaperMonitor:
             }
             for q in quotes
         ]
-        missing_fees = sorted(exchanges_seen.difference(self.costs_by_exchange))
+        missing_fees = sorted(fresh_exchanges.difference(self.costs_by_exchange))
         if missing_fees:
             record.update(
                 status="BLOCKED", reason="FEE_CONFIG_MISSING",
