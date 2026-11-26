@@ -150,3 +150,7 @@
 .settings-page .credential-panel input{display:block;width:100%;margin:10px 0;padding:11px 12px;border:1px solid #2a3a52;border-radius:8px;background:#0b1524;color:#e5edf8;font:inherit;font-size:12px}
 .settings-page .credential-panel input:focus{outline:2px solid rgba(224,177,95,.35);border-color:#c99b55}
 @media(max-width:700px){.settings-page .topbar{align-items:flex-start;flex-direction:column}}
+
+.view-switcher{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 12px;border:1px solid #34445c;border-radius:8px;background:#111d30;color:#e0b15f;font:inherit;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.view-switcher:hover{border-color:#c99b55}
+@media(max-width:700px){.view-switcher{align-self:flex-start}.topbar .view-switcher{margin-top:4px}}
