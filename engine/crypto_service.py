@@ -21,6 +21,7 @@ from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
 from engine.crypto_monitor import CryptoPaperMonitor
+from engine.crypto_fee_policy import load_fee_policy
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
 from engine.confluence_strategy import TIMEFRAME_PROFILES
@@ -51,24 +52,8 @@ def _positive_float(name: str, default: float) -> float:
 
 
 def _fee_config() -> dict[str, tuple[float, float]]:
-    """Read user-verified taker fee estimates; never invent fee values."""
-    fees: dict[str, tuple[float, float]] = {}
-    for exchange, env_name in (
-        ("Binance", "DOMINION_FEE_BINANCE_TAKER_BPS"),
-        ("Bitget", "DOMINION_FEE_BITGET_TAKER_BPS"),
-        ("HTX", "DOMINION_FEE_HTX_TAKER_BPS"),
-        ("OKX", "DOMINION_FEE_OKX_TAKER_BPS"),
-    ):
-        raw = os.getenv(env_name, "").strip()
-        if not raw:
-            continue
-        try:
-            fee = float(raw)
-        except ValueError as exc:
-            raise RuntimeError(f"{env_name} must be a number.") from exc
-        if not isfinite(fee) or fee < 0 or fee > 500:
-            raise RuntimeError(f"{env_name} must be a finite value between 0 and 500 basis points.")
-        fees[exchange] = (fee, fee)
+    """Load conservative public estimates and verified Binance personal overrides."""
+    fees, _sources = load_fee_policy()
     return fees
 
 
@@ -114,7 +99,7 @@ def _runtime_config(
     if interval < 1.0:
         raise RuntimeError("Polling interval cannot be below one second.")
     log_path = Path(data_dir) / "crypto_decisions.jsonl"
-    fees = _fee_config()
+    fees, fee_sources = load_fee_policy()
     feeds = PublicCryptoFeeds(timeout=5.0)
     paper_desk = PaperTradingDesk(
         starting_equity=20.0,
@@ -185,7 +170,13 @@ def _runtime_config(
         "poll_interval_seconds": interval,
         "market_data_mode": "PUBLIC_REST_SNAPSHOT_LOCAL_RECEIPT_TIME",
         "market_data_note": "Dynamic top-52 liquid USDT cross-exchange scan uses one batched REST snapshot per venue; one-second polling is a target, not a guaranteed execution time.",
-        "fee_configuration": "complete" if len(fees) == 4 else "missing",
+        "fee_configuration": "complete" if len(fees) == 4 else "partial",
+        "fee_policy": {
+            "rates_bps": {venue: {"maker": rates[0], "taker": rates[1]} for venue, rates in fees.items()},
+            "sources": fee_sources,
+            "net_profit_qualification": "BLOCKED_FOR_UNCONFIGURED_VENUES",
+            "note": "Public rates are estimates; Binance personal rates override only when explicitly verified.",
+        },
         "arbitrage_scanner": {
             "status": "STARTING", "symbol": arbitrage_symbols[0],
             "symbols_scanned": len(arbitrage_symbols),
