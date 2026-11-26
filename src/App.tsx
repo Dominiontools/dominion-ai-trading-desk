@@ -315,6 +315,9 @@ function CryptoMonitorPanel() {
   const scannerOpportunities = Array.isArray(arbitrageScanner?.opportunities)
     ? arbitrageScanner.opportunities.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     : [];
+  const scannerGrossGaps = Array.isArray(arbitrageScanner?.gross_price_gaps)
+    ? arbitrageScanner.gross_price_gaps.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -450,13 +453,20 @@ function CryptoMonitorPanel() {
       {latestQuotes.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No live quote snapshot yet</b><span>Start the local paper service to fetch current Binance, Bitget and HTX prices.</span></div></div> :
         latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.symbol || "Symbol")} · {String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
       <div className="decision-list-head"><b>TOP CROSS-EXCHANGE OPPORTUNITIES</b><span>{scannerOpportunities.length} candidates · paper only</span></div>
-      {scannerOpportunities.length === 0
-        ? <div className="decision-empty"><div><b>No qualifying price gaps</b><span>Only fresh quotes with verified fees, depth and net edge are shown here.</span></div></div>
-        : scannerOpportunities.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "")}>
+      {scannerOpportunities.length > 0
+        ? scannerOpportunities.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "")}>
             <div><b>{String(item.symbol || "—")}</b><small>Buy {String(item.buy_exchange || "—")} → Sell {String(item.sell_exchange || "—")}</small></div>
             <span>Net {Number(item.net_edge_bps ?? 0).toFixed(1)} bps</span>
             <small>Top-of-book cap ${Number(item.max_notional_at_top_of_book ?? 0).toFixed(2)}</small>
-          </div>)}
+          </div>)
+        : scannerGrossGaps.length > 0
+          ? <><div className="decision-empty"><div><b>Gross price differences detected — fees not verified</b><span>These are raw bid/ask comparisons, not net-profit opportunities. Trading remains blocked until actual fees are configured.</span></div></div>
+              {scannerGrossGaps.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "") + ":" + String(item.sell_exchange || "")}>
+                <div><b>{String(item.symbol || "—")}</b><small>Buy {String(item.buy_exchange || "—")} → Sell {String(item.sell_exchange || "—")}</small></div>
+                <span>Gross {Number(item.gross_edge_bps ?? 0).toFixed(1)} bps</span>
+                <small>Notional cap ${Number(item.max_notional_at_top_of_book ?? 0).toFixed(2)}</small>
+              </div>)}</>
+          : <div className="decision-empty"><div><b>No comparable price gaps yet</b><span>The scanner needs fresh bid/ask quotes for the same pair on at least two exchanges.</span></div></div>}
       <div className="decision-list-head"><b>RECENT SCANNER DECISIONS</b><span>{decisions.length} records</span></div>
       {connection !== "connected" ? <div className="decision-empty"><Activity size={18}/><div><b>Waiting for the local paper API</b><span>When the paper-monitor service is running on this phone, its status and decisions will appear here.</span></div></div> :
         decisions.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No decision records yet</b><span>The API is connected, but the monitor has not written any decisions.</span></div></div> :
