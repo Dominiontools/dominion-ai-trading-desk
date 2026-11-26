@@ -31,8 +31,9 @@ class BinanceTestnetSignalRouter:
         *,
         max_quote_age_seconds: float = 2.0,
         estimated_slippage_bps: float = 5.0,
+        max_snapshot_age_seconds: float = 5.0,
     ):
-        if max_quote_age_seconds <= 0 or estimated_slippage_bps < 0:
+        if max_quote_age_seconds <= 0 or estimated_slippage_bps < 0 or max_snapshot_age_seconds <= 0:
             raise ValueError("Invalid quote-age or slippage policy.")
         self.client = client
         self.lifecycle = lifecycle
@@ -41,6 +42,7 @@ class BinanceTestnetSignalRouter:
         )
         self.max_quote_age_seconds = max_quote_age_seconds
         self.estimated_slippage_bps = estimated_slippage_bps
+        self.max_snapshot_age_seconds = max_snapshot_age_seconds
 
     def submit_verified_setup(
         self, setup, quote: ExchangeQuote, *, snapshot, fees: VerifiedFees | None = None,
@@ -52,6 +54,15 @@ class BinanceTestnetSignalRouter:
             raise PermissionError("A provider-issued BinanceRiskSnapshot is required.")
         if snapshot.account_snapshot_verified is not True or snapshot.daily_loss_verified is not True:
             raise PermissionError("Binance account and daily-loss snapshot is not verified.")
+        current = now or datetime.now(timezone.utc)
+        captured_at = snapshot.captured_at
+        if (not isinstance(captured_at, datetime) or captured_at.tzinfo is None
+                or captured_at.utcoffset() is None or current.tzinfo is None
+                or current.utcoffset() is None):
+            raise PermissionError("Binance risk snapshot timestamp is invalid.")
+        snapshot_age = (current - captured_at).total_seconds()
+        if snapshot_age < 0 or snapshot_age > self.max_snapshot_age_seconds:
+            raise PermissionError("Binance account-risk snapshot is stale.")
         return self.submit_setup(
             setup, quote,
             context=snapshot.context,
