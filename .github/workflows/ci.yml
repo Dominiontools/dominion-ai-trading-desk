@@ -54,6 +54,8 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - run: npm install
+      - name: Build web assets for Capacitor
+        run: npm run build
       - name: Generate Capacitor Android project
         run: npx cap add android
       - name: Sync Capacitor
