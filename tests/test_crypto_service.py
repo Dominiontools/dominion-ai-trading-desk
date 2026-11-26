@@ -377,3 +377,66 @@ def test_scanner_readiness_rejects_missing_fee_qualification():
         "reason": "FEE_CONFIG_MISSING",
     }
     assert service._cross_exchange_scan_verified(scanner) is False
+
+
+
+def _testnet_monitor_state():
+    return {
+        "orders_enabled": True,
+        "binance_testnet_execution": {
+            "enabled": True, "status": "ENABLED_TESTNET",
+            "halted": False, "orders_enabled": True,
+        },
+        "agents": {
+            "RISK": {}, "SNIPER": {}, "EXIT": {},
+        },
+    }
+
+
+def test_testnet_position_monitor_keeps_confirmed_protection_and_does_not_submit():
+    state = _testnet_monitor_state()
+    result = service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILED", "halted": False, "reconciled": 1,
+        "orders": [{
+            "order_list_id": "private-id", "symbol": "BTCUSDT",
+            "state": "PROTECTED", "safe": True,
+        }],
+        "unresolved": [],
+    })
+    assert result["status"] == "RECONCILED"
+    assert result["halted"] is False
+    assert state["orders_enabled"] is True
+    assert state["binance_testnet_execution"]["orders_enabled"] is True
+    assert state["agents"]["EXIT"]["status"] == "EXCHANGE_PROTECTED_TESTNET_POSITION"
+
+
+def test_testnet_position_monitor_halts_new_entries_on_uncertain_reconciliation():
+    state = _testnet_monitor_state()
+    result = service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILIATION_REQUIRED", "halted": True,
+        "reconciled": 0,
+        "orders": [],
+        "unresolved": [{"reason": "EXCHANGE_QUERY_FAILED"}],
+    })
+    assert result["halted"] is True
+    assert result["unresolved_count"] == 1
+    assert state["orders_enabled"] is False
+    assert state["binance_testnet_execution"]["orders_enabled"] is False
+    assert state["binance_testnet_execution"]["halted"] is True
+    assert state["agents"]["RISK"]["status"] == "BLOCKED"
+    assert state["agents"]["SNIPER"]["status"] == "PAUSED_REQUIRES_REVIEW"
+    assert state["agents"]["EXIT"]["status"] == "RECONCILIATION_REQUIRED"
+
+
+def test_testnet_position_monitor_reports_exchange_confirmed_exit_without_closing_again():
+    state = _testnet_monitor_state()
+    service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILED", "halted": False, "reconciled": 1,
+        "orders": [{
+            "order_list_id": "private-id", "symbol": "BTCUSDT",
+            "state": "EXITED_TAKE_PROFIT", "safe": True,
+        }],
+        "unresolved": [],
+    })
+    assert state["agents"]["EXIT"]["status"] == "TESTNET_POSITION_EXIT_RECONCILED"
+    assert state["orders_enabled"] is True
