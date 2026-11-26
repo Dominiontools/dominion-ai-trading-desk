@@ -318,6 +318,12 @@ function CryptoMonitorPanel() {
   const scannerGrossGaps = Array.isArray(arbitrageScanner?.gross_price_gaps)
     ? arbitrageScanner.gross_price_gaps.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     : [];
+  const feeVerifiedExchanges = Array.isArray(arbitrageScanner?.fee_verified_exchanges)
+    ? arbitrageScanner.fee_verified_exchanges.map(String)
+    : [];
+  const missingFeeExchanges = Array.isArray(arbitrageScanner?.missing_fee_exchanges)
+    ? arbitrageScanner.missing_fee_exchanges.map(String)
+    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -455,6 +461,7 @@ function CryptoMonitorPanel() {
       {latestQuotes.length === 0 ? <div className="decision-empty"><Activity size={18}/><div><b>No live quote snapshot yet</b><span>Start the local paper service to fetch current Binance, Bitget and HTX prices.</span></div></div> :
         latestQuotes.map((quote, index) => <div className="decision-row" key={String(quote.exchange || index)}><div><b>{String(quote.symbol || "Symbol")} · {String(quote.exchange || "Exchange")}</b><small>Bid size {String(quote.bid_size ?? "—")} · Ask size {String(quote.ask_size ?? "—")}</small></div><span>Bid {String(quote.bid ?? "—")}</span><span>Ask {String(quote.ask ?? "—")}</span></div>)}
       <div className="decision-list-head"><b>TOP CROSS-EXCHANGE OPPORTUNITIES</b><span>{scannerOpportunities.length} candidates · paper only</span></div>
+      <div className="panel-foot">Fee-verified venues: {feeVerifiedExchanges.length ? feeVerifiedExchanges.join(", ") : "Awaiting official fee refresh"}{missingFeeExchanges.length ? " · Excluded from net-profit checks: " + missingFeeExchanges.join(", ") : ""}. Unverified venues are never used to calculate net edge.</div>
       {scannerOpportunities.length > 0
         ? scannerOpportunities.slice(0, 10).map((item, index) => <div className="decision-row" key={String(item.symbol || index) + ":" + String(item.buy_exchange || "")}>
             <div><b>{String(item.symbol || "—")}</b><small>Buy {String(item.buy_exchange || "—")} → Sell {String(item.sell_exchange || "—")}</small></div>
