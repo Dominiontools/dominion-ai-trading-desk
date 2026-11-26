@@ -174,9 +174,14 @@ def test_multi_market_scan_requires_fee_configuration_for_seen_venues(tmp_path):
         costs_by_exchange={"Binance": (0, 1)}, clock=lambda: now,
     )
     result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
-    assert result["status"] == "BLOCKED"
-    assert result["reason"] == "FEE_CONFIG_MISSING"
+    assert result["status"] == "AWAITING_VERIFIED_FEES"
+    assert result["reason"].startswith("Market quotes are being compared")
     assert result["missing_fee_exchanges"] == ["Bitget", "HTX"]
+    assert result["execution_blocked"] is True
+    assert result["opportunities_count"] == 0
+    assert result["gross_price_gaps_count"] > 0
+    assert result["gross_price_gaps"][0]["fees_verified"] is False
+    assert result["gross_price_gaps"][0]["net_edge"] is None
 
 
 def test_decision_log_rotates_to_keep_android_storage_bounded(tmp_path):
@@ -191,3 +196,21 @@ def test_decision_log_rotates_to_keep_android_storage_bounded(tmp_path):
     assert backup.exists()
     assert log.stat().st_size < 1024
     assert read_records(log)[0]["status"] == "ROTATION_TEST"
+
+
+def test_multi_market_scan_reports_partial_feed_without_hiding_healthy_venues(tmp_path):
+    now = datetime.now(timezone.utc)
+    log = tmp_path / "multi-partial.jsonl"
+    monitor = CryptoPaperMonitor(
+        FakeBatchFeeds(make_multi_quotes(now), errors={"OKX": "TimeoutError: TLS handshake timed out"}),
+        decision_log=log,
+        costs_by_exchange={"Binance": (0, 1)},
+        clock=lambda: now,
+    )
+    result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
+    assert result["status"] == "PARTIAL_FEED_AWAITING_VERIFIED_FEES"
+    assert result["available_exchanges"] == ["Binance", "Bitget", "HTX"]
+    assert result["venue_errors"]["OKX"].startswith("TimeoutError")
+    assert result["symbols_with_two_venues"] == 2
+    assert result["execution_blocked"] is True
+    assert result["orders_enabled"] is False
