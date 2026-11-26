@@ -187,11 +187,22 @@ async function manageBotPosition(
   const markToMarketDailyPnl = daily.dailyNetPnl + unrealizedPnl;
   const markToMarketLossFraction = Math.max(0, -markToMarketDailyPnl / daily.startingEquity);
   if (markToMarketLossFraction >= dailyLossLimitFraction) {
-    await session.closePosition(positionId, volume);
+    const closeResult = await closeAndVerify(session, positionId, volume);
+    if (!closeResult.closed) {
+      const pending = {
+        status: "DAILY_STOP_UNREALIZED_CLOSE_PENDING",
+        reason: "BROKER_POSITION_REMAINS_OPEN_AFTER_UNREALIZED_DAILY_STOP_CLOSE_REQUEST",
+        positionId, remainingVolume: closeResult.remainingVolume,
+        markToMarketDailyLossPct: markToMarketLossFraction * 100, mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, pending);
+      await appendEvent(store, pending);
+      return pending;
+    }
     await store.delete("account/active-position");
     const dailyClose = {
-      status: "DAILY_STOP_UNREALIZED_CLOSE_SENT",
-      reason: "REALIZED_PLUS_UNREALIZED_DAILY_LOSS_LIMIT_REACHED",
+      status: "DAILY_STOP_UNREALIZED_CLOSE_CONFIRMED",
+      reason: "BROKER_RECONCILIATION_CONFIRMED_REALIZED_PLUS_UNREALIZED_DAILY_STOP_CLOSE",
       positionId, markToMarketDailyLossPct: markToMarketLossFraction * 100,
       mode: "DEMO_ONLY",
     };
