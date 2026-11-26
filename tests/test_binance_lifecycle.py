@@ -73,6 +73,42 @@ def test_unconfirmed_protection_halts_future_submissions(plan):
     assert client.submissions == 1
 
 
+def test_partial_entry_fill_is_explicitly_unprotected_and_halts(plan):
+    client = FakeClient({
+        "state": "UNPROTECTED_PARTIAL_FILL", "protected": False,
+        "action_required": True, "working_status": "PARTIALLY_FILLED",
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client)
+    result = lifecycle.submit_and_verify(plan, list_client_order_id="dominion123")
+    assert result["status"] == "UNPROTECTED_PARTIAL_FILL"
+    assert result["protected"] is False
+    assert result["halted"] is True
+    assert result["operator_action_required"] is True
+    with pytest.raises(PermissionError, match="halted"):
+        lifecycle.submit_and_verify(plan, list_client_order_id="dominion124")
+    assert client.submissions == 1
+
+
+def test_partial_entry_fill_remains_halted_after_restart(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+    client = FakeClient({
+        "state": "UNPROTECTED_PARTIAL_FILL", "protected": False,
+        "action_required": True, "working_status": "PARTIALLY_FILLED",
+    })
+    first = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    submitted = first.submit_and_verify(plan, list_client_order_id="dominion123")
+    assert submitted["status"] == "UNPROTECTED_PARTIAL_FILL"
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    result = restarted.reconcile_after_restart()
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["halted"] is True
+    assert result["operator_action_required"] is True
+    assert result["orders"][0]["state"] == "UNPROTECTED_PARTIAL_FILL"
+    assert result["orders"][0]["safe"] is False
+    assert result["unresolved"][0]["state"] == "UNPROTECTED_PARTIAL_FILL"
+    assert client.submissions == 1
+
 def test_duplicate_order_list_id_is_never_submitted_twice(plan):
     client = FakeClient({
         "state": "PROTECTED", "protected": True, "action_required": False,
