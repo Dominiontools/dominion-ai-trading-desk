@@ -438,6 +438,24 @@ def test_stop_loss_without_saved_risk_basis_stays_halted(plan, tmp_path):
     assert result["orders"][0]["safe"] is False
 
 
+def test_emergency_flatten_requires_explicit_operator_approval(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+
+    class OrderEnabledClient(FakeClient):
+        allow_orders = True
+
+    client = OrderEnabledClient({})
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    lifecycle.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
+    with pytest.raises(PermissionError, match="Explicit operator approval"):
+        lifecycle.emergency_flatten(
+            symbol="BTCUSDT", list_client_order_id="dominion123",
+            reference_price="50000",
+        )
+    assert client.submissions == 0
+    assert lifecycle.last_result["status"] != "EMERGENCY_CLOSE_PENDING"
+
+
 def test_emergency_flatten_is_write_ahead_persisted_and_keeps_engine_halted(plan, tmp_path):
     journal = tmp_path / "private" / "binance-lifecycle.json"
 
@@ -479,7 +497,7 @@ def test_emergency_flatten_is_write_ahead_persisted_and_keeps_engine_halted(plan
     lifecycle.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
     result = lifecycle.emergency_flatten(
         symbol="BTCUSDT", list_client_order_id="dominion123",
-        reference_price="50000",
+        reference_price="50000", operator_approved=True,
     )
     assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
     assert result["sold_quantity"] == "0"
@@ -491,7 +509,7 @@ def test_emergency_flatten_is_write_ahead_persisted_and_keeps_engine_halted(plan
     assert restarted.last_result["emergency_client_order_id"].startswith("em")
     repeated = restarted.emergency_flatten(
         symbol="BTCUSDT", list_client_order_id="dominion123",
-        reference_price="50000",
+        reference_price="50000", operator_approved=True,
     )
     assert repeated["status"] == "EMERGENCY_FLAT_CONFIRMED"
 
@@ -513,7 +531,7 @@ def test_uncertain_emergency_close_is_never_submitted_again(plan, tmp_path):
     lifecycle.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
     first = lifecycle.emergency_flatten(
         symbol="BTCUSDT", list_client_order_id="dominion123",
-        reference_price="50000",
+        reference_price="50000", operator_approved=True,
     )
     assert first["status"] == "EMERGENCY_CLOSE_UNCONFIRMED"
     with pytest.raises(PermissionError, match="already attempted"):
