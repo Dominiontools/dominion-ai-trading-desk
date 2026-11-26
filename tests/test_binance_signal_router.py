@@ -213,6 +213,41 @@ def test_router_rejects_forged_snapshot_with_true_verification_flags():
 
 
 
+
+def test_router_rejects_stale_provider_issued_risk_snapshot():
+    from dataclasses import replace
+    from datetime import timedelta
+    from engine.binance_risk_context import BinanceRiskSnapshot
+    router, client, lifecycle, setup, quote, context, fees, now = fixtures()
+    snapshot = BinanceRiskSnapshot(
+        context=context, account_snapshot_verified=True, daily_loss_verified=True,
+        quote_asset="USDT", journaled_order_lists=0, recovery_status="NO_JOURNALED_ORDERS",
+        actual_equity_quote=__import__("decimal").Decimal("100"),
+        risk_capital_cap_quote=__import__("decimal").Decimal("20"),
+        exchange_open_orders=0, captured_at=now - timedelta(seconds=10),
+    )
+    with pytest.raises(PermissionError, match="snapshot is stale"):
+        router.submit_verified_setup(setup, quote, snapshot=snapshot, fees=fees, now=now)
+    assert client.exchange_info_calls == 0
+    assert lifecycle.calls == []
+
+
+def test_router_rejects_future_dated_provider_issued_risk_snapshot():
+    from datetime import timedelta
+    from decimal import Decimal
+    from engine.binance_risk_context import BinanceRiskSnapshot
+    router, client, lifecycle, setup, quote, context, fees, now = fixtures()
+    snapshot = BinanceRiskSnapshot(
+        context=context, account_snapshot_verified=True, daily_loss_verified=True,
+        quote_asset="USDT", journaled_order_lists=0, recovery_status="NO_JOURNALED_ORDERS",
+        actual_equity_quote=Decimal("100"), risk_capital_cap_quote=Decimal("20"),
+        exchange_open_orders=0, captured_at=now + timedelta(seconds=1),
+    )
+    with pytest.raises(PermissionError, match="snapshot is stale"):
+        router.submit_verified_setup(setup, quote, snapshot=snapshot, fees=fees, now=now)
+    assert client.exchange_info_calls == 0
+    assert lifecycle.calls == []
+
 def test_router_fetches_authenticated_symbol_fees_when_not_supplied():
     router, client, lifecycle, setup, quote, context, _fees, now = fixtures()
     result = router.submit_setup(
