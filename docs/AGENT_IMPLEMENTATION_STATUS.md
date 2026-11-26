@@ -19,7 +19,7 @@ The video reference shows a multi-agent trading desk. Dominion implements the sa
 - GMGN must be configured with an official API key before Trenches, trending and security reads can connect.
 - GMGN sniper candidates are filtered for paper review only. No private key or swap endpoint is connected.
 - The cross-exchange scanner reports fee-adjusted paper opportunities. Binance, Bitget, HTX and OKX market data does not mean orders can be placed on those venues.
-- Binance Spot Testnet routing is connected to the Android strategy loop behind an explicit OFF-by-default automation switch. It is BUY-only and uses exchange-held stop-loss/take-profit legs. Uncertain submissions halt further entries and require operator review; automatic emergency flattening of a filled but unprotected position is not yet implemented. End-to-end order, exit and restart verification on a real Testnet account remains outstanding.
+- Binance Spot Testnet routing is connected to the Android strategy loop behind an explicit OFF-by-default automation switch. It is BUY-only and uses exchange-held stop-loss/take-profit legs. A partial entry fill is surfaced explicitly as `UNPROTECTED_PARTIAL_FILL`, remains unprotected, halts new entries and survives restart reconciliation. Automatic emergency flattening of a filled but unprotected position is not yet implemented and is now a separate mandatory readiness gate. End-to-end order, exit and restart verification on a real Testnet account remains outstanding.
 - The cTrader backend contains a demo-only execution engine, but the saved authorization is currently view-only. Trading-scope authorization and broker-confirmed demo-order tests remain external acceptance gates.
 - Live-money trading remains locked.
 
