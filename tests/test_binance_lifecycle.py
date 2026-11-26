@@ -489,3 +489,35 @@ def test_emergency_flatten_is_write_ahead_persisted_and_keeps_engine_halted(plan
     assert restarted.halted is True
     assert restarted.last_result["status"] == "EMERGENCY_FLAT_CONFIRMED"
     assert restarted.last_result["emergency_client_order_id"].startswith("em")
+    repeated = restarted.emergency_flatten(
+        symbol="BTCUSDT", list_client_order_id="dominion123",
+        reference_price="50000",
+    )
+    assert repeated["status"] == "EMERGENCY_FLAT_CONFIRMED"
+
+
+def test_uncertain_emergency_close_is_never_submitted_again(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+
+    class UncertainClient(FakeClient):
+        allow_orders = True
+
+        def query_order_by_client_id(self, **kwargs):
+            raise TimeoutError("exchange query timed out")
+
+    client = UncertainClient({
+        "state": "PROTECTION_UNCONFIRMED", "protected": False,
+        "action_required": True,
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    lifecycle.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
+    first = lifecycle.emergency_flatten(
+        symbol="BTCUSDT", list_client_order_id="dominion123",
+        reference_price="50000",
+    )
+    assert first["status"] == "EMERGENCY_CLOSE_UNCONFIRMED"
+    with pytest.raises(PermissionError, match="already attempted"):
+        lifecycle.emergency_flatten(
+            symbol="BTCUSDT", list_client_order_id="dominion123",
+            reference_price="50000",
+        )
