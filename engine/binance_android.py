@@ -202,8 +202,12 @@ def emergency_close_after_native_approval(
         exchange_state = client.reconcile_protected_buy_otoco(
             symbol=pair, list_client_order_id=order_id,
         )
-        if not isinstance(exchange_state, dict) or exchange_state.get("action_required") is not True:
-            raise PermissionError("Fresh exchange state does not show an emergency-close requirement.")
+        if (not isinstance(exchange_state, dict)
+                or exchange_state.get("action_required") is not True
+                or exchange_state.get("state") not in {
+                    "UNPROTECTED_PARTIAL_FILL", "PROTECTION_UNCONFIRMED",
+                }):
+            raise PermissionError("Fresh exchange state does not show a recognized emergency-close requirement.")
         ticker = client.ticker_price(symbol=pair)
         reference_price = str(ticker.get("price", ""))
         price = Decimal(reference_price)
