@@ -263,7 +263,7 @@ class BinanceProtectedLifecycle:
                     "halted": True,
                     "protected": False,
                     "order_list_id": list_client_order_id,
-                    "operator_action_required": False,
+                    "operator_action_required": True,
                     "detail": (
                         str(result.get("detail")) if result.get("detail")
                         else "Position is confirmed flat. Trading remains halted for operator review."
