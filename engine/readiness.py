@@ -19,7 +19,6 @@ def build_readiness(
     binance_emergency_handling_verified: bool = False,
     verified_fee_exchanges: tuple[str, ...] = (),
     agent_workflow_verified: bool = False,
-    gmgn_read_only_status: str = "NOT_CONFIGURED",
 ) -> dict:
     """Return the next actionable integration tasks without claiming completion."""
     tasks = [
@@ -76,18 +75,6 @@ def build_readiness(
             "owner": "DEVELOPMENT_AND_TESTNET_VALIDATION",
         },
         {
-            "id": "gmgn_read_only",
-            "title": "Connect official GMGN token discovery and trending data",
-            "status": "VERIFIED" if gmgn_read_only_status == "CONNECTED"
-                      else "API_ERROR" if gmgn_read_only_status == "API_ERROR"
-                      else "RATE_LIMITED" if gmgn_read_only_status == "RATE_LIMITED"
-                      else "PLAN_UPGRADE_REQUIRED" if gmgn_read_only_status == "PLAN_UPGRADE_REQUIRED"
-                      else "VERIFYING" if gmgn_read_only_status == "READY_TO_CONNECT"
-                      else "OPTIONAL_NOT_CONNECTED",
-            "detail": "GMGN's official read-only Solana Trenches and trending connector is implemented. It requires a GMGN API key and a successful read-only response. GMGN wallet signing, swaps and live orders are not enabled.",
-            "owner": "USER_CONFIGURATION_AND_DEVELOPMENT",
-        },
-        {
             "id": "fees",
             "title": "Configure verified exchange fees and execution costs",
             "status": "VERIFIED" if {"Binance", "Bitget", "HTX", "OKX"}.issubset(set(verified_fee_exchanges))
@@ -116,7 +103,7 @@ def build_readiness(
         "schema_version": 1,
         "overall_status": "NOT_COMPLETE" if any(
             task["status"] not in {"VERIFIED", "APPROVED", "AUTHORIZED", "ORDERS_VERIFIED", "LOCKED"}
-            for task in tasks if task["id"] != "gmgn_read_only"
+            for task in tasks
         ) else "READY_FOR_FINAL_REVIEW",
         "verified_tasks": verified,
         "total_tasks": len(tasks),
