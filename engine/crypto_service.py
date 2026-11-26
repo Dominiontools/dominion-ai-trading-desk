@@ -80,20 +80,29 @@ def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
     except (TypeError, ValueError, OverflowError):
         reconciled_count = 0
         halted = True
+    emergency_candidates = [
+        {
+            "symbol": str(item.get("symbol", ""))[:20],
+            "order_list_id": str(item.get("order_list_id", ""))[:20],
+            "state": str(item.get("state", ""))[:48],
+        }
+        for item in orders
+        if isinstance(item, dict)
+        and item.get("state") == "UNPROTECTED_PARTIAL_FILL"
+        and item.get("safe") is False
+        and item.get("symbol")
+        and item.get("order_list_id")
+    ]
     state["binance_testnet_monitor"] = {
         "status": status,
         "halted": halted,
         "reconciled": reconciled_count,
         "unresolved_count": len(unresolved) if isinstance(unresolved, list) else 1,
+        "emergency_candidates": emergency_candidates[:5],
         "last_check_at": datetime.now(timezone.utc).isoformat(),
         "orders_enabled": False,
         "environment": "BINANCE_SPOT_TESTNET",
     }
-    emergency_candidates = [
-        item for item in unresolved
-        if isinstance(item, dict)
-        and item.get("state") == "UNPROTECTED_PARTIAL_FILL"
-    ] if isinstance(unresolved, list) else []
     if emergency_candidates:
         state["agents"]["EXIT"] = {
             "status": "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL",
