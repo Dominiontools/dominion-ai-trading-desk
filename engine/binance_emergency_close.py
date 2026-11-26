@@ -74,38 +74,73 @@ def emergency_flatten_otoco(
     entry = client.query_order_by_client_id(
         symbol=pair, client_order_id=list_client_order_id + "E"
     )
-    if entry.get("status") not in {"FILLED", "PARTIALLY_FILLED"}:
+    entry_status = entry.get("status")
+    if entry_status not in {"FILLED", "PARTIALLY_FILLED"}:
         raise PermissionError("No filled bot entry exists to emergency-close.")
     executed = _decimal(entry.get("executedQty", "0"), "entry executed quantity", allow_zero=True)
     if executed == 0:
         raise RuntimeError("Entry has no confirmed executed quantity.")
 
-    # Inspect both exits before cancellation. If one already filled, the
-    # exchange should have terminated its sibling and the list may be ALL_DONE.
-    tp = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "T")
-    sl = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "S")
-    if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+    if entry_status == "PARTIALLY_FILLED":
+        # FOK should not leave a partial entry, but if it does, first cancel
+        # the remaining working entry and prove the entire list is ALL_DONE.
         try:
-            cancellation = client.cancel_filled_otoco_for_emergency(
+            client.cancel_filled_otoco_for_emergency(
                 symbol=pair, list_client_order_id=list_client_order_id
             )
-            if not isinstance(cancellation, dict):
-                raise RuntimeError("Order-list cancellation response is malformed.")
         except Exception:
-            # A cancel timeout/race is acceptable only if fresh broker queries
-            # prove both exit orders are now terminal.
+            # Continue only if subsequent broker queries prove the entry/list ended.
+            pass
+        entry = client.query_order_by_client_id(
+            symbol=pair, client_order_id=list_client_order_id + "E"
+        )
+        if entry.get("status") in {"CANCELED", "EXPIRED"}:
+            order_list = client.query_order_list(
+                list_client_order_id=list_client_order_id
+            )
+            if not isinstance(order_list, dict) or order_list.get("listOrderStatus") != "ALL_DONE":
+                raise RuntimeError("Partially filled entry list is not confirmed ALL_DONE.")
+            # OTOCO exit orders are not activated until the working entry fills.
+            tp = sl = {"status": "CANCELED"}
+        elif entry.get("status") == "FILLED":
+            entry_status = "FILLED"
+        else:
+            raise RuntimeError("Partial entry cancellation is uncertain; refusing market sell.")
+    if entry_status == "FILLED":
+        # Inspect both exits before cancellation. If one already filled, the
+        # exchange should have terminated its sibling and the list may be ALL_DONE.
+        tp = client.query_order_by_client_id(
+            symbol=pair, client_order_id=list_client_order_id + "T"
+        )
+        sl = client.query_order_by_client_id(
+            symbol=pair, client_order_id=list_client_order_id + "S"
+        )
+        if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+            try:
+                cancellation = client.cancel_filled_otoco_for_emergency(
+                    symbol=pair, list_client_order_id=list_client_order_id
+                )
+                if not isinstance(cancellation, dict):
+                    raise RuntimeError("Order-list cancellation response is malformed.")
+            except Exception:
+                # A cancel timeout/race is acceptable only if fresh broker queries
+                # prove both exit orders are now terminal.
+                tp = client.query_order_by_client_id(
+                    symbol=pair, client_order_id=list_client_order_id + "T"
+                )
+                sl = client.query_order_by_client_id(
+                    symbol=pair, client_order_id=list_client_order_id + "S"
+                )
+                if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+                    raise RuntimeError("Order-list cancellation is uncertain; refusing market sell.")
             tp = client.query_order_by_client_id(
                 symbol=pair, client_order_id=list_client_order_id + "T"
             )
             sl = client.query_order_by_client_id(
                 symbol=pair, client_order_id=list_client_order_id + "S"
             )
-            if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
-                raise RuntimeError("Order-list cancellation is uncertain; refusing market sell.")
-        tp = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "T")
-        sl = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "S")
-    if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
-        raise RuntimeError("Protective exit orders are not both confirmed terminal.")
+        if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+            raise RuntimeError("Protective exit orders are not both confirmed terminal.")
 
     open_orders = client.account_open_orders(symbol=pair)
     if any(str(order.get("side", "")).upper() == "SELL" for order in open_orders):
