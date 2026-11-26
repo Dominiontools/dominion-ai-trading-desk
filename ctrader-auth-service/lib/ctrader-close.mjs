@@ -23,9 +23,15 @@ export async function closeAndVerify(session, positionId, volume) {
     throw new Error("POSITION_CLOSE_RECONCILIATION_INVALID");
   }
 
-  const remaining = reconciled.positions.find(
+  const matchingPositions = reconciled.positions.filter(
     (item) => Number(item?.positionId) === Number(positionId),
   );
+  // Duplicate IDs make the broker snapshot ambiguous; never report a flat or
+  // partial position from an inconsistent reconciliation response.
+  if (matchingPositions.length > 1) {
+    throw new Error("POSITION_CLOSE_RECONCILIATION_DUPLICATE_POSITION");
+  }
+  const remaining = matchingPositions[0];
   if (!remaining) {
     return { closed: true, remainingVolume: 0, closeRequestError };
   }
