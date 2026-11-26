@@ -76,3 +76,16 @@ def test_ctrader_partial_close_requires_broker_demo_verification():
     task = next(x for x in verified["tasks"] if x["id"] == "ctrader_partial_close")
     assert task["status"] == "VERIFIED"
 
+
+
+
+def test_cross_exchange_scanner_is_a_separate_readiness_gate():
+    pending = build_readiness()
+    scanner = next(task for task in pending["tasks"] if task["id"] == "cross_exchange_scan")
+    assert scanner["status"] == "PARTIAL_FEEDS_OR_FEES_PENDING"
+    assert pending["total_tasks"] == 11
+
+    verified = build_readiness(cross_exchange_scan_verified=True)
+    scanner = next(task for task in verified["tasks"] if task["id"] == "cross_exchange_scan")
+    assert scanner["status"] == "VERIFIED"
+    assert verified["live_trading_enabled"] is False
