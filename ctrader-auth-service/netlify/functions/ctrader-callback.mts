@@ -25,7 +25,7 @@ function html(title: string, message: string, status = 200, headers: Record<stri
 }
 
 function cookieHeader(value: string, maxAge: number) {
-  return `${STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`;
+  return `${STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=${STATE_COOKIE_PATH}; HttpOnly; Secure; SameSite=None`;
 }
 
 function readCookie(request: Request, name: string): string | null {
@@ -185,9 +185,9 @@ export default async (request: Request, context: { deploy: { context: string } }
     stage = "opening secure storage";
     const storesForDeploy = stores(context);
 
-    // cTrader's documented redirect response returns the authorization code;
-    // it does not document an OAuth state parameter. Bind the browser session
-    // with a short-lived, HttpOnly, Secure, SameSite=Lax cookie instead.
+    // Keep the short-lived browser nonce in a Secure, HttpOnly cookie scoped
+    // to this callback. Use the returned OAuth state when the provider echoes
+    // it, with the cookie as a same-browser fallback.
     if (!code) {
       const nonce = randomBytes(32).toString("base64url");
       stage = "creating authorization session";
