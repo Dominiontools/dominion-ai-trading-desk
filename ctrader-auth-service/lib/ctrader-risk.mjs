@@ -99,3 +99,32 @@ export function sizeVolume(symbol, entryPrice, stopDistance, equity, riskFractio
   }
   throw new Error("BROKER_MINIMUM_VOLUME_EXCEEDS_RISK_BUDGET");
 }
+
+export function classifyPartialClose({
+  originalVolume,
+  remainingVolume,
+  requestedCloseVolume,
+  stepVolume,
+  minVolume,
+}) {
+  const values = [originalVolume, remainingVolume, requestedCloseVolume, stepVolume, minVolume].map(Number);
+  if (values.some((value) => !Number.isFinite(value) || value < 0) ||
+      !(values[0] > 0) || !(values[2] > 0) || !(values[3] > 0) || !(values[4] > 0) ||
+      values[1] > values[0]) {
+    throw new Error("INVALID_PARTIAL_CLOSE_RECONCILIATION");
+  }
+  const [original, remaining, requested, step, minimum] = values;
+  if (remaining === 0) {
+    return { status: "FULLY_CLOSED", closedVolume: original, remainingVolume: 0, outstandingVolume: 0 };
+  }
+  const closedVolume = original - remaining;
+  const tolerance = step / 2;
+  const outstandingVolume = Math.max(0, requested - closedVolume);
+  if (remaining < minimum) {
+    return { status: "REMAINDER_BELOW_MINIMUM", closedVolume, remainingVolume: remaining, outstandingVolume };
+  }
+  if (closedVolume + tolerance < requested) {
+    return { status: "PARTIAL_CLOSE_INCOMPLETE", closedVolume, remainingVolume: remaining, outstandingVolume };
+  }
+  return { status: "PARTIAL_CLOSE_CONFIRMED", closedVolume, remainingVolume: remaining, outstandingVolume: 0 };
+}
