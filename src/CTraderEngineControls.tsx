@@ -124,7 +124,7 @@ export default function CTraderEngineControls() {
     <div className="crypto-summary">
       <div><small>TRADING PERMISSION</small><b>{authorized ? "Verified · Demo" : "Not authorized"}</b></div>
       <div><small>ENGINE STATUS</small><b>{status?.status || (loading ? "Checking…" : "Not deployed")}</b></div>
-      <div><small>STRATEGY PROFILE</small><b>{profile}</b></div>
+      <div><small>FOREX / GOLD PROFILE</small><b>{profile}</b></div>
       <div><small>CONFLUENCE SCORE</small><b>{scoreThreshold} / 15</b></div>
       <div><small>WATCHLIST</small><b>{symbolsInput || "Not configured"}</b></div>
       <div><small>RISK / DAILY STOP</small><b>{riskPerTradePct}% / {dailyLossLimitPct}%</b></div>
@@ -133,7 +133,7 @@ export default function CTraderEngineControls() {
 
     <div className="ctrader-config-grid">
       <label className="ctrader-config-field">
-        <span>Timeframe profile</span>
+        <span>Forex & Gold timeframe profile</span>
         <select value={profile} onChange={(event) => { setProfile(event.target.value); setDirty(true); }}>
           <option value="scalp">Scalp · 5m / 1h</option>
           <option value="intraday">Intraday · 15m / 4h</option>
@@ -167,6 +167,7 @@ export default function CTraderEngineControls() {
         <span>Trade only during London and New York sessions</span>
       </label>
     </div>
+    <div className="panel-foot">These candle timeframes apply only to the cTrader Forex/Gold strategy. Crypto uses a separate continuous cross-exchange scanner with a one-second scan target; it does not use this Forex timeframe profile.</div>
 
     <div className="engine-control-actions">
       <button className="engine-start" onClick={() => void submitConfig(enabled)} disabled={busy || loading || !status}>
