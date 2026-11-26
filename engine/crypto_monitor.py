@@ -253,9 +253,20 @@ class CryptoPaperMonitor:
             return self._write(record)
 
         missing_fees = sorted(fresh_exchanges.difference(self.costs_by_exchange))
-        if missing_fees:
-            # Keep quote comparison visible even when fees are not configured.
-            # These are explicitly gross price gaps, never net-profit signals.
+        fee_verified_quotes = [
+            quote for quote in fresh_quotes
+            if quote.exchange in self.costs_by_exchange
+        ]
+        fee_verified_coverage: dict[str, set[str]] = {}
+        for quote in fee_verified_quotes:
+            fee_verified_coverage.setdefault(quote.symbol, set()).add(quote.exchange)
+        fee_verified_symbols = {
+            symbol for symbol, venues in fee_verified_coverage.items() if len(venues) >= 2
+        }
+        fee_verified_exchanges = sorted({quote.exchange for quote in fee_verified_quotes})
+        if missing_fees and (len(fee_verified_exchanges) < 2 or not fee_verified_symbols):
+            # Keep quote comparison visible even when fewer than two venues have
+            # verified fees. Gross gaps are informational only, never net signals.
             fresh_by_symbol: dict[str, list] = {}
             for quote in fresh_quotes:
                 fresh_by_symbol.setdefault(quote.symbol, []).append(quote)
@@ -289,8 +300,9 @@ class CryptoPaperMonitor:
             gross_gaps.sort(key=lambda item: item["gross_edge_bps"], reverse=True)
             record.update(
                 status="PARTIAL_FEED_AWAITING_VERIFIED_FEES" if venue_errors else "AWAITING_VERIFIED_FEES",
-                reason="Market quotes are being compared. Net opportunity qualification is paused until actual fee schedules are verified.",
+                reason="At least two fresh exchanges with verified fees must quote the same symbol before net opportunity qualification.",
                 missing_fee_exchanges=missing_fees,
+                fee_verified_exchanges=fee_verified_exchanges,
                 gross_price_gaps=gross_gaps[:20],
                 gross_price_gaps_count=len(gross_gaps),
                 opportunities=[],
@@ -299,17 +311,30 @@ class CryptoPaperMonitor:
             )
             return self._write(record)
 
+        # Unpriced venues remain visible in diagnostics but are excluded from
+        # net-edge calculations. This lets verified venues continue scanning
+        # without ever assigning an unverified fee to an HTX quote, for example.
+        record["fee_verified_exchanges"] = fee_verified_exchanges
+        if missing_fees:
+            record["missing_fee_exchanges"] = missing_fees
+        scan_quotes = fee_verified_quotes if missing_fees else quotes
         opportunities = scan_arbitrage(
-            quotes, self.costs_by_exchange, now=finished,
+            scan_quotes, self.costs_by_exchange, now=finished,
             max_quote_age_seconds=self.max_quote_age_seconds,
             min_net_edge_bps=self.min_net_edge_bps,
             max_notional=self.max_notional,
         )
-        status_prefix = "PARTIAL_FEED_" if venue_errors else ""
+        status_prefix = (
+            "PARTIAL_FEE_COVERAGE_" if missing_fees
+            else ("PARTIAL_FEED_" if venue_errors else "")
+        )
         if opportunities:
             record.update(
                 status=f"{status_prefix}PAPER_OPPORTUNITY",
-                reason="NET_EDGE_THRESHOLD_MET_WITH_PARTIAL_FEED" if venue_errors else "NET_EDGE_THRESHOLD_MET",
+                reason=(
+                    "NET_EDGE_THRESHOLD_MET_WITH_PARTIAL_FEE_COVERAGE" if missing_fees
+                    else ("NET_EDGE_THRESHOLD_MET_WITH_PARTIAL_FEED" if venue_errors else "NET_EDGE_THRESHOLD_MET")
+                ),
                 opportunities=[
                     {
                         "symbol": item.symbol,
@@ -330,7 +355,11 @@ class CryptoPaperMonitor:
         else:
             record.update(
                 status=f"{status_prefix}NO_QUALIFYING_OPPORTUNITY",
-                reason="No fresh, depth-backed price gap cleared verified fees, provisional slippage and the minimum net edge.",
+                reason=(
+                    "No fresh, depth-backed price gap cleared verified fees, provisional slippage and the minimum net edge."
+                    if not missing_fees else
+                    "No fee-verified venue pair cleared the net-edge threshold; unconfigured venues were excluded."
+                ),
                 opportunities_count=0,
                 execution_blocked=True,
             )
