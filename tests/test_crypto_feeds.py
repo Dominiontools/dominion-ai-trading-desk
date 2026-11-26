@@ -138,3 +138,26 @@ def test_batch_snapshot_fetches_all_requested_pairs_from_four_exchanges():
     assert len(quotes) == 8
     assert {quote.symbol for quote in quotes} == {"BTCUSDT", "ETHUSDT"}
     assert {quote.exchange for quote in quotes} == {"Binance", "Bitget", "HTX", "OKX"}
+
+
+
+def test_transient_market_feed_timeout_is_retried_once():
+    calls = []
+
+    def flaky(url, timeout):
+        calls.append(url)
+        if len(calls) == 1:
+            raise TimeoutError("temporary TLS handshake timeout")
+        return {"symbol": "BTCUSDT", "bidPrice": "100", "bidQty": "1",
+                "askPrice": "101", "askQty": "2"}
+
+    quote = PublicCryptoFeeds(
+        fetch_json=flaky, retries=1, retry_delay_seconds=0,
+    ).binance("BTCUSDT")
+    assert quote.exchange == "Binance"
+    assert len(calls) == 2
+
+
+def test_market_feed_retry_policy_is_bounded():
+    with pytest.raises(ValueError):
+        PublicCryptoFeeds(fetch_json=fake_fetch, retries=3)
