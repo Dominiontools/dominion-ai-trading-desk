@@ -8,7 +8,7 @@ block new entries.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from .risk_execution import SpotRiskContext
@@ -27,6 +27,7 @@ class BinanceRiskSnapshot:
     actual_equity_quote: Decimal
     risk_capital_cap_quote: Decimal
     exchange_open_orders: int
+    captured_at: datetime
 
 
 class BinanceRiskContextProvider:
@@ -49,6 +50,9 @@ class BinanceRiskContextProvider:
         return amount
 
     def snapshot(self, *, now: datetime | None = None) -> BinanceRiskSnapshot:
+        captured_at = now or datetime.now(timezone.utc)
+        if captured_at.tzinfo is None or captured_at.utcoffset() is None:
+            raise ValueError("Risk snapshot time must be timezone-aware.")
         account = self.client.account()
         if not isinstance(account, dict) or account.get("canTrade") is not True:
             raise PermissionError("Binance account does not confirm trading permission.")
@@ -122,4 +126,5 @@ class BinanceRiskContextProvider:
             actual_equity_quote=equity,
             risk_capital_cap_quote=MAX_TESTNET_RISK_CAPITAL_USDT,
             exchange_open_orders=len(exchange_orders),
+            captured_at=captured_at,
         )
