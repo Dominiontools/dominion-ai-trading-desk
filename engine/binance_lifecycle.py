@@ -235,6 +235,15 @@ class BinanceProtectedLifecycle:
                 raise PermissionError("Emergency close symbol does not match the journal.")
             if not getattr(self._client, "allow_orders", False):
                 raise PermissionError("Binance Testnet order actions are disabled.")
+            previous = self._last_result or {}
+            if previous.get("order_list_id") == list_client_order_id:
+                previous_status = previous.get("status")
+                if previous_status == "EMERGENCY_FLAT_CONFIRMED":
+                    return dict(previous)
+                if previous_status in {"EMERGENCY_CLOSE_PENDING", "EMERGENCY_CLOSE_UNCONFIRMED"}:
+                    raise PermissionError(
+                        "An emergency close was already attempted. Reconcile manually; do not resubmit."
+                    )
 
             emergency_id = "em" + hashlib.sha256(
                 list_client_order_id.encode("ascii", errors="strict")
