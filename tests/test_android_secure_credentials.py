@@ -79,6 +79,8 @@ def test_native_emergency_close_requires_android_switch_and_explicit_dialog_appr
     assert "Approve one Testnet close" in script
     assert "Emergency close was not approved." in script
     assert "vault.binanceTestnetOrdersEnabled()" in script
+    assert "TradingEngineService.isRunning()" in script
+    assert "local trading engine must be running" in script
     guard = script.index("if (!vault.binanceTestnetOrdersEnabled())")
     credential_load = script.index("credentials = vault.loadForNativeUse();", guard)
     assert guard < credential_load
