@@ -82,3 +82,12 @@ def test_binance_emergency_handling_is_a_required_final_acceptance_gate():
     verified = build_readiness(binance_emergency_handling_verified=True)
     task = next(x for x in verified["tasks"] if x["id"] == "binance_emergency_handling")
     assert task["status"] == "VERIFIED"
+
+def test_ctrader_partial_close_requires_broker_demo_verification():
+    result = build_readiness()
+    task = next(x for x in result["tasks"] if x["id"] == "ctrader_partial_close")
+    assert task["status"] == "NOT_TESTED"
+    assert result["overall_status"] == "NOT_COMPLETE"
+    verified = build_readiness(ctrader_partial_close_verified=True)
+    task = next(x for x in verified["tasks"] if x["id"] == "ctrader_partial_close")
+    assert task["status"] == "VERIFIED"
