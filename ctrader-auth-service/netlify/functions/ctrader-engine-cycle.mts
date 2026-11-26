@@ -10,7 +10,7 @@ import {
   TIMEFRAME_PROFILES,
   type StrategyProfile,
 } from "../../lib/ctrader-strategy.mts";
-import { closeAndVerify } from "../../lib/ctrader-close.mjs";
+import { closeAndVerify, findReconciledPosition } from "../../lib/ctrader-close.mjs";
 import {
   calculateDailyRisk,
   classifyPartialClose,
@@ -304,7 +304,7 @@ async function manageBotPosition(
       });
       await session.closePosition(positionId, partialVolume);
       let afterPartial = await session.reconcile();
-      let remaining = afterPartial.positions.find((item) => number(item.positionId) === positionId);
+      let remaining = findReconciledPosition(afterPartial, positionId);
       if (!remaining) {
         await store.delete("account/active-position");
         const closed = { status: "POSITION_CLOSED_DURING_2R_SCALE_OUT", reason: "NO_REMAINDER_AFTER_BROKER_RECONCILIATION", positionId, mode: "DEMO_ONLY" };
@@ -373,7 +373,7 @@ async function manageBotPosition(
       try {
         await session.amendProtection(positionId, breakEven, target3R);
         afterPartial = await session.reconcile();
-        remaining = afterPartial.positions.find((item) => number(item.positionId) === positionId);
+        remaining = findReconciledPosition(afterPartial, positionId);
       } catch {
         // The previous broker-side SL/TP is still checked below; do not assume the amend succeeded.
       }
