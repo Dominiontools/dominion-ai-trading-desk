@@ -275,6 +275,6 @@ def test_stale_venue_does_not_require_fee_configuration(tmp_path):
     )
     result = monitor.poll_many_once(["BTCUSDT"])
     assert result["status"] == "PAPER_OPPORTUNITY"
-    assert result["missing_fee_exchanges"] if "missing_fee_exchanges" in result else True
+    assert "missing_fee_exchanges" not in result
     assert result["fresh_exchanges"] == ["Binance", "Bitget"]
     assert result["orders_enabled"] is False
