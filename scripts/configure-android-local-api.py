@@ -213,6 +213,9 @@ public class TradingEnginePlugin extends Plugin {
                     String[] credentials = null;
                     try {
                         CredentialVault vault = new CredentialVault(getContext());
+                        if (!vault.binanceTestnetOrdersEnabled()) {
+                            throw new SecurityException("Binance Testnet automation is OFF. Enable it explicitly in the app before requesting an emergency close.");
+                        }
                         credentials = vault.loadForNativeUse();
                         if (!com.chaquo.python.Python.isStarted()) {
                             com.chaquo.python.Python.start(
