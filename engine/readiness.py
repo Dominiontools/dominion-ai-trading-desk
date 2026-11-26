@@ -116,7 +116,7 @@ def build_readiness(
         "schema_version": 1,
         "overall_status": "NOT_COMPLETE" if any(
             task["status"] not in {"VERIFIED", "APPROVED", "AUTHORIZED", "ORDERS_VERIFIED", "LOCKED"}
-            for task in tasks
+            for task in tasks if task["id"] != "gmgn_read_only"
         ) else "READY_FOR_FINAL_REVIEW",
         "verified_tasks": verified,
         "total_tasks": len(tasks),
