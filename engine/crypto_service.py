@@ -17,7 +17,7 @@ from pathlib import Path
 
 from engine.crypto_api import create_server
 from engine.agent_feeds import DexScreenerDiscovery, GeckoTerminalWhaleFeed, GoPlusSecurityFeed, PublicNewsRSS
-from engine.specialist_agents import HypeAgent, WhaleAgent
+from engine.specialist_agents import DeskCoordinator
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
 from engine.crypto_monitor import CryptoPaperMonitor
@@ -324,6 +324,7 @@ def _runtime_config(
     whale_feed = GeckoTerminalWhaleFeed(timeout=8.0, min_notional_usd=100_000.0)
     security_feed = GoPlusSecurityFeed(token=os.getenv("DOMINION_GOPLUS_TOKEN", "").strip() or None, timeout=8.0)
     news_feed = PublicNewsRSS(timeout=8.0)
+    desk_coordinator = DeskCoordinator()
     network_map = {"ethereum":"eth", "bsc":"bsc", "base":"base", "solana":"solana", "polygon":"polygon_pos", "arbitrum":"arbitrum", "optimism":"optimism", "avalanche":"avax", "avax":"avax", "fantom":"fantom", "cronos":"cronos"}
 
     def agent_feed_loop() -> None:
@@ -344,8 +345,6 @@ def _runtime_config(
                         whale_trades.extend(whale_feed.trades(network, token["pair_address"], token["symbol"]))
                     except Exception:
                         whale_errors += 1
-                whale_result = WhaleAgent(min_notional_usd=100_000.0).analyze(whale_trades)
-                state["agents"]["WHALE"] = {"status":"CONNECTED" if not whale_errors else "PARTIAL", "detail":f"GeckoTerminal checked {min(len(discovered), 5)} pools; {len(whale_result.findings)} trades met the USD 100,000 alert threshold.", "alerts":list(whale_result.findings[:5])}
                 security_results = []
                 supported_candidates = [
                     token for token in discovered
@@ -392,9 +391,68 @@ def _runtime_config(
                     "errors": error_count,
                 }
                 headlines = news_feed.headlines(limit=20)
-                hype_result = HypeAgent().score(headlines)
-                state["agents"]["HYPE"] = {"status":"CONNECTED" if headlines else "CONNECTED_NO_HEADLINES", "detail":f"Public Cointelegraph RSS checked; {len(headlines)} headlines analysed. Keyword sentiment is only a rough signal.", "summary":hype_result.summary}
-                state["agents"]["DESK MANAGER"] = {"status":"RUNNING", "detail":"Completed public-feed cycle: token discovery, whale-trade scan, token-security lookup status and news sentiment."}
+                # Feed actual public evidence into the shared specialist coordinator.
+                # Unknown token-safety fields remain unknown; the coordinator must
+                # never treat a partial GoPlus response as a clean safety clearance.
+                rug_evidence = None
+                if security_results:
+                    security = security_results[0]
+                    honeypot_flag = security.get("is_honeypot")
+                    rug_evidence = {
+                        "liquidity_usd": security.get("liquidity_usd"),
+                        "liquidity_locked": None,
+                        "contract_verified": None,
+                        "mint_authority_disabled": None,
+                        "freeze_authority_disabled": None,
+                        "top_holder_pct": security.get("top_holder_pct"),
+                        "honeypot_check_passed": (
+                            True if honeypot_flag == "0"
+                            else False if honeypot_flag == "1"
+                            else None
+                        ),
+                    }
+                coordination = desk_coordinator.analyse(
+                    trades=whale_trades,
+                    rug_evidence=rug_evidence,
+                    posts=headlines,
+                )
+                coordinated_agents = coordination.get("agents", {})
+                whale_summary = coordinated_agents.get("WHALE", {})
+                hype_summary = coordinated_agents.get("HYPE", {})
+                state["agents"]["WHALE"] = {
+                    "status": "PARTIAL" if whale_errors else (
+                        "CONNECTED" if whale_summary.get("status") == "ANALYSED"
+                        else "CONNECTED_NO_ALERT"
+                    ),
+                    "detail": (
+                        f"GeckoTerminal checked {min(len(discovered), 5)} pools; "
+                        f"{len(whale_summary.get('findings', []))} large-trade alerts reached Desk Manager."
+                    ),
+                    "alerts": list(whale_summary.get("findings", [])[:5]),
+                }
+                state["agents"]["HYPE"] = {
+                    "status": "CONNECTED" if headlines else "CONNECTED_NO_HEADLINES",
+                    "detail": (
+                        f"Public Cointelegraph RSS checked; {len(headlines)} headlines "
+                        "were analysed and forwarded to Desk Manager. Keyword sentiment is a rough signal."
+                    ),
+                    "summary": hype_summary.get("summary", "No usable headline data."),
+                }
+                state["agent_coordination"] = {
+                    **coordination,
+                    "last_cycle_at": datetime.now(timezone.utc).isoformat(),
+                    "token_execution": "NOT_CONNECTED_NO_DEX_EXECUTOR",
+                    "note": "Discovery, whale, rug and hype evidence is coordinated for review. DEX token orders are not routed to Binance Spot.",
+                }
+                rug_coordination = coordinated_agents.get("RUG", {})
+                state["agents"]["DESK MANAGER"] = {
+                    "status": "RUNNING",
+                    "detail": (
+                        "Shared coordinator consumed Whale and Hype feed results and "
+                        f"Rug evidence ({rug_coordination.get('status', 'UNKNOWN')}). "
+                        "Unknown safety evidence remains blocked; no DEX token order is sent."
+                    ),
+                }
                 state["agent_feed_last_cycle"] = datetime.now(timezone.utc).isoformat()
                 state["agent_feed_error"] = None
             except Exception as exc:
