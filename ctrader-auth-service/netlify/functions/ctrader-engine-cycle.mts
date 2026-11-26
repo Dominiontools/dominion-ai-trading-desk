@@ -12,6 +12,7 @@ import {
 } from "../../lib/ctrader-strategy.mts";
 import {
   calculateDailyRisk,
+  classifyPartialClose,
   moneyScale,
   sizeVolume,
   MAX_RISK_PER_TRADE,
@@ -221,19 +222,59 @@ async function manageBotPosition(
     const minVolume = number(activePosition.minVolume ?? symbol.minVolume);
     const stepVolume = number(activePosition.stepVolume ?? symbol.stepVolume);
     if (!(minVolume > 0) || !(stepVolume > 0)) throw new Error("PARTIAL_CLOSE_VOLUME_RULES_MISSING");
-    const partialVolume = Math.floor((volume / 2) / stepVolume) * stepVolume;
+    const pendingTarget = number(activePosition.partialClosePendingTargetVolume ?? 0);
+    const partialVolume = pendingTarget > 0
+      ? Math.min(volume, pendingTarget)
+      : Math.floor((volume / 2) / stepVolume) * stepVolume;
     if (partialVolume >= minVolume && volume - partialVolume >= minVolume) {
+      // Persist the outstanding target before sending the close request. If the
+      // worker restarts or the broker only partially fills the close, the next
+      // cycle resumes the same target instead of blindly closing half again.
+      await store.setJSON("account/active-position", {
+        ...activePosition, partialClosePendingTargetVolume: partialVolume,
+      });
       await session.closePosition(positionId, partialVolume);
       let afterPartial = await session.reconcile();
       let remaining = afterPartial.positions.find((item) => number(item.positionId) === positionId);
       if (!remaining) {
         await store.delete("account/active-position");
-        const closed = { status: "POSITION_CLOSED_AT_2R", reason: "PARTIAL_VOLUME_NOT_REMAINING", positionId, mode: "DEMO_ONLY" };
+        const closed = { status: "POSITION_CLOSED_DURING_2R_SCALE_OUT", reason: "NO_REMAINDER_AFTER_BROKER_RECONCILIATION", positionId, mode: "DEMO_ONLY" };
         await appendEvent(store, closed);
         return closed;
       }
+      const remainingVolume = number((remaining.tradeData as RecordData).volume);
+      const closeResult = classifyPartialClose({
+        originalVolume: volume, remainingVolume, requestedCloseVolume: partialVolume, stepVolume, minVolume,
+      });
+      if (closeResult.status === "PARTIAL_CLOSE_INCOMPLETE") {
+        await store.setJSON("account/active-position", {
+          ...activePosition, partialClosePendingTargetVolume: closeResult.outstandingVolume,
+        });
+        const pending = {
+          status: "PARTIAL_TAKE_PROFIT_CLOSE_PENDING",
+          reason: "BROKER_CONFIRMED_CLOSE_VOLUME_BELOW_REQUESTED_SCALE_OUT",
+          positionId, symbol: symbolName, requestedCloseVolume: partialVolume,
+          closedVolume: closeResult.closedVolume, outstandingCloseVolume: closeResult.outstandingVolume,
+          remainingVolume, mode: "DEMO_ONLY",
+        };
+        await appendEvent(store, pending);
+        return pending;
+      }
+      if (closeResult.status === "REMAINDER_BELOW_MINIMUM") {
+        await store.setJSON("account/active-position", {
+          ...activePosition, partialClosePendingTargetVolume: closeResult.outstandingVolume,
+        });
+        const blocked = {
+          status: "PARTIAL_TAKE_PROFIT_REMAINDER_REQUIRES_REVIEW",
+          reason: "BROKER_REMAINDER_BELOW_MINIMUM_VOLUME", positionId,
+          closedVolume: closeResult.closedVolume, remainingVolume, mode: "DEMO_ONLY",
+        };
+        await saveStatus(store, blocked);
+        await appendEvent(store, blocked);
+        return blocked;
+      }
       if (!(number(remaining.stopLoss) > 0) || !(number(remaining.takeProfit) > 0)) {
-        await session.closePosition(positionId, number((remaining.tradeData as RecordData).volume));
+        await session.closePosition(positionId, remainingVolume);
         await store.delete("account/active-position");
         throw new Error("PARTIAL_CLOSE_LEFT_POSITION_UNPROTECTED_EMERGENCY_CLOSE_SENT");
       }
@@ -250,15 +291,16 @@ async function manageBotPosition(
       const updated = {
         ...activePosition,
         partialTaken: true,
+        partialClosePendingTargetVolume: 0,
         breakEvenSet: verified,
-        remainingVolume: remaining ? number((remaining.tradeData as RecordData).volume) : null,
+        remainingVolume: remaining ? number((remaining.tradeData as RecordData).volume) : remainingVolume,
         partialClosedAt: new Date().toISOString(),
       };
       await store.setJSON("account/active-position", updated);
       const status = {
         status: verified ? "PARTIAL_TAKE_PROFIT_2R_AND_BREAKEVEN_CONFIRMED" : "PARTIAL_TAKE_PROFIT_2R_CONFIRMED",
-        reason: verified ? "HALF_CLOSED_AND_REMAINDER_PROTECTED_AT_BREAKEVEN_WITH_3R_TARGET" : "HALF_CLOSED_REMAINDER_RETAINS_BROKER_PROTECTION",
-        positionId, symbol: symbolName, partialVolume,
+        reason: verified ? "BROKER_CONFIRMED_SCALE_OUT_AND_REMAINDER_PROTECTED_AT_BREAKEVEN_WITH_3R_TARGET" : "BROKER_CONFIRMED_SCALE_OUT_REMAINDER_RETAINS_BROKER_PROTECTION",
+        positionId, symbol: symbolName, partialVolume: closeResult.closedVolume,
         remainingVolume: updated.remainingVolume, mode: "DEMO_ONLY",
       };
       await appendEvent(store, status);
