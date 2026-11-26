@@ -28,7 +28,7 @@ def test_parse_official_public_base_tier_fee_rows():
         "Binance",
     ) == (10.0, 10.0)
     assert _percent_pair(
-        "<table><tr><td>VIP0</td><td>0.10% / 0.10%</td></tr></table>",
+        "<h2>Spot fee rates</h2><table><tr><td>0.1% / 0.1%</td></tr></table>",
         "Bitget",
     ) == (10.0, 10.0)
     assert _percent_pair(
@@ -40,8 +40,8 @@ def test_parse_official_public_base_tier_fee_rows():
 def test_public_fee_refresh_updates_only_when_official_row_is_parsed():
     pages = {
         "https://www.binance.com/en/fee/trading": "<p>Regular User</p><p>0.090% / 0.100%</p>",
-        "https://www.bitget.com/fee/": "<p>VIP0</p><p>0.10% / 0.10%</p>",
-        "https://www.okx.com/fees": "<p>Regular</p><p>0.0800% 0.1000%</p>",
+        "https://www.bitget.com/fee/": "<p>Spot fee rates</p><p>0.10% / 0.10%</p>",
+        "https://www.okx.com/en-gb/help/important-notice-consolidation-token-pairs": "<p>Regular</p><p>0.0800% 0.1000%</p>",
     }
     result = refresh_public_fee_policy(fetch_text=lambda url: pages[url])
     assert result["fees"]["Binance"] == (9.0, 10.0)
