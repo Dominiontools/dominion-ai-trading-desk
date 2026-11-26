@@ -11,7 +11,7 @@ This list is intentionally separate from code completion. Do not send API secret
 - The **Binance Testnet automation** switch is OFF by default. Only enable it when you explicitly want simulated Spot BUY orders on Binance Testnet.
 - The router requires fresh quotes, verified symbol filters, authenticated per-symbol fees, available USDT, the shared position limit, and the durable daily-loss ledger.
 
-The Android strategy loop is now wired to the protected Testnet router, but no actual Testnet order has yet been placed or verified. Automatic emergency market-flattening for an unprotected fill is not implemented; an uncertain protection state halts new entries and requires manual review.
+The Android strategy loop is now wired to the protected Testnet router, but no actual Testnet order has yet been placed or verified. A fail-closed emergency market-flattening path is implemented and unit-tested; its actual Testnet exercise and failure-injection verification remain outstanding.
 
 ## 2. Bitget and HTX public market data — no setup required
 
