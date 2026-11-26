@@ -184,8 +184,17 @@ class BinanceProtectedLifecycle:
                     and exchange_state.get("protected") is True
                     and exchange_state.get("action_required") is False
                 )
+                exchange_status = exchange_state.get("state")
+                # Preserve a known partial entry fill as its own emergency
+                # state instead of flattening it into a generic unknown state.
+                # It remains unprotected and halted; no automatic market order
+                # is attempted by this lifecycle.
                 result = {
-                    "status": "PROTECTED" if protected else "PROTECTION_UNCONFIRMED",
+                    "status": "PROTECTED" if protected else (
+                        "UNPROTECTED_PARTIAL_FILL"
+                        if exchange_status == "UNPROTECTED_PARTIAL_FILL"
+                        else "PROTECTION_UNCONFIRMED"
+                    ),
                     "protected": protected,
                     "halted": not protected,
                     "order_list_id": list_client_order_id,
