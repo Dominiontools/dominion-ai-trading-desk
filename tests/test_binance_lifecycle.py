@@ -450,7 +450,7 @@ def test_emergency_flatten_requires_explicit_operator_approval(plan, tmp_path):
     with pytest.raises(PermissionError, match="Explicit operator approval"):
         lifecycle.emergency_flatten(
             symbol="BTCUSDT", list_client_order_id="dominion123",
-            reference_price="50000", operator_approved=True,
+            reference_price="50000",
         )
     assert client.submissions == 0
     assert lifecycle.last_result["status"] != "EMERGENCY_CLOSE_PENDING"
@@ -537,5 +537,5 @@ def test_uncertain_emergency_close_is_never_submitted_again(plan, tmp_path):
     with pytest.raises(PermissionError, match="already attempted"):
         lifecycle.emergency_flatten(
             symbol="BTCUSDT", list_client_order_id="dominion123",
-            reference_price="50000",
+            reference_price="50000", operator_approved=True,
         )
