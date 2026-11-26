@@ -202,6 +202,14 @@ public class TradingEnginePlugin extends Plugin {
             call.reject("A valid journaled Testnet position is required.");
             return;
         }
+        if (!TradingEngineService.isRunning()) {
+            call.reject("The local trading engine must be running before emergency review.");
+            return;
+        }
+        if (!new CredentialVault(getContext()).binanceTestnetOrdersEnabled()) {
+            call.reject("Binance Testnet automation is OFF. Enable it explicitly in the app first.");
+            return;
+        }
         getActivity().runOnUiThread(() -> new AlertDialog.Builder(getActivity())
             .setTitle("Emergency close · " + symbol)
             .setMessage("Approve ONE emergency close for " + symbol +
