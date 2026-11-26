@@ -25,6 +25,9 @@ class FakeRulesClient:
             ],
         }]}
 
+    def ticker_price(self, *, symbol):
+        return {"symbol": symbol, "price": "100.0"}
+
     def account_commission(self, symbol):
         return {
             "symbol": symbol,
@@ -54,6 +57,14 @@ class FakeLifecycle:
             "status": "PROTECTED" if self.protected else "PROTECTION_UNCONFIRMED",
             "protected": self.protected, "halted": not self.protected,
             "operator_action_required": not self.protected,
+        }
+
+    def emergency_flatten(self, *, symbol, list_client_order_id, reference_price):
+        self.emergency_call = (symbol, list_client_order_id, reference_price)
+        return {
+            "status": "EMERGENCY_FLAT_CONFIRMED",
+            "halted": True,
+            "operator_action_required": False,
         }
 
 
@@ -164,7 +175,9 @@ def test_router_never_reports_protected_when_lifecycle_cannot_confirm_it():
     )
     assert result["protected"] is False
     assert result["halted"] is True
-    assert result["operator_action_required"] is True
+    assert result["operator_action_required"] is False
+    assert result["emergency_close"]["status"] == "EMERGENCY_FLAT_CONFIRMED"
+    assert lifecycle.emergency_call == ("BTCUSDT", "dom" + "dominion123"[:17], "100.0")
 
 
 
