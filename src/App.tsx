@@ -12,6 +12,7 @@ interface TradingEngineBridge {
   clearBinanceTestnetCredentials(): Promise<{ cleared: boolean }>;
   binanceTestnetOrdersEnabled(): Promise<{ enabled: boolean }>;
   setBinanceTestnetOrdersEnabled(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
+  requestBinanceEmergencyClose(options: { symbol: string; orderListId: string }): Promise<{ status?: string; halted?: boolean; orders_enabled?: boolean; environment?: string; detail?: string }>;
 }
 const TradingEngine = registerPlugin<TradingEngineBridge>("TradingEngine");
 
@@ -116,6 +117,8 @@ function CryptoMonitorPanel() {
   const [testnetAutomationEnabled, setTestnetAutomationEnabled] = useState(false);
   const [testnetAutomationBusy, setTestnetAutomationBusy] = useState(false);
   const [testnetAutomationMessage, setTestnetAutomationMessage] = useState("Automated Testnet orders are OFF.");
+  const [emergencyCloseBusy, setEmergencyCloseBusy] = useState(false);
+  const [emergencyCloseMessage, setEmergencyCloseMessage] = useState("");
   const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
     Capacitor.isNativePlatform() ? "stopped" : "web"
   );
@@ -290,6 +293,26 @@ function CryptoMonitorPanel() {
     }
   }, [isNativeApp]);
 
+  const requestEmergencyClose = useCallback(async (symbol: string, orderListId: string) => {
+    if (!isNativeApp || emergencyCloseBusy || !symbol || !orderListId) return;
+    setEmergencyCloseBusy(true);
+    setEmergencyCloseMessage("Waiting for native confirmation…");
+    try {
+      const result = await TradingEngine.requestBinanceEmergencyClose({ symbol, orderListId });
+      setEmergencyCloseMessage(
+        result.status === "EMERGENCY_FLAT_CONFIRMED"
+          ? "Binance Testnet confirms the position is flat. Trading remains halted for review."
+          : "Emergency close result: " + String(result.status || "UNKNOWN") + ". Trading remains halted; reconcile before any further action."
+      );
+      await refresh();
+    } catch {
+      setEmergencyCloseMessage("Not approved or blocked. No automatic retry will be made.");
+      await refresh();
+    } finally {
+      setEmergencyCloseBusy(false);
+    }
+  }, [isNativeApp, emergencyCloseBusy, refresh]);
+
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
@@ -348,6 +371,11 @@ function CryptoMonitorPanel() {
   const binanceMonitor = status?.binance_testnet_monitor && typeof status.binance_testnet_monitor === "object"
     ? status.binance_testnet_monitor as Record<string, unknown>
     : null;
+  const emergencyCandidates = Array.isArray(binanceMonitor?.emergency_candidates)
+    ? binanceMonitor.emergency_candidates.filter((item): item is Record<string, unknown> =>
+        !!item && typeof item === "object" &&
+        typeof item.symbol === "string" && typeof item.order_list_id === "string")
+    : [];
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -430,6 +458,13 @@ function CryptoMonitorPanel() {
         <div><small>LAST CHECK</small><b>{binanceMonitor?.last_check_at ? new Date(String(binanceMonitor.last_check_at)).toLocaleTimeString() : "Not checked"}</b></div>
       </div>
       <div className="panel-foot">When Binance Spot Testnet automation is enabled, the phone engine performs read-only order-list reconciliation every five seconds. Any uncertain or malformed result halts new entries. This monitor does not submit or cancel orders; emergency flatten remains a separate safety action.</div>
+      {emergencyCandidates.map(candidate => <div className="decision-row" key={String(candidate.order_list_id)}>
+        <div><b>Unprotected partial fill · {String(candidate.symbol)}</b><small>Order list {String(candidate.order_list_id)} · fresh exchange checks required</small></div>
+        <button className="engine-stop" onClick={() => void requestEmergencyClose(String(candidate.symbol), String(candidate.order_list_id))} disabled={!isNativeApp || emergencyCloseBusy || !testnetAutomationEnabled || engineControl !== "running"}>
+          {emergencyCloseBusy ? "Processing…" : "Review emergency close"}
+        </button>
+      </div>)}
+      {emergencyCloseMessage && <small className="engine-control-state">{emergencyCloseMessage}</small>}
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 10)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
