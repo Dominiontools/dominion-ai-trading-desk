@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calculateDailyRisk,
+  classifyPartialClose,
   estimateRoundTripCommission,
   moneyScale,
   sizeVolume,
@@ -123,4 +124,20 @@ test("user may lower risk below 0.5 percent but cannot raise the hard ceiling", 
   const reduced = sizeVolume(symbol, 1.1, 0.001, 1000, 0.0025);
   assert.ok(reduced.riskAmount + reduced.commission <= 2.5 + 1e-9);
   assert.throws(() => sizeVolume(symbol, 1.1, 0.001, 1000, 0.006), /RISK_FRACTION_EXCEEDS_HARD_LIMIT/);
+});
+
+test("partial close is confirmed only when broker reconciliation proves requested volume closed", () => {
+  const base = { originalVolume: 10000, requestedCloseVolume: 5000, stepVolume: 1000, minVolume: 1000 };
+  assert.equal(classifyPartialClose({ ...base, remainingVolume: 5000 }).status, "PARTIAL_CLOSE_CONFIRMED");
+  const incomplete = classifyPartialClose({ ...base, remainingVolume: 7000 });
+  assert.equal(incomplete.status, "PARTIAL_CLOSE_INCOMPLETE");
+  assert.equal(incomplete.outstandingVolume, 2000);
+  assert.equal(classifyPartialClose({ ...base, remainingVolume: 0 }).status, "FULLY_CLOSED");
+});
+
+test("partial close reconciliation fails closed for invalid or undersized broker remainder", () => {
+  const base = { originalVolume: 10000, requestedCloseVolume: 5000, stepVolume: 1000, minVolume: 1000 };
+  assert.equal(classifyPartialClose({ ...base, remainingVolume: 500 }).status, "REMAINDER_BELOW_MINIMUM");
+  assert.throws(() => classifyPartialClose({ ...base, remainingVolume: 12000 }), /INVALID_PARTIAL_CLOSE_RECONCILIATION/);
+  assert.throws(() => classifyPartialClose({ ...base, remainingVolume: Number.NaN }), /INVALID_PARTIAL_CLOSE_RECONCILIATION/);
 });
