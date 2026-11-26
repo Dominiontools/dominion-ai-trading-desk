@@ -899,14 +899,25 @@ export async function executeCycle(): Promise<RecordData> {
       if (remaining && positionId > 0) {
         const remainingVolume = number((remaining.tradeData as RecordData).volume);
         if (!(remainingVolume > 0)) throw new Error("UNPROTECTED_POSITION_VOLUME_MISSING");
-        await session.closePosition(positionId, remainingVolume);
-        const afterEmergencyClose = await session.reconcile();
-        const stillOpen = afterEmergencyClose.positions.some((item) => number(item.positionId) === positionId);
-        if (stillOpen) {
+        const closeResult = await closeAndVerify(session, positionId, remainingVolume);
+        if (!closeResult.closed) {
+          const positionState = {
+            positionId, symbol: best.symbolName, symbolId: best.symbolId,
+            side: best.setup.side, entryPrice: number(remaining.price ?? entryPrice),
+            initialRiskDistance: Math.abs(number(remaining.price ?? entryPrice) - stopLoss),
+            initialStopLoss: stopLoss, target2R: preview.target2R,
+            target3R: preview.target3R, partialTaken: false, breakEvenSet: false,
+            minVolume: number(best.symbol.minVolume), stepVolume: number(best.symbol.stepVolume),
+            estimatedRoundTripCommission: sized.commission,
+            emergencyClosePending: true, remainingVolume: closeResult.remainingVolume,
+            openedAt: new Date().toISOString(), clientOrderId,
+          };
+          await store.setJSON("account/active-position", positionState);
           const emergencyPending = {
             status: "EMERGENCY_CLOSE_PENDING",
             reason: "BROKER_PROTECTIVE_SL_TP_NOT_CONFIRMED_AND_POSITION_REMAINS_OPEN",
-            positionId, symbol: best.symbolName, mode: "DEMO_ONLY",
+            positionId, symbol: best.symbolName,
+            remainingVolume: closeResult.remainingVolume, mode: "DEMO_ONLY",
           };
           await saveStatus(store, emergencyPending);
           await appendEvent(store, emergencyPending);
