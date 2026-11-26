@@ -13,6 +13,7 @@ import {
 import {
   calculateDailyRisk,
   classifyPartialClose,
+  planPartialClose,
   moneyScale,
   sizeVolume,
   MAX_RISK_PER_TRADE,
@@ -222,15 +223,12 @@ async function manageBotPosition(
     const minVolume = number(activePosition.minVolume ?? symbol.minVolume);
     const stepVolume = number(activePosition.stepVolume ?? symbol.stepVolume);
     if (!(minVolume > 0) || !(stepVolume > 0)) throw new Error("PARTIAL_CLOSE_VOLUME_RULES_MISSING");
-    const pendingTargetRaw = activePosition.partialClosePendingTargetVolume ?? 0;
-    const pendingTarget = number(pendingTargetRaw);
-    if (!Number.isFinite(pendingTarget) || pendingTarget < 0) {
-      throw new Error("INVALID_PERSISTED_PARTIAL_CLOSE_TARGET");
-    }
-    const partialVolume = pendingTarget > 0
-      ? Math.min(volume, pendingTarget)
-      : Math.floor((volume / 2) / stepVolume) * stepVolume;
-    if (partialVolume >= minVolume && volume - partialVolume >= minVolume) {
+    const closePlan = planPartialClose({
+      currentVolume: volume, minVolume, stepVolume,
+      pendingTargetVolume: activePosition.partialClosePendingTargetVolume ?? 0,
+    });
+    const partialVolume = closePlan.requestedVolume;
+    if (closePlan.action === "PARTIAL_CLOSE") {
       // Persist the outstanding target before sending the close request. If the
       // worker restarts or the broker only partially fills the close, the next
       // cycle resumes the same target instead of blindly closing half again.
