@@ -110,7 +110,10 @@ def emergency_flatten_otoco(
     locked = _decimal(matches[0].get("locked"), "locked base balance", allow_zero=True)
     if locked != 0:
         raise RuntimeError("Base asset remains locked after exit cancellation.")
-    quantity = (free / step).to_integral_value(rounding=ROUND_DOWN) * step
+    # Never liquidate unrelated holdings: cap the sell at this bot entry's
+    # exchange-confirmed executed quantity, then round down to market step.
+    owned_available = min(free, executed)
+    quantity = (owned_available / step).to_integral_value(rounding=ROUND_DOWN) * step
     if quantity < min_qty or quantity > max_qty:
         raise RuntimeError("Available base balance is below/above MARKET_LOT_SIZE; manual review required.")
 
