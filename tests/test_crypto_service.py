@@ -6,6 +6,30 @@ import pytest
 import engine.crypto_service as service
 
 
+def test_shared_candidate_queue_updates_existing_and_stays_bounded():
+    state = {"candidate_queue": []}
+    service._record_candidate(state, {
+        "candidate_id": "arb:BTCUSDT:binance:bitget",
+        "status": "PAPER_OPPORTUNITY",
+    })
+    service._record_candidate(state, {
+        "candidate_id": "arb:BTCUSDT:binance:bitget",
+        "status": "AWAITING_EXECUTION",
+        "net_edge_bps": 12.5,
+    })
+    assert len(state["candidate_queue"]) == 1
+    assert state["candidate_queue"][0]["status"] == "AWAITING_EXECUTION"
+    assert state["candidate_queue"][0]["net_edge_bps"] == 12.5
+
+    for index in range(110):
+        service._record_candidate(state, {
+            "candidate_id": f"token:chain:{index}",
+            "status": "DISCOVERED",
+        })
+    assert len(state["candidate_queue"]) == 100
+    assert state["candidate_queue"][0]["candidate_id"] == "token:chain:109"
+
+
 class FakeFeeds:
     def __init__(self, timeout=5.0):
         self.timeout = timeout
