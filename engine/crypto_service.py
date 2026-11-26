@@ -607,7 +607,7 @@ def _runtime_config(
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
                            host="127.0.0.1", port=api_port)
-    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, testnet_position_monitor_loop, state, symbols, arbitrage_symbols, interval
+    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval, testnet_position_monitor_loop
 
 
 def start_embedded(
@@ -622,7 +622,7 @@ def start_embedded(
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         try:
-            stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, testnet_position_monitor_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
+            stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval, testnet_position_monitor_loop = _runtime_config(
                 data_dir, port, binance_api_key,
                 binance_api_secret, binance_testnet_orders_enabled,
             )
