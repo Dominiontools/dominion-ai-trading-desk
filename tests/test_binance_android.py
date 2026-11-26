@@ -108,6 +108,9 @@ def test_android_risk_snapshot_returns_only_verified_read_only_context(monkeypat
                 ],
             }
 
+        def account_open_orders(self):
+            return []
+
     monkeypatch.setattr(binance_android, "BinanceSpotTestnetClient", RiskClient)
     result = json.loads(binance_android.account_risk_snapshot(
         "test-key", "test-secret",
@@ -119,9 +122,11 @@ def test_android_risk_snapshot_returns_only_verified_read_only_context(monkeypat
     assert result["orders_enabled"] is False
     assert result["risk_context"] == {
         "verified": True, "quote_asset": "USDT",
-        "equity_quote": "105.00", "available_quote": "100.00",
+        "equity_quote": "20", "available_quote": "20",
+        "actual_equity_quote": "105.00", "risk_capital_cap_quote": "20",
         "daily_loss_quote": "0", "open_positions": 0,
-        "journaled_order_lists": 0, "status": "VERIFIED",
+        "exchange_open_orders": 0, "journaled_order_lists": 0,
+        "status": "VERIFIED",
     }
     assert "test-secret" not in json.dumps(result)
 
