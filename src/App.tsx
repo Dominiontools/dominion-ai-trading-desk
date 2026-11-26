@@ -345,6 +345,9 @@ function CryptoMonitorPanel() {
   const binanceExecution = status?.binance_testnet_execution && typeof status.binance_testnet_execution === "object"
     ? status.binance_testnet_execution as Record<string, unknown>
     : null;
+  const binanceMonitor = status?.binance_testnet_monitor && typeof status.binance_testnet_monitor === "object"
+    ? status.binance_testnet_monitor as Record<string, unknown>
+    : null;
   return <section className="crypto-monitor">
     <div className="section-head"><div><div className="eyebrow">CRYPTO / CROSS-EXCHANGE</div><h2>Paper arbitrage monitor</h2></div><span className={"monitor-state " + connection}><i/> {connection === "connected" ? "LOCAL API CONNECTED" : connection === "checking" ? "CHECKING LOCAL API" : "LOCAL API OFFLINE"}</span></div>
     <div className="engine-controls">
@@ -417,6 +420,16 @@ function CryptoMonitorPanel() {
         <div><small>JOURNALED ORDER LISTS</small><b>{binanceRiskContext?.verified === true ? String(binanceRiskContext.journaled_order_lists) : "—"}</b></div>
       </div>
       <div className="panel-foot">Read-only Testnet account and recovery check; it does not enable orders. Seeded non-USDT Testnet inventory is not treated as an open trade. Reconciled bot positions and account-wide active orders occupy the one-position limit. Risk capital is capped at 20 USDT. Unknown account, recovery or daily-loss state blocks execution.</div>
+    </div>
+    <div className="agent-runtime-list">
+      <div className="decision-list-head"><b>BINANCE TESTNET · POSITION MONITOR</b><span>{String(binanceMonitor?.status || "WAITING")}</span></div>
+      <div className="crypto-summary">
+        <div><small>RECONCILIATION</small><b>{binanceMonitor?.halted === true ? "HALTED · REVIEW REQUIRED" : String(binanceMonitor?.status || "NOT RUN").replaceAll("_", " ")}</b></div>
+        <div><small>JOURNALED ORDERS CHECKED</small><b>{String(binanceMonitor?.reconciled ?? 0)}</b></div>
+        <div><small>UNRESOLVED ORDERS</small><b>{String(binanceMonitor?.unresolved_count ?? 0)}</b></div>
+        <div><small>LAST CHECK</small><b>{binanceMonitor?.last_check_at ? new Date(String(binanceMonitor.last_check_at)).toLocaleTimeString() : "Not checked"}</b></div>
+      </div>
+      <div className="panel-foot">When Binance Spot Testnet automation is enabled, the phone engine performs read-only order-list reconciliation every five seconds. Any uncertain or malformed result halts new entries. This monitor does not submit or cancel orders; emergency flatten remains a separate safety action.</div>
     </div>
     <div className="agent-runtime-list readiness-panel">
       <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 10)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
