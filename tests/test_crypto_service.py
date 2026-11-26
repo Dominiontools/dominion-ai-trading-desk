@@ -475,3 +475,33 @@ def test_testnet_partial_fill_surfaces_emergency_close_for_operator_approval_onl
     assert state["orders_enabled"] is False
     assert state["agents"]["EXIT"]["status"] == "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL"
     assert "explicit operator approval" in state["agents"]["EXIT"]["detail"]
+
+
+def test_partial_fill_monitor_flags_emergency_review_without_submitting_or_clearing_halt():
+    state = {
+        "orders_enabled": True,
+        "binance_testnet_execution": {
+            "enabled": True, "status": "ENABLED_TESTNET",
+            "halted": False, "orders_enabled": True,
+        },
+        "agents": {"RISK": {}, "SNIPER": {}, "EXIT": {}},
+    }
+    result = service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILIATION_REQUIRED", "halted": True,
+        "reconciled": 1, "orders": [{
+            "order_list_id": "private-order", "symbol": "BTCUSDT",
+            "state": "UNPROTECTED_PARTIAL_FILL", "safe": False,
+        }],
+        "unresolved": [{
+            "order_list_id": "private-order",
+            "reason": "EXCHANGE_STATE_REQUIRES_REVIEW",
+            "state": "UNPROTECTED_PARTIAL_FILL",
+        }],
+    })
+    assert result["halted"] is True
+    assert state["orders_enabled"] is False
+    assert state["binance_testnet_execution"]["orders_enabled"] is False
+    assert state["agents"]["RISK"]["status"] == "BLOCKED"
+    assert state["agents"]["SNIPER"]["status"] == "PAUSED_REQUIRES_REVIEW"
+    assert state["agents"]["EXIT"]["status"] == "EMERGENCY_CLOSE_REQUIRES_OPERATOR_APPROVAL"
+    assert "will not submit or cancel orders" in state["agents"]["EXIT"]["detail"]
