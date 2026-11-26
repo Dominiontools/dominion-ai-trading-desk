@@ -222,7 +222,11 @@ async function manageBotPosition(
     const minVolume = number(activePosition.minVolume ?? symbol.minVolume);
     const stepVolume = number(activePosition.stepVolume ?? symbol.stepVolume);
     if (!(minVolume > 0) || !(stepVolume > 0)) throw new Error("PARTIAL_CLOSE_VOLUME_RULES_MISSING");
-    const pendingTarget = number(activePosition.partialClosePendingTargetVolume ?? 0);
+    const pendingTargetRaw = activePosition.partialClosePendingTargetVolume ?? 0;
+    const pendingTarget = number(pendingTargetRaw);
+    if (!Number.isFinite(pendingTarget) || pendingTarget < 0) {
+      throw new Error("INVALID_PERSISTED_PARTIAL_CLOSE_TARGET");
+    }
     const partialVolume = pendingTarget > 0
       ? Math.min(volume, pendingTarget)
       : Math.floor((volume / 2) / stepVolume) * stepVolume;
