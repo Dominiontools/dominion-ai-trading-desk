@@ -21,7 +21,7 @@ from engine.specialist_agents import HypeAgent, WhaleAgent
 from engine.crypto_feeds import PublicCryptoFeeds
 from engine.crypto_universe import BinanceMarketUniverse
 from engine.crypto_monitor import CryptoPaperMonitor
-from engine.crypto_fee_policy import load_fee_policy
+from engine.crypto_fee_policy import load_fee_policy, refresh_public_fee_policy, fee_refresh_interval_seconds
 from engine.paper_workflow import PaperTradingDesk
 from engine.crypto_strategy import BinancePublicCandleFeed, ConfluencePaperStrategy
 from engine.confluence_strategy import TIMEFRAME_PROFILES
@@ -309,8 +309,37 @@ def _runtime_config(
         state["engine"] = "running"
         active_symbols = tuple(arbitrage_symbols)
         last_universe_refresh = datetime.now(timezone.utc)
+        last_fee_refresh = None
         while not stop_event.is_set():
             cycle_started = datetime.now(timezone.utc)
+            if (last_fee_refresh is None or
+                    (cycle_started - last_fee_refresh).total_seconds() >= fee_refresh_interval_seconds()):
+                try:
+                    refreshed_policy = refresh_public_fee_policy()
+                    refreshed_fees = refreshed_policy.get("fees", {})
+                    if isinstance(refreshed_fees, dict):
+                        fees.clear()
+                        fees.update(refreshed_fees)
+                        monitor.costs_by_exchange.clear()
+                        monitor.costs_by_exchange.update(refreshed_fees)
+                    with _runtime_lock:
+                        state["fee_configuration"] = "complete" if len(fees) == 4 else "partial"
+                        state["fee_policy"] = {
+                            "rates_bps": {
+                                venue: {"maker": rates[0], "taker": rates[1]}
+                                for venue, rates in fees.items()
+                            },
+                            "sources": refreshed_policy.get("sources", fee_sources),
+                            "net_profit_qualification": "BLOCKED_FOR_UNCONFIGURED_VENUES",
+                            "last_refresh_at": refreshed_policy.get("last_refresh_at"),
+                            "next_refresh_in_seconds": refreshed_policy.get("next_refresh_in_seconds"),
+                            "note": "Official public schedules refresh every six hours. Binance personal rates override only when authenticated and verified; HTX remains blocked until its public base rate is verifiable.",
+                        }
+                    last_fee_refresh = cycle_started
+                except Exception as exc:
+                    state["fee_policy"]["refresh_error"] = type(exc).__name__
+                    state["fee_policy"]["refresh_status"] = "FAILED_USING_LAST_KNOWN_RATES"
+                    last_fee_refresh = cycle_started
             if not raw_arbitrage_symbols and (cycle_started - last_universe_refresh).total_seconds() >= 3600:
                 try:
                     refreshed = universe_feed.top_usdt_symbols(
