@@ -67,3 +67,14 @@ def test_failed_public_fee_refresh_keeps_last_known_rates_and_marks_failure():
     assert set(result["fees"]) == set(PUBLIC_SPOT_FEES_BPS)
     assert result["sources"]["Binance"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
     assert "HTX" not in result["fees"]
+
+
+def test_cold_start_with_unavailable_public_schedules_returns_no_qualifiable_rates():
+    def unavailable(_url):
+        raise OSError("offline")
+
+    result = refresh_public_fee_policy(fetch_text=unavailable)
+    assert result["fees"] == {}
+    assert result["sources"]["Binance"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
+    assert result["sources"]["Bitget"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
+    assert result["sources"]["OKX"]["refresh_status"] == "REFRESH_FAILED_USING_LAST_KNOWN_RATE"
