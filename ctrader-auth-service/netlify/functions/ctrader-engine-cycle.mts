@@ -10,6 +10,7 @@ import {
   TIMEFRAME_PROFILES,
   type StrategyProfile,
 } from "../../lib/ctrader-strategy.mts";
+import { closeAndVerify } from "../../lib/ctrader-close.mjs";
 import {
   calculateDailyRisk,
   classifyPartialClose,
@@ -122,24 +123,6 @@ async function saveStatus(store: ReturnType<typeof getStore>, status: RecordData
   });
 }
 
-async function closeAndVerify(
-  session: CTraderDemoSession,
-  positionId: number,
-  volume: number,
-): Promise<{ closed: boolean; remainingVolume: number; remaining?: RecordData }> {
-  if (!(positionId > 0) || !(volume > 0) || !Number.isFinite(volume)) {
-    throw new Error("INVALID_POSITION_CLOSE_REQUEST");
-  }
-  await session.closePosition(positionId, volume);
-  const reconciled = await session.reconcile();
-  const remaining = reconciled.positions.find((item) => number(item.positionId) === positionId);
-  if (!remaining) return { closed: true, remainingVolume: 0 };
-  const remainingVolume = number((remaining.tradeData as RecordData | undefined)?.volume);
-  if (!(remainingVolume > 0) || !Number.isFinite(remainingVolume)) {
-    throw new Error("POSITION_CLOSE_RECONCILIATION_VOLUME_INVALID");
-  }
-  return { closed: false, remaining, remainingVolume };
-}
 
 async function manageBotPosition(
   session: CTraderDemoSession,
@@ -226,13 +209,25 @@ async function manageBotPosition(
     // Keep broker-side protection active if strategy data is temporarily unavailable.
   }
   if (oppositeSetup && oppositeSetup.side !== side) {
-    await session.closePosition(positionId, volume);
+    const closeResult = await closeAndVerify(session, positionId, volume);
+    if (!closeResult.closed) {
+      const pending = {
+        status: "STRATEGY_INVALIDATION_CLOSE_PENDING",
+        reason: "BROKER_RECONCILIATION_CONFIRMED_POSITION_REMAINS_OPEN",
+        positionId, symbol: symbolName, remainingVolume: closeResult.remainingVolume,
+        oppositeSignal: oppositeSetup.side, oppositeScore: oppositeSetup.score,
+        mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, pending);
+      await appendEvent(store, pending);
+      return pending;
+    }
     await store.delete("account/active-position");
     const exit = {
-      status: "STRATEGY_INVALIDATION_EXIT_SENT",
-      reason: "OPPOSITE_CONFLUENCE_SIGNAL",
+      status: "STRATEGY_INVALIDATION_EXIT_CONFIRMED",
+      reason: "OPPOSITE_CONFLUENCE_SIGNAL_AND_BROKER_CONFIRMED_FLAT",
       positionId, symbol: symbolName, side, oppositeSignal: oppositeSetup.side,
-      oppositeScore: oppositeSetup.score, mode: "DEMO_ONLY",
+      oppositeScore: oppositeSetup.score, brokerConfirmed: true, mode: "DEMO_ONLY",
     };
     await appendEvent(store, exit);
     return exit;
@@ -242,9 +237,24 @@ async function manageBotPosition(
   const reached2R = side === "BUY" ? currentPrice >= target2R : currentPrice <= target2R;
   const reached3R = side === "BUY" ? currentPrice >= target3R : currentPrice <= target3R;
   if (reached3R) {
-    await session.closePosition(positionId, volume);
+    const closeResult = await closeAndVerify(session, positionId, volume);
+    if (!closeResult.closed) {
+      const pending = {
+        status: "TAKE_PROFIT_3R_CLOSE_PENDING",
+        reason: "BROKER_RECONCILIATION_CONFIRMED_POSITION_REMAINS_OPEN",
+        positionId, symbol: symbolName, remainingVolume: closeResult.remainingVolume,
+        mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, pending);
+      await appendEvent(store, pending);
+      return pending;
+    }
     await store.delete("account/active-position");
-    const exit = { status: "TAKE_PROFIT_3R_EXIT_SENT", reason: "THREE_R_TARGET_REACHED", positionId, symbol: symbolName, mode: "DEMO_ONLY" };
+    const exit = {
+      status: "TAKE_PROFIT_3R_EXIT_CONFIRMED",
+      reason: "THREE_R_TARGET_REACHED_AND_BROKER_CONFIRMED_FLAT",
+      positionId, symbol: symbolName, brokerConfirmed: true, mode: "DEMO_ONLY",
+    };
     await appendEvent(store, exit);
     return exit;
   }
@@ -306,9 +316,31 @@ async function manageBotPosition(
         return blocked;
       }
       if (!(number(remaining.stopLoss) > 0) || !(number(remaining.takeProfit) > 0)) {
-        await session.closePosition(positionId, remainingVolume);
+        const emergencyClose = await closeAndVerify(session, positionId, remainingVolume);
+        if (!emergencyClose.closed) {
+          const pending = {
+            status: "PARTIAL_CLOSE_EMERGENCY_FLATTEN_PENDING",
+            reason: "BROKER_RECONCILIATION_CONFIRMED_UNPROTECTED_REMAINDER_STILL_OPEN",
+            positionId, symbol: symbolName,
+            remainingVolume: emergencyClose.remainingVolume, mode: "DEMO_ONLY",
+          };
+          await store.setJSON("account/active-position", {
+            ...activePosition, emergencyClosePending: true,
+            remainingVolume: emergencyClose.remainingVolume,
+          });
+          await saveStatus(store, pending);
+          await appendEvent(store, pending);
+          return pending;
+        }
         await store.delete("account/active-position");
-        throw new Error("PARTIAL_CLOSE_LEFT_POSITION_UNPROTECTED_EMERGENCY_CLOSE_SENT");
+        const emergency = {
+          status: "PARTIAL_CLOSE_EMERGENCY_FLATTEN_CONFIRMED",
+          reason: "UNPROTECTED_REMAINDER_CLOSED_AND_BROKER_CONFIRMED_FLAT",
+          positionId, symbol: symbolName, brokerConfirmed: true, mode: "DEMO_ONLY",
+        };
+        await saveStatus(store, emergency);
+        await appendEvent(store, emergency);
+        return emergency;
       }
       const breakEven = Number(entryPrice.toFixed(number(symbol.digits)));
       try {
@@ -338,9 +370,24 @@ async function manageBotPosition(
       await appendEvent(store, status);
       return status;
     }
-    await session.closePosition(positionId, volume);
+    const closeResult = await closeAndVerify(session, positionId, volume);
+    if (!closeResult.closed) {
+      const pending = {
+        status: "FULL_TAKE_PROFIT_2R_CLOSE_PENDING",
+        reason: "BROKER_RECONCILIATION_CONFIRMED_POSITION_REMAINS_OPEN",
+        positionId, symbol: symbolName, remainingVolume: closeResult.remainingVolume,
+        mode: "DEMO_ONLY",
+      };
+      await saveStatus(store, pending);
+      await appendEvent(store, pending);
+      return pending;
+    }
     await store.delete("account/active-position");
-    const fullExit = { status: "FULL_TAKE_PROFIT_2R_EXIT_SENT", reason: "BROKER_MINIMUM_VOLUME_PREVENTED_SCALE_OUT", positionId, mode: "DEMO_ONLY" };
+    const fullExit = {
+      status: "FULL_TAKE_PROFIT_2R_EXIT_CONFIRMED",
+      reason: "BROKER_MINIMUM_VOLUME_PREVENTED_SCALE_OUT_AND_BROKER_CONFIRMED_FLAT",
+      positionId, brokerConfirmed: true, mode: "DEMO_ONLY",
+    };
     await appendEvent(store, fullExit);
     return fullExit;
   }
