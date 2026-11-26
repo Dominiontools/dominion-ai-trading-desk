@@ -220,6 +220,18 @@ class BinanceSpotTestnetClient:
         if working.get("status") == "FILLED":
             raise PermissionError("Refusing to cancel an OTOCO protecting a filled position.")
         return self._signed("DELETE", "/api/v3/orderList", {"symbol": pair, "listClientOrderId": list_client_order_id})
+    def ticker_price(self, *, symbol: str) -> dict:
+        pair = symbol.strip().upper()
+        if not pair.isalnum() or not 5 <= len(pair) <= 20:
+            raise ValueError("Invalid trading symbol.")
+        query = urlencode({"symbol": pair})
+        result = self.transport(
+            "GET", f"{self.base_url}/api/v3/ticker/price?{query}", {}, self.timeout
+        )
+        if not isinstance(result, dict) or result.get("symbol") != pair:
+            raise RuntimeError("Binance ticker response is malformed or mismatched.")
+        return result
+
     def account_open_orders(self, *, symbol: str) -> list[dict]:
         pair = symbol.strip().upper()
         if not pair.isalnum() or not 5 <= len(pair) <= 20:
