@@ -128,3 +128,21 @@ export function classifyPartialClose({
   }
   return { status: "PARTIAL_CLOSE_CONFIRMED", closedVolume, remainingVolume: remaining, outstandingVolume: 0 };
 }
+
+export function planPartialClose({ currentVolume, minVolume, stepVolume, pendingTargetVolume = 0 }) {
+  const current = Number(currentVolume);
+  const minimum = Number(minVolume);
+  const step = Number(stepVolume);
+  const pending = Number(pendingTargetVolume);
+  if (![current, minimum, step, pending].every(Number.isFinite) ||
+      !(current > 0) || !(minimum > 0) || !(step > 0) || pending < 0) {
+    throw new Error("INVALID_PARTIAL_CLOSE_PLAN");
+  }
+  const requested = pending > 0
+    ? Math.min(current, pending)
+    : Math.floor((current / 2) / step) * step;
+  if (requested >= minimum && current - requested >= minimum) {
+    return { action: "PARTIAL_CLOSE", requestedVolume: requested, resumesPendingTarget: pending > 0 };
+  }
+  return { action: "FULL_CLOSE", requestedVolume: current, resumesPendingTarget: false };
+}
