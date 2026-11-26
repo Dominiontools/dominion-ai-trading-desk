@@ -57,6 +57,68 @@ def _fee_config() -> dict[str, tuple[float, float]]:
     return fees
 
 
+
+
+def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
+    """Publish a read-only lifecycle reconciliation; fail closed on uncertainty."""
+    if not isinstance(result, dict):
+        result = {"status": "INVALID_RECONCILIATION_RESULT", "halted": True}
+    status = str(result.get("status", "UNKNOWN"))[:48]
+    halted = result.get("halted") is not False or status not in {
+        "RECONCILED", "NO_JOURNALED_ORDERS",
+    }
+    orders = result.get("orders", [])
+    if not isinstance(orders, list):
+        orders = []
+        halted = True
+    state["binance_testnet_monitor"] = {
+        "status": status,
+        "halted": halted,
+        "reconciled": max(0, min(100, int(result.get("reconciled", 0) or 0))),
+        "unresolved_count": len(result.get("unresolved", []))
+            if isinstance(result.get("unresolved", []), list) else 1,
+        "last_check_at": datetime.now(timezone.utc).isoformat(),
+        "orders_enabled": False,
+        "environment": "BINANCE_SPOT_TESTNET",
+    }
+    if halted:
+        state["binance_testnet_execution"].update({
+            "status": "HALTED_REQUIRES_REVIEW",
+            "halted": True,
+            "orders_enabled": False,
+        })
+        state["orders_enabled"] = False
+        state["agents"]["RISK"] = {
+            "status": "BLOCKED",
+            "detail": "Binance Testnet lifecycle reconciliation is uncertain; new entries are disabled pending review.",
+        }
+        state["agents"]["SNIPER"] = {
+            "status": "PAUSED_REQUIRES_REVIEW",
+            "detail": "No new Testnet entries are allowed while a protected order or position is unresolved.",
+        }
+        state["agents"]["EXIT"] = {
+            "status": "RECONCILIATION_REQUIRED",
+            "detail": "Exchange order state needs review. Existing exchange-held protection is not assumed safe until confirmed.",
+        }
+    elif any(item.get("state") == "PROTECTED" and item.get("safe") is True
+             for item in orders if isinstance(item, dict)):
+        state["agents"]["EXIT"] = {
+            "status": "EXCHANGE_PROTECTED_TESTNET_POSITION",
+            "detail": "Read-only reconciliation confirmed an exchange-held protected position and its OTOCO state.",
+        }
+    elif orders and all(
+        item.get("safe") is True and item.get("state") in {
+            "NO_POSITION", "EXITED_TAKE_PROFIT", "EXITED_STOP_LOSS",
+        }
+        for item in orders if isinstance(item, dict)
+    ):
+        state["agents"]["EXIT"] = {
+            "status": "TESTNET_POSITION_EXIT_RECONCILED",
+            "detail": "The exchange confirms the journaled position has exited; no close order was submitted by the monitor.",
+        }
+    return dict(state["binance_testnet_monitor"])
+
+
 def _cross_exchange_scan_verified(scanner: dict) -> bool:
     """Only mark the full scanner ready when every venue has fresh coverage."""
     if not isinstance(scanner, dict):
@@ -148,6 +210,7 @@ def _runtime_config(
     )
     testnet_router = None
     testnet_risk_context = None
+    testnet_lifecycle = None
     if testnet_execution_enabled:
         testnet_client = BinanceSpotTestnetClient(
             binance_api_key, binance_api_secret, allow_orders=True
@@ -168,6 +231,15 @@ def _runtime_config(
         "engine": "starting",
         "mode": "BINANCE_SPOT_TESTNET" if testnet_execution_enabled else "PAPER_ONLY",
         "orders_enabled": testnet_execution_enabled,
+        "binance_testnet_monitor": {
+            "status": "WAITING_FOR_TESTNET_ENABLEMENT" if not testnet_execution_enabled else "STARTING",
+            "halted": not testnet_execution_enabled,
+            "reconciled": 0,
+            "unresolved_count": 0,
+            "last_check_at": None,
+            "orders_enabled": False,
+            "environment": "BINANCE_SPOT_TESTNET",
+        },
         "binance_testnet_execution": {
             "enabled": testnet_execution_enabled,
             "status": "ENABLED_TESTNET" if testnet_execution_enabled
@@ -409,6 +481,23 @@ def _runtime_config(
             stop_event.wait(interval)
         state["engine"] = "stopped"
 
+
+    def testnet_position_monitor_loop() -> None:
+        """Continuously reconcile Binance Testnet brackets using read-only queries."""
+        if not testnet_execution_enabled or testnet_lifecycle is None:
+            return
+        while not stop_event.is_set():
+            try:
+                reconciliation = testnet_lifecycle.reconcile_after_restart()
+                _apply_testnet_reconciliation(state, reconciliation)
+            except Exception as exc:
+                _apply_testnet_reconciliation(state, {
+                    "status": "RECONCILIATION_QUERY_FAILED",
+                    "halted": True,
+                    "unresolved": [{"reason": type(exc).__name__}],
+                })
+            stop_event.wait(5.0)
+
     def strategy_loop() -> None:
         while not stop_event.is_set():
             for symbol in symbols:
@@ -422,7 +511,16 @@ def _runtime_config(
                     quote = feeds.binance(symbol)
                     cycle_now = datetime.now(timezone.utc)
                     if testnet_execution_enabled and testnet_router is not None and testnet_risk_context is not None:
-                        if paper_desk.position is not None:
+                        if (state["binance_testnet_execution"].get("halted") is True
+                                or state["binance_testnet_execution"].get("orders_enabled") is not True):
+                            result = {
+                                "event": "TESTNET_BLOCKED",
+                                "reason": "LIFECYCLE_HALTED_OR_EXECUTION_DISABLED",
+                                "halted": True,
+                                "mode": "BINANCE_SPOT_TESTNET",
+                                "orders_enabled": False,
+                            }
+                        elif paper_desk.position is not None:
                             result = {
                                 "event": "TESTNET_BLOCKED",
                                 "reason": "PAPER_POSITION_OPEN",
@@ -501,7 +599,7 @@ def _runtime_config(
     api_port = port if port is not None else int(os.getenv("DOMINION_CRYPTO_API_PORT", "8766"))
     server = create_server(str(log_path), status_provider=status_provider,
                            host="127.0.0.1", port=api_port)
-    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval
+    return stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, testnet_position_monitor_loop, state, symbols, arbitrage_symbols, interval
 
 
 def start_embedded(
@@ -516,7 +614,7 @@ def start_embedded(
             return {"started": True, "already_running": True, "port": _runtime_server.server_address[1]}
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         try:
-            stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
+            stop_event, server, monitor_loop, agent_feed_loop, strategy_loop, testnet_position_monitor_loop, state, symbols, arbitrage_symbols, interval = _runtime_config(
                 data_dir, port, binance_api_key,
                 binance_api_secret, binance_testnet_orders_enabled,
             )
@@ -575,13 +673,20 @@ def start_embedded(
         worker = threading.Thread(target=monitor_loop, name="dominion-crypto-paper", daemon=True)
         agent_worker = threading.Thread(target=agent_feed_loop, name="dominion-agent-feeds", daemon=True)
         strategy_worker = threading.Thread(target=strategy_loop, name="dominion-paper-strategy", daemon=True)
+        testnet_monitor_worker = threading.Thread(
+            target=testnet_position_monitor_loop,
+            name="dominion-binance-testnet-position-monitor",
+            daemon=True,
+        )
         api_thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.5}, daemon=True)
         _runtime_stop, _runtime_server = stop_event, server
-        _runtime_threads = [worker, agent_worker, strategy_worker, api_thread]
+        _runtime_threads = [worker, agent_worker, strategy_worker, testnet_monitor_worker, api_thread]
         _runtime_state = state
         worker.start()
         agent_worker.start()
         strategy_worker.start()
+        if state["binance_testnet_execution"]["enabled"]:
+            testnet_monitor_worker.start()
         api_thread.start()
         return {"started": True, "already_running": False,
                 "port": server.server_address[1], "symbols": list(symbols),
