@@ -222,9 +222,12 @@ class BinanceProtectedLifecycle:
                 raise
 
     def emergency_flatten(
-        self, *, symbol: str, list_client_order_id: str, reference_price: str
+        self, *, symbol: str, list_client_order_id: str, reference_price: str,
+        operator_approved: bool = False,
     ) -> dict[str, Any]:
-        """Durably record and attempt one emergency flatten for a known bot order."""
+        """Attempt one emergency flatten only after explicit operator approval."""
+        if operator_approved is not True:
+            raise PermissionError("Explicit operator approval is required for emergency close.")
         from engine.binance_emergency_close import emergency_flatten_otoco
 
         with self._lock:
