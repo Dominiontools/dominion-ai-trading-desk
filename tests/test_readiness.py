@@ -24,6 +24,7 @@ def test_demo_order_verification_does_not_unlock_live_mode():
         ctrader_demo_orders_verified=True,
         crypto_testnet_authorized=True,
         crypto_testnet_orders_verified=True,
+        binance_emergency_handling_verified=True,
         verified_fee_exchanges=("Binance", "Bitget", "HTX", "OKX"),
         agent_workflow_verified=True,
         gmgn_read_only_status="CONNECTED",
@@ -68,3 +69,16 @@ def test_crypto_readiness_describes_verified_context_but_not_enabled_execution()
     assert "wired into the Android strategy loop" in crypto["detail"]
     assert "off-by-default Testnet automation setting" in crypto["detail"]
     assert result["live_trading_enabled"] is False
+
+
+
+def test_binance_emergency_handling_is_a_required_final_acceptance_gate():
+    result = build_readiness()
+    task = next(x for x in result["tasks"] if x["id"] == "binance_emergency_handling")
+    assert task["status"] == "NOT_IMPLEMENTED_OR_NOT_TESTED"
+    assert "Automatic emergency market-flattening is not implemented" in task["detail"]
+    assert result["overall_status"] == "NOT_COMPLETE"
+
+    verified = build_readiness(binance_emergency_handling_verified=True)
+    task = next(x for x in verified["tasks"] if x["id"] == "binance_emergency_handling")
+    assert task["status"] == "VERIFIED"
