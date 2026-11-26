@@ -148,3 +148,14 @@ def test_refuses_when_quantity_is_below_market_minimum():
     with pytest.raises(RuntimeError, match="MARKET_LOT_SIZE"):
         run(client)
     assert not any(call[0] == "market-sell" for call in client.calls)
+
+
+def test_already_filled_exit_and_zero_balance_does_not_submit_duplicate_sell():
+    client = FakeClient()
+    client.orders["entryT"] = {"status": "FILLED"}
+    client.orders["entryS"] = {"status": "CANCELED"}
+    client.balances[0]["free"] = "0"
+    result = run(client)
+    assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
+    assert result["sold_quantity"] == "0"
+    assert not any(call[0] in {"cancel-list", "market-sell"} for call in client.calls)
