@@ -80,16 +80,30 @@ def emergency_flatten_otoco(
     if executed == 0:
         raise RuntimeError("Entry has no confirmed executed quantity.")
 
-    # Cancel the exact OTOCO list. If the request times out, do not proceed:
-    # the next invocation must first reconcile broker state.
-    cancellation = client.cancel_filled_otoco_for_emergency(
-        symbol=pair, list_client_order_id=list_client_order_id
-    )
-    if not isinstance(cancellation, dict):
-        raise RuntimeError("Order-list cancellation response is malformed.")
-
+    # Inspect both exits before cancellation. If one already filled, the
+    # exchange should have terminated its sibling and the list may be ALL_DONE.
     tp = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "T")
     sl = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "S")
+    if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+        try:
+            cancellation = client.cancel_filled_otoco_for_emergency(
+                symbol=pair, list_client_order_id=list_client_order_id
+            )
+            if not isinstance(cancellation, dict):
+                raise RuntimeError("Order-list cancellation response is malformed.")
+        except Exception:
+            # A cancel timeout/race is acceptable only if fresh broker queries
+            # prove both exit orders are now terminal.
+            tp = client.query_order_by_client_id(
+                symbol=pair, client_order_id=list_client_order_id + "T"
+            )
+            sl = client.query_order_by_client_id(
+                symbol=pair, client_order_id=list_client_order_id + "S"
+            )
+            if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
+                raise RuntimeError("Order-list cancellation is uncertain; refusing market sell.")
+        tp = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "T")
+        sl = client.query_order_by_client_id(symbol=pair, client_order_id=list_client_order_id + "S")
     if tp.get("status") not in TERMINAL or sl.get("status") not in TERMINAL:
         raise RuntimeError("Protective exit orders are not both confirmed terminal.")
 
