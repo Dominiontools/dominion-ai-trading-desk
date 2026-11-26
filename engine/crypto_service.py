@@ -320,8 +320,9 @@ def _runtime_config(
                     if isinstance(refreshed_fees, dict):
                         fees.clear()
                         fees.update(refreshed_fees)
-                        monitor.costs_by_exchange.clear()
-                        monitor.costs_by_exchange.update(refreshed_fees)
+                        if hasattr(monitor, "costs_by_exchange"):
+                            monitor.costs_by_exchange.clear()
+                            monitor.costs_by_exchange.update(refreshed_fees)
                     with _runtime_lock:
                         state["fee_configuration"] = "complete" if len(fees) == 4 else "partial"
                         state["fee_policy"] = {
