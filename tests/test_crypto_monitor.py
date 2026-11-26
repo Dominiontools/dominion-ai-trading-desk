@@ -175,7 +175,7 @@ def test_multi_market_scan_requires_fee_configuration_for_seen_venues(tmp_path):
     )
     result = monitor.poll_many_once(["BTCUSDT", "ETHUSDT"])
     assert result["status"] == "AWAITING_VERIFIED_FEES"
-    assert result["reason"].startswith("Market quotes are being compared")
+    assert result["reason"].startswith("At least two fresh exchanges with verified fees")
     assert result["missing_fee_exchanges"] == ["Bitget", "HTX"]
     assert result["execution_blocked"] is True
     assert result["opportunities_count"] == 0
