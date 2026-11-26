@@ -64,7 +64,7 @@ class FakeLifecycle:
         return {
             "status": "EMERGENCY_FLAT_CONFIRMED",
             "halted": True,
-            "operator_action_required": False,
+            "operator_action_required": True,
         }
 
 
