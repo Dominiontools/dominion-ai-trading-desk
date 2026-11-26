@@ -30,3 +30,22 @@ building or installing the app. When enabled, the local strategy loop uses the
 verified account snapshot, daily-loss ledger, fresh quote, exchange filters
 and authenticated per-symbol commission schedule before it can submit a
 protected Testnet BUY. Live endpoints and wallet execution are not included.
+
+## Native emergency-close approval boundary
+
+The generated Capacitor Android plugin now exposes a native-only, one-position
+confirmation path. The read-only monitor publishes only the exact symbol and
+journaled order-list ID for a confirmed unprotected partial fill. The Android
+app displays those details in a native confirmation dialog; declining it
+submits nothing. After approval, the native bridge reloads credentials from
+Android Keystore and the Python handler rechecks the Testnet trading permission,
+the local journal, the symbol/order binding and the current exchange order
+state. It accepts only `UNPROTECTED_PARTIAL_FILL` or
+`PROTECTION_UNCONFIRMED`, then obtains a fresh Testnet reference price before
+calling the write-ahead emergency-close routine.
+
+The emergency-close routine still makes at most one close attempt. It keeps
+the engine halted after success or uncertainty, and an ambiguous submission
+must be reconciled manually rather than retried. This is code-level
+integration only: the native dialog has not yet been built or exercised on a
+physical Android device, and no Testnet close order has been submitted.
