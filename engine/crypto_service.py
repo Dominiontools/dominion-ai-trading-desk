@@ -57,6 +57,24 @@ def _fee_config() -> dict[str, tuple[float, float]]:
     return fees
 
 
+def _cross_exchange_scan_verified(scanner: dict) -> bool:
+    """Only mark the full scanner ready when every venue has fresh coverage."""
+    if not isinstance(scanner, dict):
+        return False
+    return (
+        scanner.get("status") in {"PAPER_OPPORTUNITY", "NO_QUALIFYING_OPPORTUNITY"}
+        and scanner.get("symbols_scanned", 0) >= 52
+        and scanner.get("fresh_quote_count", 0) > 0
+        and scanner.get("symbols_with_two_venues", 0) > 0
+        and len(set(scanner.get("fresh_exchanges", []))) == 4
+        and not scanner.get("venue_errors")
+        and scanner.get("reason") not in {
+            "FEE_CONFIG_MISSING", "INSUFFICIENT_INDEPENDENT_MARKET_QUOTES",
+            "BATCH_MARKET_DATA_FETCH_FAILED",
+        }
+    )
+
+
 def _runtime_config(
     data_dir: str | Path, port: int | None = None,
     binance_api_key: str = "", binance_api_secret: str = "",
@@ -286,20 +304,7 @@ def _runtime_config(
             snapshot["paper_trading"] = paper_desk.snapshot()
             scanner = snapshot.get("arbitrage_scanner")
             scanner = scanner if isinstance(scanner, dict) else {}
-            fresh_exchanges = set(scanner.get("fresh_exchanges", []))
-            venue_errors = scanner.get("venue_errors")
-            scanner_verified = (
-                scanner.get("status") in {"PAPER_OPPORTUNITY", "NO_QUALIFYING_OPPORTUNITY"}
-                and scanner.get("symbols_scanned", 0) >= 52
-                and scanner.get("fresh_quote_count", 0) > 0
-                and scanner.get("symbols_with_two_venues", 0) > 0
-                and len(fresh_exchanges) == 4
-                and not venue_errors
-                and not scanner.get("reason") in {
-                    "FEE_CONFIG_MISSING", "INSUFFICIENT_INDEPENDENT_MARKET_QUOTES",
-                    "BATCH_MARKET_DATA_FETCH_FAILED",
-                }
-            )
+            scanner_verified = _cross_exchange_scan_verified(scanner)
             snapshot["integration_readiness"] = build_readiness(
                 phone_engine_running=state.get("engine") == "running",
                 verified_fee_exchanges=tuple(
