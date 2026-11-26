@@ -11,6 +11,7 @@ import os
 import signal
 import threading
 import time
+from math import isfinite
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,8 +66,8 @@ def _fee_config() -> dict[str, tuple[float, float]]:
             fee = float(raw)
         except ValueError as exc:
             raise RuntimeError(f"{env_name} must be a number.") from exc
-        if fee < 0 or fee > 500:
-            raise RuntimeError(f"{env_name} must be between 0 and 500 basis points.")
+        if not isfinite(fee) or fee < 0 or fee > 500:
+            raise RuntimeError(f"{env_name} must be a finite value between 0 and 500 basis points.")
         fees[exchange] = (fee, fee)
     return fees
 
