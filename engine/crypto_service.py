@@ -64,19 +64,27 @@ def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
     if not isinstance(result, dict):
         result = {"status": "INVALID_RECONCILIATION_RESULT", "halted": True}
     status = str(result.get("status", "UNKNOWN"))[:48]
-    halted = result.get("halted") is not False or status not in {
-        "RECONCILED", "NO_JOURNALED_ORDERS",
-    }
+    unresolved = result.get("unresolved", [])
+    halted = (
+        result.get("halted") is not False
+        or status not in {"RECONCILED", "NO_JOURNALED_ORDERS"}
+        or not isinstance(unresolved, list)
+        or bool(unresolved)
+    )
     orders = result.get("orders", [])
-    if not isinstance(orders, list):
+    if not isinstance(orders, list) or any(not isinstance(item, dict) for item in orders):
         orders = []
+        halted = True
+    try:
+        reconciled_count = max(0, min(100, int(result.get("reconciled", 0) or 0)))
+    except (TypeError, ValueError, OverflowError):
+        reconciled_count = 0
         halted = True
     state["binance_testnet_monitor"] = {
         "status": status,
         "halted": halted,
-        "reconciled": max(0, min(100, int(result.get("reconciled", 0) or 0))),
-        "unresolved_count": len(result.get("unresolved", []))
-            if isinstance(result.get("unresolved", []), list) else 1,
+        "reconciled": reconciled_count,
+        "unresolved_count": len(unresolved) if isinstance(unresolved, list) else 1,
         "last_check_at": datetime.now(timezone.utc).isoformat(),
         "orders_enabled": False,
         "environment": "BINANCE_SPOT_TESTNET",
@@ -110,7 +118,7 @@ def _apply_testnet_reconciliation(state: dict, result: dict) -> dict:
         item.get("safe") is True and item.get("state") in {
             "NO_POSITION", "EXITED_TAKE_PROFIT", "EXITED_STOP_LOSS",
         }
-        for item in orders if isinstance(item, dict)
+        for item in orders
     ):
         state["agents"]["EXIT"] = {
             "status": "TESTNET_POSITION_EXIT_RECONCILED",
