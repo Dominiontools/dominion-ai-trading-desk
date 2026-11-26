@@ -436,3 +436,56 @@ def test_stop_loss_without_saved_risk_basis_stays_halted(plan, tmp_path):
     # The order-level status must reflect the final ledger/risk decision,
     # not merely the exchange's STOP_LOSS terminal state.
     assert result["orders"][0]["safe"] is False
+
+
+def test_emergency_flatten_is_write_ahead_persisted_and_keeps_engine_halted(plan, tmp_path):
+    journal = tmp_path / "private" / "binance-lifecycle.json"
+
+    class EmergencyClient(FakeClient):
+        allow_orders = True
+
+        def query_order_by_client_id(self, *, symbol, client_order_id):
+            statuses = {
+                "dominion123E": {"status": "FILLED", "executedQty": "0.001"},
+                "dominion123T": {"status": "CANCELED"},
+                "dominion123S": {"status": "CANCELED"},
+            }
+            return dict(statuses[client_order_id])
+
+        def account_open_orders(self, *, symbol):
+            return []
+
+        def exchange_info(self, symbol):
+            return {"symbols": [{
+                "symbol": symbol, "status": "TRADING", "baseAsset": "BTC",
+                "filters": [
+                    {"filterType": "MARKET_LOT_SIZE", "stepSize": "0.0001",
+                     "minQty": "0.0001", "maxQty": "100"},
+                    {"filterType": "MIN_NOTIONAL", "minNotional": "5"},
+                ],
+            }]}
+
+        def account(self):
+            return {"balances": [
+                {"asset": "BTC", "free": "0", "locked": "0"},
+                {"asset": "USDT", "free": "100", "locked": "0"},
+            ]}
+
+    client = EmergencyClient({
+        "state": "PROTECTION_UNCONFIRMED", "protected": False,
+        "action_required": True,
+    })
+    lifecycle = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    lifecycle.reconcile_existing(symbol="BTCUSDT", list_client_order_id="dominion123")
+    result = lifecycle.emergency_flatten(
+        symbol="BTCUSDT", list_client_order_id="dominion123",
+        reference_price="50000",
+    )
+    assert result["status"] == "EMERGENCY_FLAT_CONFIRMED"
+    assert result["sold_quantity"] == "0"
+    assert lifecycle.halted is True
+
+    restarted = BinanceProtectedLifecycle(FakeGate(), client, journal_path=journal)
+    assert restarted.halted is True
+    assert restarted.last_result["status"] == "EMERGENCY_FLAT_CONFIRMED"
+    assert restarted.last_result["emergency_client_order_id"].startswith("em")
