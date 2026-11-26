@@ -440,3 +440,17 @@ def test_testnet_position_monitor_reports_exchange_confirmed_exit_without_closin
     })
     assert state["agents"]["EXIT"]["status"] == "TESTNET_POSITION_EXIT_RECONCILED"
     assert state["orders_enabled"] is True
+
+
+def test_testnet_position_monitor_fails_closed_on_malformed_reconciliation():
+    state = _testnet_monitor_state()
+    result = service._apply_testnet_reconciliation(state, {
+        "status": "RECONCILED", "halted": False,
+        "reconciled": "not-a-number",
+        "orders": ["not-an-order"],
+        "unresolved": [],
+    })
+    assert result["halted"] is True
+    assert state["orders_enabled"] is False
+    assert state["binance_testnet_execution"]["halted"] is True
+    assert state["agents"]["RISK"]["status"] == "BLOCKED"
