@@ -72,3 +72,22 @@ def test_android_default_recovery_json_has_valid_java_escaping():
     prefix = line.split("status")[0]
     assert prefix.endswith(chr(92) + '"')
     assert not prefix.endswith(chr(92) * 2 + '"')
+
+def test_native_emergency_close_requires_android_switch_and_explicit_dialog_approval():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    assert "requestBinanceEmergencyClose" in script
+    assert "Approve one Testnet close" in script
+    assert "Emergency close was not approved." in script
+    assert "vault.binanceTestnetOrdersEnabled()" in script
+    guard = script.index("if (!vault.binanceTestnetOrdersEnabled())")
+    credential_load = script.index("credentials = vault.loadForNativeUse();", guard)
+    assert guard < credential_load
+    assert 'callAttr("emergency_close_after_native_approval"' in script
+    assert "An uncertain submission will NOT be retried." in script
+
+
+def test_android_python_bundle_includes_native_approved_emergency_close_module():
+    script = Path("scripts/configure-android-local-api.py").read_text()
+    assert '"binance_emergency_close.py"' in script
+    assert '"binance_android.py"' in script
+
