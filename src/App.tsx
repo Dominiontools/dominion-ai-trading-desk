@@ -12,9 +12,6 @@ interface TradingEngineBridge {
   clearBinanceTestnetCredentials(): Promise<{ cleared: boolean }>;
   binanceTestnetOrdersEnabled(): Promise<{ enabled: boolean }>;
   setBinanceTestnetOrdersEnabled(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
-  saveGmgnApiKey(options: { apiKey: string }): Promise<{ saved: boolean; storage: string }>;
-  gmgnApiKeyStatus(): Promise<{ saved: boolean; storage: string }>;
-  clearGmgnApiKey(): Promise<{ cleared: boolean }>;
 }
 const TradingEngine = registerPlugin<TradingEngineBridge>("TradingEngine");
 
@@ -119,10 +116,6 @@ function CryptoMonitorPanel() {
   const [testnetAutomationEnabled, setTestnetAutomationEnabled] = useState(false);
   const [testnetAutomationBusy, setTestnetAutomationBusy] = useState(false);
   const [testnetAutomationMessage, setTestnetAutomationMessage] = useState("Automated Testnet orders are OFF.");
-  const [gmgnApiKey, setGmgnApiKey] = useState("");
-  const [gmgnKeySaved, setGmgnKeySaved] = useState(false);
-  const [gmgnKeyBusy, setGmgnKeyBusy] = useState(false);
-  const [gmgnKeyMessage, setGmgnKeyMessage] = useState("GMGN API key not configured");
   const [engineControl, setEngineControl] = useState<"web" | "stopped" | "starting" | "running" | "error">(
     Capacitor.isNativePlatform() ? "stopped" : "web"
   );
@@ -132,18 +125,14 @@ function CryptoMonitorPanel() {
     if (!isNativeApp) return;
     void Promise.all([
       TradingEngine.binanceTestnetCredentialStatus(),
-      TradingEngine.gmgnApiKeyStatus(),
       TradingEngine.binanceTestnetOrdersEnabled()
-    ]).then(([binance, gmgn, automation]) => {
+    ]).then(([binance, automation]) => {
       setCredentialSaved(binance.saved);
       setCredentialMessage(binance.saved ? "Encrypted credentials are stored on this phone." : "Credentials not saved");
-      setGmgnKeySaved(gmgn.saved);
-      setGmgnKeyMessage(gmgn.saved ? "GMGN API key is encrypted on this phone." : "GMGN API key not configured");
       setTestnetAutomationEnabled(automation.enabled);
       setTestnetAutomationMessage(automation.enabled ? "Testnet automation is enabled. The engine must be running to act on new signals." : "Automated Testnet orders are OFF.");
     }).catch(() => {
       setCredentialMessage("Secure storage status unavailable");
-      setGmgnKeyMessage("Secure storage status unavailable");
     });
   }, [isNativeApp]);
 
@@ -199,37 +188,6 @@ function CryptoMonitorPanel() {
       setCredentialMessage("Could not clear the stored credentials.");
     } finally {
       setCredentialBusy(false);
-    }
-  }, [isNativeApp]);
-
-  const saveGmgnKey = useCallback(async () => {
-    if (!isNativeApp || !gmgnApiKey.trim()) return;
-    setGmgnKeyBusy(true);
-    setGmgnKeyMessage("Encrypting GMGN API key on this phone…");
-    try {
-      const result = await TradingEngine.saveGmgnApiKey({ apiKey: gmgnApiKey.trim() });
-      setGmgnKeySaved(result.saved);
-      setGmgnApiKey("");
-      setGmgnKeyMessage("Saved in Android Keystore. Stop and restart the phone engine to load GMGN data.");
-    } catch {
-      setGmgnKeyMessage("Could not save GMGN API key. Check the key and try again.");
-    } finally {
-      setGmgnKeyBusy(false);
-    }
-  }, [isNativeApp, gmgnApiKey]);
-
-  const clearGmgnKey = useCallback(async () => {
-    if (!isNativeApp) return;
-    setGmgnKeyBusy(true);
-    try {
-      await TradingEngine.clearGmgnApiKey();
-      setGmgnKeySaved(false);
-      setGmgnApiKey("");
-      setGmgnKeyMessage("GMGN API key and encrypted record cleared.");
-    } catch {
-      setGmgnKeyMessage("Could not clear the GMGN API key.");
-    } finally {
-      setGmgnKeyBusy(false);
     }
   }, [isNativeApp]);
 
@@ -357,18 +315,6 @@ function CryptoMonitorPanel() {
   const scannerOpportunities = Array.isArray(arbitrageScanner?.opportunities)
     ? arbitrageScanner.opportunities.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     : [];
-  const gmgnFeed = status?.gmgn_feed && typeof status.gmgn_feed === "object"
-    ? status.gmgn_feed as Record<string, unknown>
-    : null;
-  const gmgnTokens = Array.isArray(gmgnFeed?.tokens)
-    ? gmgnFeed.tokens.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-    : [];
-  const gmgnSniper = status?.gmgn_sniper && typeof status.gmgn_sniper === "object"
-    ? status.gmgn_sniper as Record<string, unknown>
-    : null;
-  const gmgnSniperCandidates = Array.isArray(gmgnSniper?.candidates)
-    ? gmgnSniper.candidates.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-    : [];
   const paperTrades = Array.isArray(paperTrading?.recent_trades)
     ? (paperTrading.recent_trades as Record<string, unknown>[]).slice(-5).reverse()
     : [];
@@ -399,16 +345,6 @@ function CryptoMonitorPanel() {
         <button className="engine-stop" onClick={() => void stopPhoneEngine()} disabled={!isNativeApp || engineControl === "stopped" || engineControl === "web"}>Stop</button>
       </div>
       <small className={"engine-control-state " + engineControl}>Phone service: {engineControl === "web" ? "Android app required" : engineControl}</small>
-    </div>
-    <div className="agent-runtime-list credential-panel">
-      <div className="decision-list-head"><b>GMGN OFFICIAL API · READ ONLY</b><span>{gmgnKeySaved ? "ENCRYPTED ON DEVICE" : "NOT CONFIGURED"}</span></div>
-      <div className="panel-foot">Use your GMGN API key from gmgn.ai/ai. This first connection enables official token discovery and trending data only. The key is encrypted with Android Keystore and is never sent to our server. No wallet private key or trade permission is requested.</div>
-      <input aria-label="GMGN API key" type="password" autoComplete="off" placeholder={isNativeApp ? "GMGN API key" : "Available in the Android app"} value={gmgnApiKey} onChange={event => setGmgnApiKey(event.target.value)} disabled={!isNativeApp || gmgnKeyBusy} />
-      <div className="engine-control-actions">
-        <button className="engine-start" onClick={() => void saveGmgnKey()} disabled={!isNativeApp || gmgnKeyBusy || !gmgnApiKey.trim()}>Save GMGN key securely</button>
-        <button className="engine-stop" onClick={() => void clearGmgnKey()} disabled={!isNativeApp || gmgnKeyBusy || !gmgnKeySaved}>Clear GMGN key</button>
-      </div>
-      <small className="engine-control-state">{isNativeApp ? gmgnKeyMessage : "Install the Android app to use device-secure GMGN API storage."}</small>
     </div>
     <div className="agent-runtime-list credential-panel">
       <div className="decision-list-head"><b>BINANCE SPOT TESTNET CREDENTIALS</b><span>{credentialSaved ? "ENCRYPTED ON DEVICE" : "NOT CONNECTED"}</span></div>
@@ -445,7 +381,6 @@ function CryptoMonitorPanel() {
       </div>}
     </div>
     <div className="crypto-summary">
-      <div><small>GMGN FEED</small><b>{String(gmgnFeed?.status || "NOT CONFIGURED")}</b></div>
       <div><small>ENGINE</small><b>{engine}</b></div>
       <div><small>MODE</small><b>{String(status?.mode || "PAPER_ONLY").replaceAll("_", " ")}</b></div>
       <div><small>ORDER ROUTING</small><b>{status?.orders_enabled === true ? "Binance Spot Testnet" : "Disabled"}</b></div>
@@ -472,34 +407,8 @@ function CryptoMonitorPanel() {
       </div>
       <div className="panel-foot">Read-only Testnet account and recovery check. This snapshot does not enable orders. Any non-zero non-USDT Spot holding counts toward the one-position limit. Unknown account, recovery or daily-loss state blocks execution.</div>
     </div>
-    <div className="agent-runtime-list">
-      <div className="decision-list-head"><b>GMGN TOKEN DISCOVERY</b><span>{String(gmgnFeed?.status || "NOT CONFIGURED")}</span></div>
-      <div className="panel-foot">{String(gmgnFeed?.detail || "Configure the official GMGN API key in the Android app to enable this feed.")}</div>
-      {gmgnTokens.slice(0, 10).map((token, index) => <div className="decision-row" key={String(token.token_address || index)}>
-        <div><b>{String(token.symbol || "—")} · {String(token.name || "Token")}</b><small>{String(token.launchpad || "GMGN Trenches")} · {String(token.chain || "sol")}</small></div>
-        <small>{String(token.token_address || "")}</small>
-        <span>{token.rug_ratio === undefined ? "Risk score pending" : "Rug ratio " + String(token.rug_ratio)}</span>
-      </div>)}
-      {gmgnFeed?.trenches_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trenches_preview)}</pre> : null}
-      {gmgnFeed?.trending_preview ? <pre className="gmgn-preview">{String(gmgnFeed.trending_preview)}</pre> : null}
-      {gmgnFeed?.security_preview ? <pre className="gmgn-preview">{String(gmgnFeed.security_preview)}</pre> : null}
-    </div>
-    <div className="agent-runtime-list">
-      <div className="decision-list-head"><b>GMGN SNIPER · PAPER REVIEW ONLY</b><span>{String(gmgnSniper?.status || "WAITING")}</span></div>
-      <div className="panel-foot">{String(gmgnSniper?.detail || "Candidates require current liquidity and complete GMGN security evidence. No orders are enabled.")}</div>
-      <div className="crypto-summary">
-        <div><small>QUALIFIED CANDIDATES</small><b>{String(gmgnSniper?.candidate_count ?? 0)}</b></div>
-        <div><small>BLOCKED TOKENS</small><b>{String(gmgnSniper?.blocked_count ?? 0)}</b></div>
-        <div><small>EXECUTION</small><b>DISABLED</b></div>
-      </div>
-      {gmgnSniperCandidates.map((item, index) => <div className="decision-row" key={String(item.token_address || index)}>
-        <div><b>{String(item.symbol || "—")}</b><small>{String(item.chain || "sol")} · Liquidity ${Number(item.liquidity_usd ?? 0).toLocaleString()}</small></div>
-        <span>Rug ratio {String(item.rug_ratio ?? "—")}</span>
-        <small>{String(item.token_address || "")}</small>
-      </div>)}
-    </div>
     <div className="agent-runtime-list readiness-panel">
-      <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 9)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
+      <div className="decision-list-head"><b>REMAINING INTEGRATION WORK</b><span>{String(readiness?.verified_tasks ?? 0)}/{String(readiness?.total_tasks ?? 10)} verified · {String(readiness?.overall_status ?? "WAITING FOR ENGINE")}</span></div>
       {readinessTasks.map(task => <div className="readiness-row" key={String(task.id)}>
         <div><b>{String(task.title || task.id)}</b><small>{String(task.detail || "")}</small></div>
         <span className={"readiness-state " + String(task.status || "UNKNOWN").toLowerCase()}>{String(task.status || "UNKNOWN").replaceAll("_", " ")}</span>
