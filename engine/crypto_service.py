@@ -300,7 +300,10 @@ def _runtime_config(
             )
             snapshot["integration_readiness"] = build_readiness(
                 phone_engine_running=state.get("engine") == "running",
-                verified_fee_exchanges=tuple(fees.keys()),
+                verified_fee_exchanges=tuple(
+                    venue for venue, source in state.get("fee_policy", {}).get("sources", {}).items()
+                    if isinstance(source, dict) and source.get("verified") is True
+                ),
                 cross_exchange_scan_verified=scanner_verified,
             )
             return snapshot
