@@ -18,6 +18,13 @@ The package build script runs the TypeScript application check followed by the V
 build. Keep the command exactly as `npm run build` (without punctuation). A push to this
 branch can trigger Cloudflare's connected Git build; do not push merely to test repeatedly.
 
+## Build trigger note (2026-11-27)
+
+The Cloudflare dashboard's saved build command was verified as `npm run build`. This
+documentation-only commit is intended to create a fresh push event on the configured production
+branch so Cloudflare can pick up the corrected build configuration. It does not change
+application code, Worker routes, secrets, storage bindings, or trading behavior.
+
 ## Service boundaries
 
 - `/api/ctrader/callback`: OAuth callback and authorization-code exchange.
