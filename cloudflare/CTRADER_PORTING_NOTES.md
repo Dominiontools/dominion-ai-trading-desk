@@ -210,3 +210,10 @@ This heartbeat is covered by a unit test. It does not prove a real broker connec
 `ctrader-execution-reconciliation.js` compares the authoritative cTrader open-position list against the saved D1 snapshot. It allows a flat state only when both sources are flat. Untracked positions, missing broker positions, multiple positions, changed volume/side/symbol, or missing broker-side SL/TP protection fail closed.
 
 **Operational status:** this migration is source-only. It has not been applied to a Cloudflare D1 database, no D1 binding or secrets have been configured, and no Worker deployment has been made. The reconciliation helpers are unit-tested only; they do not establish live broker connectivity or production readiness.
+## Controlled demo-cycle preflight
+
+`src/cloudflare/ctrader-demo-cycle-preflight.js` is the first orchestration layer for the future cTrader demo cycle. It reads the validated demo config and verified trading-scope status, loads/refreshes the encrypted demo token, acquires an account-scoped D1 execution lease, authenticates the exact selected demo account, and obtains a fresh broker reconciliation snapshot.
+
+Before returning a safe reconciliation result, it compares broker positions with the D1 recovery snapshot, blocks any unresolved order intent or pending broker order, applies the demo session guard, records a bounded event, and releases the lease/session in `finally`.
+
+**Important boundary:** this preflight does not place, amend, or close orders and is not yet connected to a public Worker route or scheduler. A successful preflight only means broker/D1 state is reconciled and no unresolved order exists. The legacy strategy, risk sizing, protected order submission, position management, and restart recovery still need a complete Cloudflare port and broker demo integration tests before any execution cycle can be enabled.
