@@ -149,7 +149,7 @@ export async function reconcileCTraderDemoCycle({
       environment: "demo",
       isLive: false,
       permissionScope: 1,
-      lastHeartbeatAt: nowMs
+      lastHeartbeatAt: session.lastMessageAt
     }, nowMs);
     if (!sessionGate.allowed) {
       return { safe: false, status: "BLOCKED", reason: "DEMO_SESSION_GUARD_REJECTED" };
