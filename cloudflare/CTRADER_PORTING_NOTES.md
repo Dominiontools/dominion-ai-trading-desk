@@ -196,3 +196,17 @@ The Cloudflare session client now sends cTrader `ProtoHeartbeatEvent` (payload t
 - https://help.ctrader.com/open-api/common-messages/
 
 This heartbeat is covered by a unit test. It does not prove a real broker connection or make the Worker session persistent. The execution-cycle design must still close sessions cleanly and recover from disconnects/restarts.
+
+## Execution recovery migration (0002)
+
+`cloudflare/migrations/0002_execution_recovery.sql` adds three D1 tables:
+
+- `ctrader_active_positions`: one durable broker-confirmed active-position snapshot per demo account.
+- `ctrader_order_intents`: immutable client order IDs and a constrained state machine (`PREPARED`, `SUBMITTED`, `FILLED`, `REJECTED`, `UNKNOWN`).
+- `ctrader_engine_events`: bounded account-scoped recovery events.
+
+`ctrader-execution-recovery-store.js` reserves each client order ID before broker submission, enforces state transitions, persists broker snapshots, and reads non-terminal intents. A `PREPARED`, `SUBMITTED`, or `UNKNOWN` intent blocks a fresh entry until broker reconciliation resolves it. An uncertain network result must never trigger a blind resubmission.
+
+`ctrader-execution-reconciliation.js` compares the authoritative cTrader open-position list against the saved D1 snapshot. It allows a flat state only when both sources are flat. Untracked positions, missing broker positions, multiple positions, changed volume/side/symbol, or missing broker-side SL/TP protection fail closed.
+
+**Operational status:** this migration is source-only. It has not been applied to a Cloudflare D1 database, no D1 binding or secrets have been configured, and no Worker deployment has been made. The reconciliation helpers are unit-tested only; they do not establish live broker connectivity or production readiness.
