@@ -93,6 +93,7 @@ export async function readCTraderEngineStatus(db) {
     status: stored.status,
     reason: stored.reason,
     connected,
+    isLive: connected ? false : null,
     environment: "demo",
     access,
     permissionScope,
