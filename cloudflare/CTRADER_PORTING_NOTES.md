@@ -71,3 +71,36 @@ one minute, not a high-frequency execution loop.
 5. Port engine control only after the secure storage and replay-protection layer is verified.
 6. Keep scheduled execution disabled until the user explicitly enables demo automation.
 7. Do not merge or deploy to the production branch until the user approves the final release.
+
+
+## Runtime finding: broker WebSocket must be reconnectable
+
+Checked against Cloudflare's current Workers documentation on 2026-11-27:
+
+- Workers support WebSocket connections, but runtime updates can terminate existing
+  connections; Cloudflare explicitly requires clients to reconnect and restore state.
+- A plain Worker isolate does not provide durable process state for a broker session.
+- Durable Objects are the preferred Cloudflare primitive for reliable long-lived WebSocket
+  coordination. However, outbound WebSockets do not use the WebSocket hibernation API; an
+  open outbound connection prevents Durable Object eviction for up to 15 minutes, and
+  subsequent I/O can extend its in-memory lifetime.
+- Cron Trigger and Durable Object Alarm invocations have a 15-minute wall-time limit.
+  An HTTP request can remain active while its client remains connected, but this is not a
+  substitute for a fault-tolerant background trading process.
+
+Engineering decision:
+
+1. Do not run the cTrader trading loop as an ordinary request handler or rely on one
+   in-memory Worker WebSocket surviving indefinitely.
+2. Prototype the cTrader broker connection inside a Durable Object, with explicit
+   heartbeat, reconnect/backoff, broker re-authentication, state reconstruction from D1,
+   duplicate-order protection and a fail-closed disconnect state.
+3. Test broker disconnects, Worker runtime restarts, Durable Object eviction, stale quotes,
+   and duplicate scheduler delivery before any demo order is permitted.
+4. If the prototype cannot meet broker-session reliability and execution timing, retain
+   the cTrader execution process on a persistent runtime and use Cloudflare for the
+   stateless API, OAuth callback, encrypted storage and dashboard routing.
+
+This is a design decision based on platform documentation, not proof that the cTrader
+Open API session has passed a live connectivity test. No broker connection or order was
+attempted by this review.
