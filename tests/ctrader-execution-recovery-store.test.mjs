@@ -79,7 +79,7 @@ test("order state machine rejects regressions and invalid broker IDs", async () 
 });
 
 test("active position snapshots can be saved, read, and cleared by exact ID", async () => {
-  const position = { side: "BUY", symbol: "EURUSD", stopLoss: 1.08, target2R: 1.14 };
+  const position = { side: "BUY", symbol: "EURUSD", symbolId: 10, volume: 1000, stopLoss: 1.08, takeProfit: 1.14, target2R: 1.12 };
   const saveDb = mockD1();
   const saved = await saveCTraderActivePosition(saveDb, {
     accountId, positionId: "88", position, nowMs: 1_800_000_000_000
@@ -147,4 +147,13 @@ test("unresolved order intents are read by account and decoded safely", async ()
   assert.deepEqual(rows[0].intent, { symbol: "EURUSD" });
   assert.match(db.calls[0].sql, /state IN \('PREPARED', 'SUBMITTED', 'UNKNOWN'\)/);
   assert.deepEqual(db.calls[0].values, [accountId]);
+});
+
+test("active position persistence rejects snapshots without durable broker protection", async () => {
+  const db = mockD1();
+  await assert.rejects(saveCTraderActivePosition(db, {
+    accountId, positionId: "88",
+    position: { symbolId: 10, side: "BUY", volume: 1000, stopLoss: 1.08 },
+  }), /durable volume and SL\/TP protection/);
+  assert.equal(db.calls.length, 0);
 });
