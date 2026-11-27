@@ -95,9 +95,9 @@ test("refreshes an expiring token and persists only the encrypted replacement", 
     fetchImpl: async (url, options) => {
       requestedUrl = String(url);
       assert.equal(options.method, "POST");
-      assert.ok(options.headers["content-type"].includes("application/x-www-form-urlencoded"));
-      assert.match(String(options.body), /grant_type=refresh_token/);
-      assert.match(String(options.body), /refresh_token=old-refresh/);
+      assert.equal(options.headers["content-type"], "application/json");
+      assert.match(requestedUrl, /grant_type=refresh_token/);
+      assert.match(requestedUrl, /refresh_token=old-refresh/);
       return new Response(JSON.stringify({
         accessToken: "new-access",
         refreshToken: "new-refresh",
@@ -106,7 +106,7 @@ test("refreshes an expiring token and persists only the encrypted replacement", 
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
   });
-  assert.equal(requestedUrl, "https://openapi.ctrader.com/apps/token");
+  assert.match(requestedUrl, /^https:\/\/openapi\.ctrader\.com\/apps\/token\?/);
   assert.equal(token.accessToken, "new-access");
   assert.equal(token.refreshToken, "new-refresh");
   assert.equal(token.expiresAt, now + 3_600_000);
