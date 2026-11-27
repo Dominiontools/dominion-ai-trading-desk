@@ -11,7 +11,7 @@ export function findReconciledPosition(reconciled, positionId) {
 }
 
 export async function closeAndVerify(session, positionId, volume) {
-  if (!/^\d{1,30}$/.test(String(positionId ?? "")) ||
+  if (!/^\d{1,30}$/.test(String(positionId ?? "")) || Number(positionId) <= 0 ||
       !(Number.isFinite(Number(volume)) && Number(volume) > 0)) {
     throw new Error("INVALID_POSITION_CLOSE_REQUEST");
   }
