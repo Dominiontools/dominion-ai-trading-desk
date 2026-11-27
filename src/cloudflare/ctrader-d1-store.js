@@ -122,3 +122,24 @@ export async function releaseExecutionLock(db, lockName, lockId) {
   ).bind(lockName, lockId).run();
   return Number(result?.meta?.changes ?? 0) === 1;
 }
+
+
+/** Extends a lease only while it is unexpired and still owned by this caller. */
+export async function renewExecutionLock(db, lockName, lockId, nowMs = Date.now(), ttlMs = 90_000) {
+  requireDatabase(db);
+  if (typeof lockName !== "string" || !/^[a-z0-9:_-]{1,100}$/i.test(lockName) ||
+      typeof lockId !== "string" || lockId.length < 32 || lockId.length > 256) {
+    throw new Error("A valid execution lock name and high-entropy lock ID are required.");
+  }
+  if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(ttlMs) ||
+      ttlMs < 1_000 || ttlMs > 300_000) {
+    throw new Error("Invalid execution lock lifetime.");
+  }
+  const now = Math.floor(nowMs / 1000);
+  const expiresAt = Math.ceil((nowMs + ttlMs) / 1000);
+  const row = await db.prepare(
+    "UPDATE execution_locks SET expires_at = ? WHERE lock_name = ? AND lock_id = ? AND expires_at > ? RETURNING lock_id, expires_at",
+  ).bind(expiresAt, lockName, lockId, now).first();
+  if (!row || row.lock_id !== lockId) return null;
+  return { lockName, lockId, expiresAt: row.expires_at };
+}
