@@ -56,7 +56,11 @@ export function validateCTraderEngineConfig(body, previous = null) {
     return invalid("INVALID_SYMBOL_WATCHLIST");
   }
   // Strip separators only; preserve every letter, including the D in USD.
-  const symbols = rawSymbols.map((item) => String(item).replace(/[^A-Za-z0-9]/g, "").toUpperCase());
+  const symbols = rawSymbols.map((item) => {
+    const raw = String(item);
+    if (!/^[A-Za-z0-9]+(?:[\/_-][A-Za-z0-9]+)*$/.test(raw)) return "";
+    return raw.replace(/[\/_-]/g, "").toUpperCase();
+  });
   if (symbols.some((item) => !/^[A-Z0-9]{3,20}$/.test(item)) ||
       new Set(symbols).size !== symbols.length) {
     return invalid("INVALID_OR_DUPLICATE_SYMBOL");
