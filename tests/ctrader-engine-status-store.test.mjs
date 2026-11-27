@@ -76,7 +76,7 @@ test("read status exposes only sanitized fields and requires verified demo marke
   const result = await readCTraderEngineStatus(mockD1({ row }));
   assert.deepEqual(result, {
     status: "CONNECTED", reason: "ENGINE_DISABLED", connected: true,
-    environment: "demo", access: "trading", permissionScope: 1,
+    isLive: false, environment: "demo", access: "trading", permissionScope: 1,
     demoAccountCount: 1, liveTradingEnabled: false, updatedAt: 1_800_000_000
   });
   assert.equal("token" in result, false);
