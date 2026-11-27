@@ -9,4 +9,6 @@
 - Returned status excludes account IDs, tokens, and other private fields.
 - Missing status returns a disconnected `NOT_CONFIGURED` default.
 
-This is a persistence helper only. No Worker route reads or writes it yet; no cTrader account has been connected; no broker heartbeat is being received; and no real Cloudflare D1 database has been provisioned or integration-tested. Tests use a mocked D1 interface.
+The Worker exposes a read-only `GET /api/ctrader/status` route when the `CTRADER_DB` D1 binding is present. It returns sanitized status/configuration only, rejects other methods, and returns HTTP 503 when storage is unavailable or invalid. The route does not perform OAuth, broker verification, token decryption, or execution.
+
+No cTrader account has been connected; no broker heartbeat is being received; and no real Cloudflare D1 database has been provisioned or integration-tested. Tests use a mocked D1 interface.
