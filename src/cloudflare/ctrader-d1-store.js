@@ -33,7 +33,7 @@ export async function createOAuthState(db, state, accessKind, nowMs = Date.now()
   const stateHash = await sha256Hex(state);
   await db.prepare(
     "INSERT INTO oauth_states (state_hash, created_at, expires_at, consumed_at, access_kind) VALUES (?, ?, ?, NULL, ?)",
-  ).bind(stateHash, Math.floor(nowMs / 1000), Math.floor((nowMs + ttlMs) / 1000), accessKind).run();
+  ).bind(stateHash, Math.floor(nowMs / 1000), Math.ceil((nowMs + ttlMs) / 1000), accessKind).run();
   return { expiresAt: Math.floor((nowMs + ttlMs) / 1000) };
 }
 
