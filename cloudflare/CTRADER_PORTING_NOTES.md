@@ -60,7 +60,9 @@ one minute, not a high-frequency execution loop.
 ## Next safe implementation sequence
 
 1. Add and verify a Cloudflare D1 binding in a non-production environment, then apply
-   `0001_initial_schema.sql`.
+   `0001_initial_schema.sql`. The isolated D1 helper now includes atomic lease acquisition,
+   owner-checked renewal, and owner-checked release; these are tested with a mocked D1 API,
+   not yet against a provisioned Cloudflare database.
 2. Implement atomic one-time OAuth state consumption and AES-GCM token encryption/decryption
    using Worker Web Crypto APIs.
 3. Implement callback and safe status routes without exposing tokens; test with mocked cTrader
