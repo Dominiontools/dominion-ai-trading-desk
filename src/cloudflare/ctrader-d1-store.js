@@ -84,3 +84,41 @@ export async function readEncryptedCTraderToken(db, tokenKind) {
     updatedAt: row.updated_at,
   };
 }
+
+
+/**
+ * Atomically acquires an execution lease. A live lease cannot be stolen.
+ * The caller must use a cryptographically random lockId and renew before expiry.
+ */
+export async function acquireExecutionLock(db, lockName, lockId, nowMs = Date.now(), ttlMs = 90_000) {
+  requireDatabase(db);
+  if (typeof lockName !== "string" || !/^[a-z0-9:_-]{1,100}$/i.test(lockName) ||
+      typeof lockId !== "string" || lockId.length < 32 || lockId.length > 256) {
+    throw new Error("A valid execution lock name and high-entropy lock ID are required.");
+  }
+  if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(ttlMs) ||
+      ttlMs < 1_000 || ttlMs > 300_000) {
+    throw new Error("Invalid execution lock lifetime.");
+  }
+  const now = Math.floor(nowMs / 1000);
+  const expiresAt = Math.floor((nowMs + ttlMs) / 1000);
+  const row = await db.prepare(
+    "INSERT INTO execution_locks (lock_name, lock_id, acquired_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(lock_name) DO UPDATE SET lock_id = excluded.lock_id, acquired_at = excluded.acquired_at, expires_at = excluded.expires_at WHERE execution_locks.expires_at <= excluded.acquired_at RETURNING lock_id, expires_at",
+  ).bind(lockName, lockId, now, expiresAt).first();
+  if (!row || row.lock_id !== lockId) return null;
+  return { lockName, lockId, expiresAt: row.expires_at };
+}
+
+/** Releases a lease only when the caller still owns its exact lock ID. */
+export async function releaseExecutionLock(db, lockName, lockId) {
+  requireDatabase(db);
+  if (typeof lockName !== "string" || typeof lockId !== "string" ||
+      lockName.length < 1 || lockName.length > 100 ||
+      lockId.length < 32 || lockId.length > 256) {
+    throw new Error("A valid execution lock name and lock ID are required.");
+  }
+  const result = await db.prepare(
+    "DELETE FROM execution_locks WHERE lock_name = ? AND lock_id = ?",
+  ).bind(lockName, lockId).run();
+  return Number(result?.meta?.changes ?? 0) === 1;
+}
