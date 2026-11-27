@@ -41,6 +41,7 @@ export async function saveCTraderEngineStatus(db, snapshot, nowMs = Date.now()) 
     status,
     reason,
     connected,
+    isLive: connected ? false : null,
     environment: "demo",
     access,
     permissionScope,
