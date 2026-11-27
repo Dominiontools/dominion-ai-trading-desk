@@ -7,6 +7,7 @@ import {
   readEncryptedCTraderToken,
   acquireExecutionLock,
   renewExecutionLock,
+  consumeRequestNonce,
   releaseExecutionLock,
 } from "../src/cloudflare/ctrader-d1-store.js";
 
@@ -167,4 +168,21 @@ test("execution lease renewal fails when the lease is expired or owned by anothe
   assert.equal(await renewExecutionLock(db, "ctrader-demo-cycle", "s".repeat(48), 1_800_000_000_000), null);
   await assert.rejects(renewExecutionLock(db, "ctrader-demo-cycle", "short"));
   await assert.rejects(renewExecutionLock(db, "ctrader-demo-cycle", "s".repeat(48), Date.now(), 600_000));
+});
+
+
+test("request nonce is atomically recorded once for an allowed purpose", async () => {
+  const nonce = "n".repeat(48);
+  const db = mockD1({ firstResult: { nonce } });
+  assert.equal(await consumeRequestNonce(db, nonce, "dashboard-control", 1_800_000_000_500, 120_000), true);
+  assert.match(db.calls[0].sql, /ON CONFLICT\(nonce\) DO NOTHING RETURNING nonce/);
+  assert.deepEqual(db.calls[0].values, [nonce, "dashboard-control", 1_800_000_000, 1_800_000_121]);
+});
+
+test("request nonce rejects duplicates and invalid purposes or lifetimes", async () => {
+  const db = mockD1();
+  assert.equal(await consumeRequestNonce(db, "d".repeat(48), "scheduled-worker"), false);
+  await assert.rejects(consumeRequestNonce(db, "short", "dashboard-control"));
+  await assert.rejects(consumeRequestNonce(db, "d".repeat(48), "live-trading"));
+  await assert.rejects(consumeRequestNonce(db, "d".repeat(48), "dashboard-control", Date.now(), 600_000));
 });
