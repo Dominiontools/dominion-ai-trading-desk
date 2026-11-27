@@ -51,7 +51,11 @@ export function reconcileCTraderPositionState({ brokerPositions, storedPosition 
   const storedSide = String(stored.side ?? "");
   const brokerStop = Number(broker.stopLoss ?? 0);
   const brokerTarget = Number(broker.takeProfit ?? 0);
-  const storedStop = Number(stored.stopLoss ?? 0);
+  // Legacy position snapshots keep the original stop/target under these names.
+  // Once break-even is confirmed, the expected broker stop is the entry price.
+  const storedEntry = Number(stored.entryPrice ?? 0);
+  const storedStop = Number(stored.stopLoss ??
+    (stored.breakEvenSet === true ? storedEntry : stored.initialStopLoss) ?? 0);
   const storedTarget = Number(stored.takeProfit ?? stored.target3R ?? 0);
 
   const mismatches = [];
