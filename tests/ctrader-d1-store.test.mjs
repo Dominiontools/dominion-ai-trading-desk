@@ -5,6 +5,8 @@ import {
   consumeOAuthState,
   saveEncryptedCTraderToken,
   readEncryptedCTraderToken,
+  acquireExecutionLock,
+  releaseExecutionLock,
 } from "../src/cloudflare/ctrader-d1-store.js";
 
 function mockD1({ firstResult = null } = {}) {
@@ -94,4 +96,44 @@ test("token reads are restricted to demo records and return parsed ciphertext on
     updatedAt: 1_800_000_000,
   });
   assert.match(db.calls[0].sql, /environment = 'demo'/);
+});
+
+
+test("execution lock acquisition is atomic and returns only the caller's lease", async () => {
+  const db = mockD1({ firstResult: { lock_id: "x".repeat(48), expires_at: 1_800_000_090 } });
+  const lease = await acquireExecutionLock(db, "ctrader-demo-cycle", "x".repeat(48), 1_800_000_000_000, 90_000);
+  assert.deepEqual(lease, {
+    lockName: "ctrader-demo-cycle",
+    lockId: "x".repeat(48),
+    expiresAt: 1_800_000_090,
+  });
+  assert.match(db.calls[0].sql, /ON CONFLICT\(lock_name\) DO UPDATE/);
+  assert.match(db.calls[0].sql, /WHERE execution_locks\.expires_at <= excluded\.acquired_at RETURNING/);
+});
+
+test("execution lock acquisition fails when another owner holds the lease", async () => {
+  const db = mockD1();
+  assert.equal(await acquireExecutionLock(db, "ctrader-demo-cycle", "y".repeat(48), 1_800_000_000_000), null);
+});
+
+test("execution lock release is restricted to the exact lock owner", async () => {
+  const db = mockD1();
+  db.prepare = (sql) => {
+    const call = { sql, values: [] };
+    db.calls.push(call);
+    return {
+      bind(...values) { call.values = values; return this; },
+      async run() { return { meta: { changes: 1 } }; },
+    };
+  };
+  assert.equal(await releaseExecutionLock(db, "ctrader-demo-cycle", "z".repeat(48)), true);
+  assert.match(db.calls[0].sql, /WHERE lock_name = \? AND lock_id = \?/);
+  assert.deepEqual(db.calls[0].values, ["ctrader-demo-cycle", "z".repeat(48)]);
+});
+
+test("execution lock rejects malformed IDs and unsafe lease durations", async () => {
+  const db = mockD1();
+  await assert.rejects(acquireExecutionLock(db, "ctrader", "short"));
+  await assert.rejects(acquireExecutionLock(db, "ctrader", "x".repeat(48), Date.now(), 600_000));
+  await assert.rejects(releaseExecutionLock(db, "ctrader", "short"));
 });
