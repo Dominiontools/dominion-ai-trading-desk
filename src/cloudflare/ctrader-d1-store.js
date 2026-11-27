@@ -143,3 +143,26 @@ export async function renewExecutionLock(db, lockName, lockId, nowMs = Date.now(
   if (!row || row.lock_id !== lockId) return null;
   return { lockName, lockId, expiresAt: row.expires_at };
 }
+
+
+/**
+ * Atomically records a one-time request nonce for replay protection.
+ * A duplicate nonce is rejected by the database primary key.
+ */
+export async function consumeRequestNonce(db, nonce, purpose, nowMs = Date.now(), ttlMs = 120_000) {
+  requireDatabase(db);
+  if (typeof nonce !== "string" || nonce.length < 32 || nonce.length > 256 ||
+      !["dashboard-control", "scheduled-worker"].includes(purpose)) {
+    throw new Error("A valid request nonce and purpose are required.");
+  }
+  if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(ttlMs) ||
+      ttlMs < 1_000 || ttlMs > 300_000) {
+    throw new Error("Invalid request nonce lifetime.");
+  }
+  const acceptedAt = Math.floor(nowMs / 1000);
+  const expiresAt = Math.ceil((nowMs + ttlMs) / 1000);
+  const row = await db.prepare(
+    "INSERT INTO request_nonces (nonce, purpose, accepted_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(nonce) DO NOTHING RETURNING nonce",
+  ).bind(nonce, purpose, acceptedAt, expiresAt).first();
+  return row?.nonce === nonce;
+}
