@@ -38,7 +38,7 @@ export async function confirmCTraderDemoOrderFromBroker({
   }
 
   const positionId = String(brokerPosition.positionId ?? "");
-  if (!/^\\d{1,30}$/.test(positionId)) {
+  if (!/^\d{1,30}$/.test(positionId)) {
     throw new Error("Broker-confirmed position ID is invalid.");
   }
   const trade = brokerPosition.tradeData && typeof brokerPosition.tradeData === "object"
