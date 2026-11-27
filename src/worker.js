@@ -1,7 +1,11 @@
 import { readCTraderEngineConfig } from "./cloudflare/ctrader-engine-config-store.js";
 import { readCTraderEngineStatus } from "./cloudflare/ctrader-engine-status-store.js";
 import { createOAuthState } from "./cloudflare/ctrader-d1-store.js";
-import { buildCTraderAuthorizationUrl } from "./cloudflare/ctrader-oauth.js";
+import { buildCTraderAuthorizationUrl, validateCTraderTokenResponse } from "./cloudflare/ctrader-oauth.js";
+import { consumeOAuthState, saveEncryptedCTraderToken } from "./cloudflare/ctrader-d1-store.js";
+import { encryptCTraderTokenRecord } from "./cloudflare/ctrader-token-crypto.js";
+import { verifyCTraderDemoAccount } from "./cloudflare/ctrader-demo-verification.js";
+import { saveCTraderEngineStatus } from "./cloudflare/ctrader-engine-status-store.js";
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -63,6 +67,66 @@ export default {
         });
       } catch {
         return json({ ok: false, error: "ctrader_oauth_start_failed" }, 503);
+      }
+    }
+
+
+    if (url.pathname === "/api/ctrader/oauth/callback") {
+      const html = (title, message, status = 200) => new Response(
+        `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;line-height:1.5"><h2>${title}</h2><p>${message}</p></body></html>`,
+        { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" } }
+      );
+      if (request.method !== "GET") return html("Method not allowed", "Start cTrader authorization from Dominion AI Trading Desk.", 405);
+      if (!env.CTRADER_DB) return html("Setup incomplete", "Secure cTrader storage is not configured.", 503);
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      if (url.searchParams.has("error")) return html("Authorization not completed", "cTrader did not grant access. Return to the app and try again.", 400);
+      if (!code || code.length > 4096 || !state) return html("Authorization details missing", "Start cTrader authorization again from the app.", 400);
+      const clientId = typeof env.CTRADER_CLIENT_ID === "string" ? env.CTRADER_CLIENT_ID.trim() : "";
+      const clientSecret = typeof env.CTRADER_CLIENT_SECRET === "string" ? env.CTRADER_CLIENT_SECRET : "";
+      const redirectUri = typeof env.CTRADER_REDIRECT_URI === "string" ? env.CTRADER_REDIRECT_URI.trim() : "";
+      const encryptionKey = typeof env.CTRADER_TOKEN_ENCRYPTION_KEY === "string" ? env.CTRADER_TOKEN_ENCRYPTION_KEY : "";
+      if (!clientId || !clientSecret || !redirectUri || !encryptionKey) {
+        return html("Setup incomplete", "Required cTrader server settings are missing. No token was saved.", 503);
+      }
+      try {
+        const callback = new URL(redirectUri);
+        if (callback.protocol !== "https:" || callback.origin !== url.origin ||
+            callback.pathname !== "/api/ctrader/oauth/callback" || callback.search || callback.hash) {
+          return html("Setup incomplete", "The registered cTrader callback URL does not match this Cloudflare service.", 503);
+        }
+        const oauthState = await consumeOAuthState(env.CTRADER_DB, state);
+        if (!oauthState) return html("Authorization session expired", "The one-time authorization session is invalid or expired. Start again from the app.", 400);
+        const accessKind = oauthState.accessKind;
+        const tokenParams = new URLSearchParams({
+          grant_type: "authorization_code", code, redirect_uri: redirectUri,
+          client_id: clientId, client_secret: clientSecret
+        });
+        const tokenResponse = await fetch(`https://openapi.ctrader.com/apps/token?${tokenParams.toString()}`, {
+          method: "GET", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000)
+        });
+        if (!tokenResponse.ok) return html("Token exchange failed", "cTrader did not accept the authorization code. No token was saved.", 502);
+        const tokenData = validateCTraderTokenResponse(await tokenResponse.json());
+        const verified = await verifyCTraderDemoAccount({
+          accessToken: tokenData.accessToken, clientId, clientSecret,
+          expectedScope: accessKind === "trading" ? 1 : 0
+        });
+        const encrypted = await encryptCTraderTokenRecord(
+          { ...tokenData, issuedAt: Date.now(), environment: "demo", access: accessKind,
+            accountId: verified.authorizedAccountId },
+          encryptionKey
+        );
+        await saveEncryptedCTraderToken(env.CTRADER_DB, accessKind, encrypted, verified.authorizedAccountId);
+        await saveCTraderEngineStatus(env.CTRADER_DB, {
+          status: "CONNECTED", reason: "ENGINE_DISABLED", connected: true, isLive: false,
+          environment: "demo", access: accessKind, permissionScope: verified.permissionScope,
+          demoAccountCount: verified.demoAccountCount, liveTradingEnabled: false
+        });
+        return html("cTrader demo authorization received",
+          `Your ${accessKind === "trading" ? "demo-trading" : "view-only"} permission was verified. The demo account was authenticated and tokens were encrypted before storage. No trade was placed.`);
+      } catch {
+        return html("cTrader authorization could not be completed",
+          "The callback failed during secure verification. No trade was placed. Start authorization again after the configuration issue is fixed.", 502);
       }
     }
 
