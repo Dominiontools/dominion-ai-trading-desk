@@ -92,8 +92,12 @@ test("refreshes an expiring token and persists only the encrypted replacement", 
   const token = await loadUsableCTraderToken({
     db, tokenKind: "trading", encryptionKey: key,
     clientId: "client", clientSecret: "secret", nowMs: now,
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options) => {
       requestedUrl = String(url);
+      assert.equal(options.method, "POST");
+      assert.match(options.headers["content-type"], /application\\/x-www-form-urlencoded/);
+      assert.match(String(options.body), /grant_type=refresh_token/);
+      assert.match(String(options.body), /refresh_token=old-refresh/);
       return new Response(JSON.stringify({
         accessToken: "new-access",
         refreshToken: "new-refresh",
@@ -102,8 +106,7 @@ test("refreshes an expiring token and persists only the encrypted replacement", 
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
   });
-  assert.match(requestedUrl, /grant_type=refresh_token/);
-  assert.match(requestedUrl, /refresh_token=old-refresh/);
+  assert.equal(requestedUrl, "https://openapi.ctrader.com/apps/token");
   assert.equal(token.accessToken, "new-access");
   assert.equal(token.refreshToken, "new-refresh");
   assert.equal(token.expiresAt, now + 3_600_000);
