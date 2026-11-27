@@ -137,3 +137,12 @@ test("execution lock rejects malformed IDs and unsafe lease durations", async ()
   await assert.rejects(acquireExecutionLock(db, "ctrader", "x".repeat(48), Date.now(), 600_000));
   await assert.rejects(releaseExecutionLock(db, "ctrader", "short"));
 });
+
+
+test("short execution leases retain their full minimum lifetime across second boundaries", async () => {
+  const db = mockD1({ firstResult: { lock_id: "q".repeat(48), expires_at: 1_800_000_002 } });
+  const lease = await acquireExecutionLock(db, "ctrader-demo-cycle", "q".repeat(48), 1_800_000_000_500, 1_000);
+  assert.equal(db.calls[0].values[2], 1_800_000_000);
+  assert.equal(db.calls[0].values[3], 1_800_000_002);
+  assert.equal(lease.expiresAt, 1_800_000_002);
+});
