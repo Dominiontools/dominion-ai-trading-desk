@@ -9,7 +9,7 @@ on:
       - "src/worker.js"
       - "src/cloudflare/**"
       - "cloudflare/**"
-      - "tests/cloudflare-worker.test.mjs"
+      - "tests/**/*.test.mjs"
       - "wrangler.jsonc"
       - "package.json"
       - ".github/workflows/cloudflare-migration.yml"
