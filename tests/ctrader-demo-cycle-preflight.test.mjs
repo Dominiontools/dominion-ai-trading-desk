@@ -20,6 +20,7 @@ const token = {
 function setup(overrides = {}) {
   const calls = [];
   const session = {
+    lastMessageAt: 1_800_000_000_000,
     async connect() { calls.push("connect"); },
     async authorize(...args) { calls.push(["authorize", ...args.slice(1, 2)]); },
     async reconcile() { calls.push("reconcile"); return { positions: [], orders: [] }; },
