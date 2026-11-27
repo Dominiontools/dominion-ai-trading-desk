@@ -107,3 +107,19 @@ Engineering decision:
 This is a design decision based on platform documentation, not proof that the cTrader
 Open API session has passed a live connectivity test. No broker connection or order was
 attempted by this review.
+
+
+## Control authentication prototype
+
+Added `src/cloudflare/ctrader-control-auth.js` as a Worker-native Web Crypto verifier for
+the existing control request signature format:
+`HMAC-SHA256(secret, timestampText + "." + nonce + "." + rawBody)`.
+It rejects malformed or stale timestamps, malformed UUID-style nonces, weak/missing
+secrets, oversized request bodies and invalid signatures. Tests cover valid signatures,
+tampering, stale requests and malformed headers.
+
+This helper does not consume or persist a nonce, parse/validate the control JSON, read
+environment secrets, check cTrader account status, or enable automation. The route must
+call the D1 one-time nonce primitive after signature verification and before processing
+the request, then apply all existing demo-only/risk/explicit-confirmation checks. No
+control route has been connected and no engine setting can be changed through this helper.
