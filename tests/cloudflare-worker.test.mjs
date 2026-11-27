@@ -115,7 +115,7 @@ test("cTrader OAuth start creates one-time state and redirects with trading scop
   assert.match(response.headers.get("location"), /state=[A-Za-z0-9_-]{43}/);
   assert.match(response.headers.get("cache-control"), /no-store/);
   assert.match(response.headers.get("set-cookie"), /HttpOnly; Secure; SameSite=None/);
-  assert.match(response.headers.get("set-cookie"), /Path=\\/api\\/ctrader\\/oauth\\/callback/);
+  assert.ok(response.headers.get("set-cookie").includes("Path=/api/ctrader/oauth/callback"));
   assert.match(inserted.sql, /INSERT INTO oauth_states/);
   assert.equal(inserted.values[3], "trading");
 });
