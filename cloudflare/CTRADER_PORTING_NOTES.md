@@ -217,3 +217,10 @@ This heartbeat is covered by a unit test. It does not prove a real broker connec
 Before returning a safe reconciliation result, it compares broker positions with the D1 recovery snapshot, blocks any unresolved order intent or pending broker order, applies the demo session guard, records a bounded event, and releases the lease/session in `finally`.
 
 **Important boundary:** this preflight does not place, amend, or close orders and is not yet connected to a public Worker route or scheduler. A successful preflight only means broker/D1 state is reconciled and no unresolved order exists. The legacy strategy, risk sizing, protected order submission, position management, and restart recovery still need a complete Cloudflare port and broker demo integration tests before any execution cycle can be enabled.
+## Strategy and risk helper port
+
+The existing `ctrader-risk.mjs` logic has been ported to `src/cloudflare/ctrader-risk.js`: broker money precision, daily realized P/L and cash-flow accounting, fee-aware round-trip commission, 0.5% hard-capped position sizing, and partial-close planning/reconciliation.
+
+The existing `ctrader-strategy.mts` logic has been ported to `src/cloudflare/ctrader-strategy.js`, retaining the scalp (5m/1h), intraday (15m/4h), and swing (4h/1d) profiles and its EMA/RSI/MACD, ATR, structure, liquidity sweep, order-block, fair-value-gap, Fibonacci, and London/New York session confluence checks. The session filter is in `ctrader-session.js` and retains IANA timezone/DST handling.
+
+These are strategy/risk primitives only. They have not yet been wired to a Cloudflare order cycle. The next port must preserve the legacy checks for USD deposit currency, symbol quote currency, verified broker fee metadata, minimum stop/target distances, price direction, slippage, margin, broker-side protection, daily stop, one-position limit, partial fills, and emergency close. No order route should call these primitives until that full flow and its restart/failure tests are in place.
