@@ -129,3 +129,30 @@ export async function appendCTraderEngineEvent(db, {
   ).bind(account, eventType, json, recordedAt).run();
   return { accountId: account, eventType, recordedAt };
 }
+
+
+/** Return every non-terminal order intent; any result blocks a fresh entry until broker reconciliation resolves it. */
+export async function readUnresolvedCTraderOrderIntents(db, accountId) {
+  requireDatabase(db);
+  const account = requireAccountId(accountId);
+  const result = await db.prepare(
+    "SELECT client_order_id, intent_json, state, broker_position_id, created_at, updated_at FROM ctrader_order_intents WHERE account_id = ? AND state IN ('PREPARED', 'SUBMITTED', 'UNKNOWN') ORDER BY created_at ASC"
+  ).bind(account).all();
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  return rows.map((row) => {
+    let intent;
+    try { intent = JSON.parse(row.intent_json); }
+    catch { throw new Error("Stored cTrader order intent is corrupt."); }
+    if (!intent || typeof intent !== "object" || Array.isArray(intent)) {
+      throw new Error("Stored cTrader order intent is invalid.");
+    }
+    return {
+      clientOrderId: String(row.client_order_id),
+      state: row.state,
+      brokerPositionId: row.broker_position_id == null ? null : String(row.broker_position_id),
+      intent,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  });
+}
