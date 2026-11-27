@@ -64,6 +64,7 @@ test("session connects to demo endpoint and authorizes only the selected demo ac
     assert.equal(session.socket.url, "wss://demo.ctraderapi.com:5036");
     await session.authorize("access", "456", "client", "secret");
     assert.equal(session.requireAccount(), 456);
+    assert.ok(session.lastMessageAt > 0, "broker messages must update the session freshness timestamp");
     session.sendHeartbeat();
     assert.equal(MockWebSocket.instances.at(-1).sent.at(-1).payloadType, 51);
     const symbols = await session.symbols();
