@@ -124,7 +124,10 @@ test("recovery store rejects invalid account IDs and oversized snapshots", async
   const db = mockD1();
   await assert.rejects(readCTraderActivePosition(db, "live"));
   await assert.rejects(saveCTraderActivePosition(db, {
-    accountId, positionId: "88", position: { data: "x".repeat(20_000) }
+    accountId, positionId: "88", position: {
+      symbolId: 10, side: "BUY", volume: 1000, stopLoss: 1.08, takeProfit: 1.14,
+      data: "x".repeat(20_000)
+    }
   }), /size limit/);
 });
 
