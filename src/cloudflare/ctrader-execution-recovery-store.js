@@ -6,7 +6,7 @@ function requireDatabase(db) {
 
 function requireAccountId(value) {
   const accountId = String(value ?? "");
-  if (!/^\\d{1,30}$/.test(accountId)) throw new Error("A verified numeric demo account ID is required.");
+  if (!/^\d{1,30}$/.test(accountId)) throw new Error("A verified numeric demo account ID is required.");
   return accountId;
 }
 
@@ -61,7 +61,7 @@ export async function transitionCTraderOrderIntent(db, {
       !Object.hasOwn(TRANSITIONS, fromState) || !TRANSITIONS[fromState].has(toState)) {
     throw new Error("Invalid cTrader order intent transition.");
   }
-  if (brokerPositionId !== null && !/^\\d{1,30}$/.test(String(brokerPositionId))) {
+  if (brokerPositionId !== null && !/^\d{1,30}$/.test(String(brokerPositionId))) {
     throw new Error("Invalid broker position ID.");
   }
   const now = requireTimestamp(nowMs);
@@ -77,7 +77,7 @@ export async function saveCTraderActivePosition(db, { accountId, positionId, pos
   requireDatabase(db);
   const account = requireAccountId(accountId);
   const id = String(positionId ?? "");
-  if (!/^\\d{1,30}$/.test(id)) throw new Error("A valid broker position ID is required.");
+  if (!/^\d{1,30}$/.test(id)) throw new Error("A valid broker position ID is required.");
   const json = safeJson(position);
   const now = requireTimestamp(nowMs);
   await db.prepare(
@@ -107,7 +107,7 @@ export async function clearCTraderActivePosition(db, accountId, positionId) {
   requireDatabase(db);
   const account = requireAccountId(accountId);
   const id = String(positionId ?? "");
-  if (!/^\\d{1,30}$/.test(id)) throw new Error("A valid broker position ID is required.");
+  if (!/^\d{1,30}$/.test(id)) throw new Error("A valid broker position ID is required.");
   const result = await db.prepare(
     "DELETE FROM ctrader_active_positions WHERE account_id = ? AND position_id = ?"
   ).bind(account, id).run();
