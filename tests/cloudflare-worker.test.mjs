@@ -91,3 +91,47 @@ test("non-API requests are passed to the static asset binding", async () => {
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "asset:/dashboard");
 });
+
+
+test("cTrader OAuth start creates one-time state and redirects with trading scope", async () => {
+  let inserted;
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          inserted = { sql, values };
+          return { async run() { return { success: true }; } };
+        }
+      };
+    }
+  };
+  const response = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/start?mode=trading"),
+    { ...env, CTRADER_DB: db, CTRADER_CLIENT_ID: "client-123",
+      CTRADER_REDIRECT_URI: "https://desk.example/api/ctrader/oauth/callback" }
+  );
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get("location"), /scope=trading/);
+  assert.match(response.headers.get("location"), /state=[A-Za-z0-9_-]{43}/);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.match(inserted.sql, /INSERT INTO oauth_states/);
+  assert.equal(inserted.values[3], "trading");
+});
+
+test("cTrader OAuth start rejects invalid modes and missing configuration", async () => {
+  const db = { prepare() { return { bind() { return { async run() {} }; } }; } };
+  const invalid = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/start?mode=live"),
+    { ...env, CTRADER_DB: db, CTRADER_CLIENT_ID: "client",
+      CTRADER_REDIRECT_URI: "https://desk.example/api/ctrader/oauth/callback" }
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, "invalid_access_mode");
+
+  const missing = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/start"),
+    { ...env, CTRADER_DB: db }
+  );
+  assert.equal(missing.status, 503);
+  assert.equal((await missing.json()).error, "ctrader_oauth_not_configured");
+});
