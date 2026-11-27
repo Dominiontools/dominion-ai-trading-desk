@@ -39,7 +39,6 @@ class MockWebSocket {
 test("OAuth callback consumes state, verifies demo trading access, encrypts tokens and never enables trading", async () => {
   const originalFetch = globalThis.fetch;
   const originalSocket = globalThis.WebSocket;
-  const originalCrypto = globalThis.crypto;
   const calls = [];
   const db = {
     prepare(sql) {
@@ -102,7 +101,6 @@ test("OAuth callback consumes state, verifies demo trading access, encrypts toke
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.WebSocket = originalSocket;
-    globalThis.crypto = originalCrypto;
   }
 });
 
