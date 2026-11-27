@@ -18,6 +18,7 @@ export class CTraderDemoSession {
   eventWaiters = new Set();
   accountId = "";
   heartbeatTimer = null;
+  lastMessageAt = 0;
 
   async connect(timeoutMs = 10_000) {
     if (this.socket) throw new Error("CTRADER_SESSION_ALREADY_CONNECTED");
@@ -59,6 +60,7 @@ export class CTraderDemoSession {
   }
 
   onMessage(data) {
+    this.lastMessageAt = Date.now();
     let message;
     try {
       message = JSON.parse(messageText(data));
