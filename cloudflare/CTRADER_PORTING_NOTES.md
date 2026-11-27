@@ -244,3 +244,13 @@ cycle. The next integration must reconcile the broker's exact order/position sta
 only then transition the intent to `FILLED` or `REJECTED`, persist the canonical
 protected-position snapshot, and release the execution lock. No live or demo order has
 been submitted by this source change.
+
+
+## Exact broker confirmation and durable position recovery
+
+- `src/cloudflare/ctrader-order-reconciliation.js` adds a separate confirmation step after an order submission returns or an uncertain result is reconciled.
+- It accepts only a broker order carrying the exact submitted `clientOrderId`; it does not infer identity from symbol, side, volume, label, or timing.
+- It requires a broker position ID, symbol ID, side, volume, entry price, stop-loss, and take-profit before persisting a canonical D1 active-position snapshot.
+- The active-position snapshot is saved before the order intent transitions from `SUBMITTED` or `UNKNOWN` to `FILLED`. If the state transition fails, the saved broker position remains durable and the unresolved intent continues to block new entries.
+- An already-stored different active position prevents an overwrite.
+- The helper is not yet wired to the execution cycle. The broker API response must first be proven to expose the exact client order ID in a field that can be trusted; otherwise the intent stays unresolved and execution remains blocked.
