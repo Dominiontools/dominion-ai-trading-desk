@@ -65,3 +65,15 @@ test("unresolved intents block fresh entries", () => {
   assert.equal(blocked.safe, false);
   assert.equal(blocked.reason, "UNRESOLVED_ORDER_INTENT");
 });
+
+test("missing durable D1 stop-loss or take-profit fails closed", () => {
+  const incomplete = {
+    ...storedPosition,
+    position: { symbolId: 10, side: "BUY", volume: 1000 }
+  };
+  const result = reconcileCTraderPositionState({
+    brokerPositions: [brokerPosition], storedPosition: incomplete
+  });
+  assert.equal(result.safe, false);
+  assert.ok(result.mismatches.includes("D1_PROTECTION_MISSING"));
+});
