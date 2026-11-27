@@ -1,7 +1,7 @@
 # Cloudflare migration plan
 
 This directory contains the Cloudflare replacement work for Dominion AI Trading Desk.
-All changes are made on the `cloudflare-deploy` branch. The existing Netlify projects,
+All migration work is developed on the separate `cloudflare-backend-migration` branch. The production Cloudflare project remains connected to `cloudflare-deploy`. The existing Netlify projects,
 deployments, environment variables, and Blob records are preservation-only until the
 Cloudflare replacement passes acceptance tests and the user approves the single final cutover.
 
@@ -91,3 +91,16 @@ consumption semantics. Execution locks require atomic acquisition and expiry.
   requirements before moving the broker execution loop.
 - The Python crypto engine is a separate migration track and is not made operational by this
   cTrader Worker.
+
+
+## Session coordinator prototype
+
+The pure policy helper in `src/cloudflare/ctrader-session-guard.js` requires an explicitly
+enabled demo session, verified trading permission, a confirmed non-live account, and a fresh
+broker heartbeat. It also provides bounded exponential reconnect backoff. It does not open a
+broker connection or place orders. See `cloudflare/CTRADER_SESSION_GUARD.md`.
+
+Cloudflare Durable Objects can make outbound WebSocket connections, but those connections do
+not hibernate and only prevent eviction for a maximum of 15 minutes per connection. The
+cTrader session design must therefore include reconnect/re-authentication and state recovery;
+a permanent in-memory broker session must not be assumed. See `cloudflare/CTRADER_PORTING_NOTES.md`.
