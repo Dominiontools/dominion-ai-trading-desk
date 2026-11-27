@@ -135,3 +135,24 @@ test("cTrader OAuth start rejects invalid modes and missing configuration", asyn
   assert.equal(missing.status, 503);
   assert.equal((await missing.json()).error, "ctrader_oauth_not_configured");
 });
+
+
+test("cTrader OAuth callback rejects missing setup and incomplete authorization", async () => {
+  const missingStorage = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/callback?code=abc&state=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"),
+    env
+  );
+  assert.equal(missingStorage.status, 503);
+
+  const noCode = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/callback"),
+    { ...env, CTRADER_DB: {} }
+  );
+  assert.equal(noCode.status, 400);
+
+  const wrongMethod = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/oauth/callback", { method: "POST" }),
+    { ...env, CTRADER_DB: {} }
+  );
+  assert.equal(wrongMethod.status, 405);
+});
