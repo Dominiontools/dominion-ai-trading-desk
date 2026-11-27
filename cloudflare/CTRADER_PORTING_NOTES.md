@@ -224,3 +224,6 @@ The existing `ctrader-risk.mjs` logic has been ported to `src/cloudflare/ctrader
 The existing `ctrader-strategy.mts` logic has been ported to `src/cloudflare/ctrader-strategy.js`, retaining the scalp (5m/1h), intraday (15m/4h), and swing (4h/1d) profiles and its EMA/RSI/MACD, ATR, structure, liquidity sweep, order-block, fair-value-gap, Fibonacci, and London/New York session confluence checks. The session filter is in `ctrader-session.js` and retains IANA timezone/DST handling.
 
 These are strategy/risk primitives only. They have not yet been wired to a Cloudflare order cycle. The next port must preserve the legacy checks for USD deposit currency, symbol quote currency, verified broker fee metadata, minimum stop/target distances, price direction, slippage, margin, broker-side protection, daily stop, one-position limit, partial fills, and emergency close. No order route should call these primitives until that full flow and its restart/failure tests are in place.
+## Broker-confirmed close helper
+
+`src/cloudflare/ctrader-close.js` ports the legacy close helper. It treats a close request or timeout as inconclusive, re-reads the broker position list, rejects ambiguous duplicate matches, and reports `closed: true` only when the broker no longer reports that exact position. This helper is not yet wired into an execution route.
