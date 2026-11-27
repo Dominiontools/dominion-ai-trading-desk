@@ -5,6 +5,19 @@ All changes are made on the `cloudflare-deploy` branch. The existing Netlify pro
 deployments, environment variables, and Blob records are preservation-only until the
 Cloudflare replacement passes acceptance tests and the user approves the single final cutover.
 
+## Cloudflare build configuration
+
+The connected Cloudflare Worker project is configured with:
+- Production branch: `cloudflare-deploy`
+- Build command: `npm run build`
+- Deploy command: `npx wrangler deploy`
+- Root directory: `/`
+- Worker static assets: `./dist` (from `wrangler.jsonc`)
+
+The package build script runs the TypeScript application check followed by the Vite production
+build. Keep the command exactly as `npm run build` (without punctuation). A push to this
+branch can trigger Cloudflare's connected Git build; do not push merely to test repeatedly.
+
 ## Service boundaries
 
 - `/api/ctrader/callback`: OAuth callback and authorization-code exchange.
