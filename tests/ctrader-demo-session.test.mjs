@@ -4,10 +4,13 @@ import { CTraderDemoSession, trendbarsToCandles } from "../src/cloudflare/ctrade
 
 class MockWebSocket {
   static OPEN = 1;
+  static instances = [];
   constructor(url) {
     this.url = url;
     this.readyState = 1;
     this.listeners = new Map();
+    this.sent = [];
+    MockWebSocket.instances.push(this);
     queueMicrotask(() => this.emit("open", {}));
   }
   addEventListener(type, callback) {
@@ -19,6 +22,7 @@ class MockWebSocket {
     for (const callback of this.listeners.get(type) ?? []) callback(event);
   }
   send(raw) {
+    this.sent.push(JSON.parse(raw));
     const request = JSON.parse(raw);
     const payloads = {
       2100: [2101, {}],
@@ -60,6 +64,8 @@ test("session connects to demo endpoint and authorizes only the selected demo ac
     assert.equal(session.socket.url, "wss://demo.ctraderapi.com:5036");
     await session.authorize("access", "456", "client", "secret");
     assert.equal(session.requireAccount(), 456);
+    session.sendHeartbeat();
+    assert.equal(MockWebSocket.instances.at(-1).sent.at(-1).payloadType, 51);
     const symbols = await session.symbols();
     assert.equal(symbols[0].symbolName, "EURUSD");
     const details = await session.symbolDetails(10);
