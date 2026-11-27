@@ -187,3 +187,12 @@ No Durable Object namespace, D1 database, secrets, or live broker connection has
 - Never exposes tokens through the dashboard status response.
 
 The helper is not yet wired to an execution route. Callers must keep its returned credentials in server memory only, never log them or serialize them to a client. The existing callback continues to leave automation and live trading disabled.
+
+
+## cTrader WebSocket heartbeat requirement
+
+The Cloudflare session client now sends cTrader `ProtoHeartbeatEvent` (payload type 51) every 10 seconds while its socket is open and clears the interval on close. Spotware's connection guide requires a heartbeat every 10 seconds to keep a connection alive; its common-messages reference identifies payload type 51:
+- https://help.ctrader.com/open-api/connection/
+- https://help.ctrader.com/open-api/common-messages/
+
+This heartbeat is covered by a unit test. It does not prove a real broker connection or make the Worker session persistent. The execution-cycle design must still close sessions cleanly and recover from disconnects/restarts.
