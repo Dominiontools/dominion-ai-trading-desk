@@ -123,3 +123,22 @@ environment secrets, check cTrader account status, or enable automation. The rou
 call the D1 one-time nonce primitive after signature verification and before processing
 the request, then apply all existing demo-only/risk/explicit-confirmation checks. No
 control route has been connected and no engine setting can be changed through this helper.
+
+
+## OAuth URL and token validation primitives
+
+Added `src/cloudflare/ctrader-oauth.js` with two isolated helpers:
+
+- Builds the cTrader authorization URL for either view-only (`accounts`) or trading scope.
+- Requires the redirect URI to be HTTPS, same-origin with the Worker request, and exactly
+  `/api/ctrader/oauth/callback`; it rejects open redirects and malformed state.
+- Validates the token exchange response before encryption or persistence, including both
+  access and refresh tokens and a positive expiry.
+
+Tests cover both access modes, callback-origin/path validation, malformed state, and
+incomplete/error token responses.
+
+These are primitives only. No OAuth start or callback route is enabled yet, no cTrader
+credentials are configured in Cloudflare, and no authorization request has been sent.
+The callback URI must be registered in the Spotware app only after the complete callback
+route is implemented and reviewed. The old Netlify redirect remains unchanged.
