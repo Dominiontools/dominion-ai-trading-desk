@@ -6,7 +6,8 @@ import {
   saveCTraderActivePosition,
   readCTraderActivePosition,
   clearCTraderActivePosition,
-  appendCTraderEngineEvent
+  appendCTraderEngineEvent,
+  readUnresolvedCTraderOrderIntents
 } from "../src/cloudflare/ctrader-execution-recovery-store.js";
 
 function mockD1({ first = null, changes = 1 } = {}) {
@@ -125,4 +126,25 @@ test("recovery store rejects invalid account IDs and oversized snapshots", async
   await assert.rejects(saveCTraderActivePosition(db, {
     accountId, positionId: "88", position: { data: "x".repeat(20_000) }
   }), /size limit/);
+});
+
+
+test("unresolved order intents are read by account and decoded safely", async () => {
+  const db = {
+    calls: [],
+    prepare(sql) {
+      const call = { sql, values: [] }; this.calls.push(call);
+      return { bind(...values) { call.values = values; return this; },
+        async all() { return { results: [{
+          client_order_id: clientOrderId, intent_json: JSON.stringify({ symbol: "EURUSD" }),
+          state: "UNKNOWN", broker_position_id: null, created_at: 10, updated_at: 11
+        }] }; } };
+    }
+  };
+  const rows = await readUnresolvedCTraderOrderIntents(db, accountId);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].state, "UNKNOWN");
+  assert.deepEqual(rows[0].intent, { symbol: "EURUSD" });
+  assert.match(db.calls[0].sql, /state IN \('PREPARED', 'SUBMITTED', 'UNKNOWN'\)/);
+  assert.deepEqual(db.calls[0].values, [accountId]);
 });
