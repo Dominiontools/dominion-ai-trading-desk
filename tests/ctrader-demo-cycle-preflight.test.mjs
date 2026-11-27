@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileCTraderDemoCycle } from "../src/cloudflare/ctrader-demo-cycle-preflight.js";
+import { evaluateCTraderDemoSession } from "../src/cloudflare/ctrader-session-guard.js";
 
 const config = {
   enabled: true, environment: "demo", profile: "intraday", scoreThreshold: 6,
@@ -26,6 +27,7 @@ function setup(overrides = {}) {
     async reconcile() { calls.push("reconcile"); return { positions: [], orders: [] }; },
     async close() { calls.push("close"); }
   };
+  if (overrides.lastMessageAt !== undefined) session.lastMessageAt = overrides.lastMessageAt;
   const services = {
     async readConfig() { return { config }; },
     async readStatus() { return status; },
@@ -72,6 +74,19 @@ test("demo cycle preflight locks, authenticates, reconciles flat state, and rele
   assert.ok(calls.includes("close"));
   assert.ok(calls.includes("unlock"));
   assert.ok(calls.some((item) => Array.isArray(item) && item[1] === "CYCLE_PREFLIGHT_RECONCILED"));
+});
+
+
+test("stale actual broker message timestamp blocks preflight", async () => {
+  const { resultPromise, calls } = setup({
+    lastMessageAt: 1_800_000_000_000 - 16_000,
+    services: { evaluateSession: evaluateCTraderDemoSession }
+  });
+  const result = await resultPromise;
+  assert.equal(result.safe, false);
+  assert.equal(result.reason, "DEMO_SESSION_GUARD_REJECTED");
+  assert.ok(calls.includes("close"));
+  assert.ok(calls.includes("unlock"));
 });
 
 test("disabled automation stops before acquiring a lock or connecting", async () => {
