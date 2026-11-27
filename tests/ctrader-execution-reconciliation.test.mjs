@@ -77,3 +77,35 @@ test("missing durable D1 stop-loss or take-profit fails closed", () => {
   assert.equal(result.safe, false);
   assert.ok(result.mismatches.includes("D1_PROTECTION_MISSING"));
 });
+
+test("legacy durable snapshot aliases reconcile the original protected stop", () => {
+  const legacy = {
+    positionId: "88",
+    position: {
+      symbolId: 10, side: "BUY", volume: 1000,
+      initialStopLoss: 1.09, target3R: 1.13,
+      entryPrice: 1.10, breakEvenSet: false
+    }
+  };
+  assert.equal(reconcileCTraderPositionState({
+    brokerPositions: [brokerPosition], storedPosition: legacy
+  }).safe, true);
+});
+
+test("legacy durable snapshot expects entry stop after break-even is confirmed", () => {
+  const legacy = {
+    positionId: "88",
+    position: {
+      symbolId: 10, side: "BUY", volume: 1000,
+      initialStopLoss: 1.09, target3R: 1.13,
+      entryPrice: 1.10, breakEvenSet: true
+    }
+  };
+  const atBreakEven = { ...brokerPosition, stopLoss: 1.10 };
+  assert.equal(reconcileCTraderPositionState({
+    brokerPositions: [atBreakEven], storedPosition: legacy
+  }).safe, true);
+  assert.ok(reconcileCTraderPositionState({
+    brokerPositions: [brokerPosition], storedPosition: legacy
+  }).mismatches.includes("STOP_LOSS"));
+});
