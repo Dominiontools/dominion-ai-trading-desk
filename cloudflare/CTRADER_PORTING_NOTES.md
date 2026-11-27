@@ -227,3 +227,20 @@ These are strategy/risk primitives only. They have not yet been wired to a Cloud
 ## Broker-confirmed close helper
 
 `src/cloudflare/ctrader-close.js` ports the legacy close helper. It treats a close request or timeout as inconclusive, re-reads the broker position list, rejects ambiguous duplicate matches, and reports `closed: true` only when the broker no longer reports that exact position. This helper is not yet wired into an execution route.
+
+## One-shot durable demo order submission guard
+
+Added `src/cloudflare/ctrader-order-submission.js` as a narrow execution primitive. It
+atomically reserves the client order ID in D1, advances the intent to `SUBMITTED`
+before making the single broker request, and never retries that request automatically.
+If the broker call throws or times out, it records `UNKNOWN` and returns
+`ORDER_RESULT_UNKNOWN_RECONCILIATION_REQUIRED`. A successful response remains
+`SUBMITTED_AWAITING_BROKER_RECONCILIATION`; this helper deliberately does not mark
+an order filled based only on the submit response.
+
+Tests cover reserve-before-submit ordering, duplicate intent rejection without a broker
+call, and uncertain result handling. This helper is not yet connected to the strategy
+cycle. The next integration must reconcile the broker's exact order/position state and
+only then transition the intent to `FILLED` or `REJECTED`, persist the canonical
+protected-position snapshot, and release the execution lock. No live or demo order has
+been submitted by this source change.
