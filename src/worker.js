@@ -17,6 +17,24 @@ const json = (body, status = 200) =>
     }
   });
 
+const OAUTH_STATE_COOKIE = "dominion_ctrader_oauth_state";
+const OAUTH_COOKIE_PATH = "/api/ctrader/oauth/callback";
+
+function readOAuthStateCookie(request) {
+  const cookie = request.headers.get("cookie") ?? "";
+  for (const part of cookie.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator >= 0 && part.slice(0, separator).trim() === OAUTH_STATE_COOKIE) {
+      return part.slice(separator + 1).trim();
+    }
+  }
+  return null;
+}
+
+function oauthStateCookie(value, maxAge) {
+  return `${OAUTH_STATE_COOKIE}=${value}; Max-Age=${maxAge}; Path=${OAUTH_COOKIE_PATH}; HttpOnly; Secure; SameSite=None`;
+}
+
 function randomOAuthState() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   let binary = "";
@@ -72,31 +90,38 @@ export default {
 
 
     if (url.pathname === "/api/ctrader/oauth/callback") {
-      const html = (title, message, status = 200) => new Response(
+      const html = (title, message, status = 200, clearCookie = false) => new Response(
         `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;line-height:1.5"><h2>${title}</h2><p>${message}</p></body></html>`,
-        { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" } }
+        { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", ...(clearCookie ? { "set-cookie": oauthStateCookie("", 0) } : {}) } }
       );
       if (request.method !== "GET") return html("Method not allowed", "Start cTrader authorization from Dominion AI Trading Desk.", 405);
-      if (!env.CTRADER_DB) return html("Setup incomplete", "Secure cTrader storage is not configured.", 503);
+      if (!env.CTRADER_DB) return html("Setup incomplete", "Secure cTrader storage is not configured.", 503, true);
       const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state");
-      if (url.searchParams.has("error")) return html("Authorization not completed", "cTrader did not grant access. Return to the app and try again.", 400);
-      if (!code || code.length > 4096 || !state) return html("Authorization details missing", "Start cTrader authorization again from the app.", 400);
+      const returnedState = url.searchParams.get("state");
+      if (url.searchParams.has("error")) return html("Authorization not completed", "cTrader did not grant access. Return to the app and try again.", 400, true);
+      if (!code || code.length > 4096) return html("Authorization details missing", "Start cTrader authorization again from the app.", 400, true);
+      const cookieState = readOAuthStateCookie(request);
+      const state = returnedState
+        ? (/^[A-Za-z0-9_-]{40,60}$/.test(returnedState) ? returnedState : null)
+        : cookieState;
+      if (!state || !/^[A-Za-z0-9_-]{40,60}$/.test(state)) {
+        return html("Authorization session missing", "The browser authorization session was not preserved. Start again from Dominion AI Trading Desk in the same browser.", 400, true);
+      }
       const clientId = typeof env.CTRADER_CLIENT_ID === "string" ? env.CTRADER_CLIENT_ID.trim() : "";
       const clientSecret = typeof env.CTRADER_CLIENT_SECRET === "string" ? env.CTRADER_CLIENT_SECRET : "";
       const redirectUri = typeof env.CTRADER_REDIRECT_URI === "string" ? env.CTRADER_REDIRECT_URI.trim() : "";
       const encryptionKey = typeof env.CTRADER_TOKEN_ENCRYPTION_KEY === "string" ? env.CTRADER_TOKEN_ENCRYPTION_KEY : "";
       if (!clientId || !clientSecret || !redirectUri || !encryptionKey) {
-        return html("Setup incomplete", "Required cTrader server settings are missing. No token was saved.", 503);
+        return html("Setup incomplete", "Required cTrader server settings are missing. No token was saved.", 503, true);
       }
       try {
         const callback = new URL(redirectUri);
         if (callback.protocol !== "https:" || callback.origin !== url.origin ||
             callback.pathname !== "/api/ctrader/oauth/callback" || callback.search || callback.hash) {
-          return html("Setup incomplete", "The registered cTrader callback URL does not match this Cloudflare service.", 503);
+          return html("Setup incomplete", "The registered cTrader callback URL does not match this Cloudflare service.", 503, true);
         }
         const oauthState = await consumeOAuthState(env.CTRADER_DB, state);
-        if (!oauthState) return html("Authorization session expired", "The one-time authorization session is invalid or expired. Start again from the app.", 400);
+        if (!oauthState) return html("Authorization session expired", "The one-time authorization session is invalid or expired. Start again from the app.", 400, true);
         const accessKind = oauthState.accessKind;
         const tokenParams = new URLSearchParams({
           grant_type: "authorization_code", code, redirect_uri: redirectUri,
@@ -105,7 +130,7 @@ export default {
         const tokenResponse = await fetch(`https://openapi.ctrader.com/apps/token?${tokenParams.toString()}`, {
           method: "GET", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000)
         });
-        if (!tokenResponse.ok) return html("Token exchange failed", "cTrader did not accept the authorization code. No token was saved.", 502);
+        if (!tokenResponse.ok) return html("Token exchange failed", "cTrader did not accept the authorization code. No token was saved.", 502, true);
         const tokenData = validateCTraderTokenResponse(await tokenResponse.json());
         const verified = await verifyCTraderDemoAccount({
           accessToken: tokenData.accessToken, clientId, clientSecret,
@@ -123,10 +148,10 @@ export default {
           demoAccountCount: verified.demoAccountCount, liveTradingEnabled: false
         });
         return html("cTrader demo authorization received",
-          `Your ${accessKind === "trading" ? "demo-trading" : "view-only"} permission was verified. The demo account was authenticated and tokens were encrypted before storage. No trade was placed.`);
+          `Your ${accessKind === "trading" ? "demo-trading" : "view-only"} permission was verified. The demo account was authenticated and tokens were encrypted before storage. No trade was placed.`, 200, true);
       } catch {
         return html("cTrader authorization could not be completed",
-          "The callback failed during secure verification. No trade was placed. Start authorization again after the configuration issue is fixed.", 502);
+          "The callback failed during secure verification. No trade was placed. Start authorization again after the configuration issue is fixed.", 502, true);
       }
     }
 
