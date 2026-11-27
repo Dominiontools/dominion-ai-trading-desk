@@ -174,3 +174,16 @@ Therefore:
 5. If those tests cannot demonstrate safe recovery within Cloudflare's execution model, keep the broker execution process on a persistent runtime and use Cloudflare for OAuth, API, and secure storage.
 
 No Durable Object namespace, D1 database, secrets, or live broker connection has been provisioned by this documentation change.
+
+
+## Encrypted demo-token renewal
+
+`src/cloudflare/ctrader-token-service.js` now provides a server-only token loader:
+- Reads only the requested view-only or trading token record from D1.
+- Decrypts the AES-256-GCM record and checks its demo environment, access kind, account binding, and expiry metadata.
+- Returns a still-valid token without a network request.
+- Refreshes a token when it is expired or within the configured 60-second safety window.
+- Encrypts the replacement token before writing it back to D1.
+- Never exposes tokens through the dashboard status response.
+
+The helper is not yet wired to an execution route. Callers must keep its returned credentials in server memory only, never log them or serialize them to a client. The existing callback continues to leave automation and live trading disabled.
