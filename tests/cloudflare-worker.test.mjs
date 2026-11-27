@@ -31,6 +31,39 @@ test("health endpoint rejects non-GET requests", async () => {
   assert.equal(response.status, 405);
 });
 
+test("cTrader status endpoint is read-only and requires its D1 binding", async () => {
+  const missing = await worker.fetch(new Request("https://desk.example/api/ctrader/status"), env);
+  assert.equal(missing.status, 503);
+  assert.equal((await missing.json()).error, "ctrader_storage_unavailable");
+
+  const wrongMethod = await worker.fetch(new Request("https://desk.example/api/ctrader/status", {
+    method: "POST"
+  }), { ...env, CTRADER_DB: {} });
+  assert.equal(wrongMethod.status, 405);
+});
+
+test("cTrader status endpoint returns safe disconnected defaults from D1", async () => {
+  const db = {
+    prepare() {
+      return {
+        async first() { return null; }
+      };
+    }
+  };
+  const response = await worker.fetch(
+    new Request("https://desk.example/api/ctrader/status"),
+    { ...env, CTRADER_DB: db }
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.status.connected, false);
+  assert.equal(body.status.environment, "demo");
+  assert.equal(body.trading_enabled, false);
+  assert.equal(body.live_trading_enabled, false);
+  assert.equal(body.config, null);
+});
+
 test("unmigrated cTrader routes fail closed without broker actions", async () => {
   const response = await worker.fetch(new Request("https://desk.example/api/ctrader/status"), env);
   assert.equal(response.status, 503);
