@@ -17,6 +17,7 @@ export class CTraderDemoSession {
   pending = new Map();
   eventWaiters = new Set();
   accountId = "";
+  heartbeatTimer = null;
 
   async connect(timeoutMs = 10_000) {
     if (this.socket) throw new Error("CTRADER_SESSION_ALREADY_CONNECTED");
@@ -35,10 +36,21 @@ export class CTraderDemoSession {
         } else resolve();
       };
       const timer = setTimeout(() => finish(new Error("CTRADER_WEBSOCKET_CONNECT_TIMEOUT")), timeoutMs);
-      socket.addEventListener("open", () => finish());
-      socket.addEventListener("error", () => finish(new Error("CTRADER_WEBSOCKET_CONNECT_FAILED")));
+      socket.addEventListener("open", () => {
+        finish();
+        this.heartbeatTimer = setInterval(() => {
+          try { this.sendHeartbeat(); }
+          catch { this.failAll(new Error("CTRADER_HEARTBEAT_FAILED")); }
+        }, 10_000);
+      });
+      socket.addEventListener("error", () => {
+        if (!settled) finish(new Error("CTRADER_WEBSOCKET_CONNECT_FAILED"));
+        else this.failAll(new Error("CTRADER_WEBSOCKET_ERROR"));
+      });
       socket.addEventListener("message", (event) => this.onMessage(event.data));
       socket.addEventListener("close", () => {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
         this.failAll(new Error("CTRADER_WEBSOCKET_CLOSED"));
         this.socket = null;
         if (!settled) finish(new Error("CTRADER_WEBSOCKET_CLOSED"));
@@ -113,6 +125,18 @@ export class CTraderDemoSession {
   removeWaiter(waiter) {
     clearTimeout(waiter.timer);
     this.eventWaiters.delete(waiter);
+  }
+
+  sendHeartbeat() {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      throw new Error("CTRADER_WEBSOCKET_NOT_OPEN");
+    }
+    socket.send(JSON.stringify({
+      clientMsgId: randomMessageId(),
+      payloadType: 51,
+      payload: {}
+    }));
   }
 
   request(payloadType, expectedPayloadType, payload, predicate, timeoutMs = 9000) {
@@ -295,6 +319,8 @@ export class CTraderDemoSession {
   async close() {
     const socket = this.socket;
     this.socket = null;
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
     if (!socket) return;
     this.failAll(new Error("CTRADER_SESSION_CLOSED"));
     try { socket.close(); } catch { /* ignore close race */ }
