@@ -18,14 +18,11 @@ function invalid(error) {
 }
 
 /**
- * Validates the cTrader control payload without enabling trading or accessing
- * storage. The caller must separately authenticate, consume the nonce, verify
- * the connected demo trading account, and persist the result.
+ * Pure configuration validation. The caller must separately authenticate,
+ * consume the replay nonce, verify the connected demo trading account, and persist.
  */
 export function validateCTraderEngineConfig(body, previous = null) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return invalid("INVALID_CONTROL_BODY");
-  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return invalid("INVALID_CONTROL_BODY");
   if (!previous || typeof previous !== "object" || Array.isArray(previous)) previous = {};
   if (typeof body.enabled !== "boolean") return invalid("ENABLED_FLAG_REQUIRED");
   if (body.enabled && body.confirmDemoAutomation !== true) {
@@ -58,22 +55,25 @@ export function validateCTraderEngineConfig(body, previous = null) {
   if (!Array.isArray(rawSymbols) || rawSymbols.length < 1 || rawSymbols.length > 20) {
     return invalid("INVALID_SYMBOL_WATCHLIST");
   }
-  const symbols = rawSymbols.map((item) => String(item).replace(/[\\s/_.-]/g, "").toUpperCase());
+  // Strip separators only; preserve every letter, including the D in USD.
+  const symbols = rawSymbols.map((item) => String(item).replace(/[^A-Za-z0-9]/g, "").toUpperCase());
   if (symbols.some((item) => !/^[A-Z0-9]{3,20}$/.test(item)) ||
       new Set(symbols).size !== symbols.length) {
     return invalid("INVALID_OR_DUPLICATE_SYMBOL");
   }
 
-  const config = {
-    ...prior,
-    enabled: body.enabled,
-    profile,
-    scoreThreshold,
-    useSessionFilter,
-    riskPerTradePct,
-    dailyLossLimitPct,
-    symbols,
-    environment: "demo",
+  return {
+    ok: true,
+    config: {
+      ...prior,
+      enabled: body.enabled,
+      profile,
+      scoreThreshold,
+      useSessionFilter,
+      riskPerTradePct,
+      dailyLossLimitPct,
+      symbols,
+      environment: "demo",
+    },
   };
-  return { ok: true, config };
 }

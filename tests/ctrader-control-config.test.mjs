@@ -17,10 +17,7 @@ test("uses safe defaults while remaining disabled", () => {
 });
 
 test("requires explicit confirmation before enabling", () => {
-  assert.equal(
-    validateCTraderEngineConfig({ enabled: true }).error,
-    "EXPLICIT_DEMO_AUTOMATION_CONFIRMATION_REQUIRED",
-  );
+  assert.equal(validateCTraderEngineConfig({ enabled: true }).error, "EXPLICIT_DEMO_AUTOMATION_CONFIRMATION_REQUIRED");
   const result = validateCTraderEngineConfig({ enabled: true, confirmDemoAutomation: true });
   assert.equal(result.ok, true);
   assert.equal(result.config.enabled, true);
@@ -48,7 +45,7 @@ test("validates session filter and risk limits", () => {
   assert.equal(validateCTraderEngineConfig({ enabled: false, dailyLossLimitPct: 2.01 }).error, "DAILY_LOSS_LIMIT_MUST_BE_BETWEEN_0_5_AND_2_PERCENT");
 });
 
-test("normalizes symbols and rejects invalid, duplicate, or oversized lists", () => {
+test("normalizes symbols without dropping letters and rejects invalid or duplicate entries", () => {
   const result = validateCTraderEngineConfig({ enabled: false, symbols: ["xau/usd", "EUR_USD", "gbp-usd"] });
   assert.equal(result.ok, true);
   assert.deepEqual(result.config.symbols, ["XAUUSD", "EURUSD", "GBPUSD"]);
@@ -58,13 +55,7 @@ test("normalizes symbols and rejects invalid, duplicate, or oversized lists", ()
 });
 
 test("preserves omitted settings from previous config", () => {
-  const previous = {
-    ...DEFAULT_CTRADER_ENGINE_CONFIG,
-    profile: "swing",
-    scoreThreshold: 9,
-    symbols: ["XAUUSD"],
-    riskPerTradePct: 0.25,
-  };
+  const previous = { ...DEFAULT_CTRADER_ENGINE_CONFIG, profile: "swing", scoreThreshold: 9, symbols: ["XAUUSD"], riskPerTradePct: 0.25 };
   const result = validateCTraderEngineConfig({ enabled: false }, previous);
   assert.equal(result.ok, true);
   assert.equal(result.config.profile, "swing");
