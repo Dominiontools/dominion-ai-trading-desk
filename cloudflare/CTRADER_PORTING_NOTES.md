@@ -142,3 +142,16 @@ These are primitives only. No OAuth start or callback route is enabled yet, no c
 credentials are configured in Cloudflare, and no authorization request has been sent.
 The callback URI must be registered in the Spotware app only after the complete callback
 route is implemented and reviewed. The old Netlify redirect remains unchanged.
+
+
+## Cloudflare OAuth route implementation
+
+The migration branch now contains:
+- `GET /api/ctrader/oauth/start?mode=view-only|trading`: validates the requested mode and required public client/callback settings, creates a 32-byte random base64url state, stores only its SHA-256 hash in D1 with a 10-minute expiry, and redirects to cTrader.
+- `GET /api/ctrader/oauth/callback`: consumes the one-time D1 state before exchanging the authorization code, validates the token response, verifies the granted permission scope against the cTrader demo Open API, authenticates a demo account, encrypts the token record with AES-256-GCM, and stores only encrypted tokens and safe demo status metadata.
+- `src/cloudflare/ctrader-demo-verification.js`: demo-only app auth, account-list, permission-scope and account-auth sequence. It rejects missing demo accounts and mismatched account authentication.
+- The callback returns a minimal no-store HTML result and does not expose tokens, account identifiers, authorization codes, or provider error detail.
+
+Required Cloudflare Worker secrets/settings are `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_TOKEN_ENCRYPTION_KEY`; `CTRADER_REDIRECT_URI` is a non-secret URL setting. The D1 binding must be named `CTRADER_DB` and the migration in `cloudflare/migrations/0001_initial_schema.sql` must be applied. The registered Spotware callback must be the exact Worker URL plus `/api/ctrader/oauth/callback`.
+
+This is source implementation only. No D1 database/binding or secrets have been provisioned, no Spotware callback has been changed, and no live cTrader authorization has been attempted. The old Netlify callback and deployments remain untouched. The route does not place orders or enable automation; demo trading control and the broker-session runtime remain separate unfinished work.
