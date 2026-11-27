@@ -101,7 +101,7 @@ export async function acquireExecutionLock(db, lockName, lockId, nowMs = Date.no
     throw new Error("Invalid execution lock lifetime.");
   }
   const now = Math.floor(nowMs / 1000);
-  const expiresAt = Math.floor((nowMs + ttlMs) / 1000);
+  const expiresAt = Math.ceil((nowMs + ttlMs) / 1000);
   const row = await db.prepare(
     "INSERT INTO execution_locks (lock_name, lock_id, acquired_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(lock_name) DO UPDATE SET lock_id = excluded.lock_id, acquired_at = excluded.acquired_at, expires_at = excluded.expires_at WHERE execution_locks.expires_at <= excluded.acquired_at RETURNING lock_id, expires_at",
   ).bind(lockName, lockId, now, expiresAt).first();
