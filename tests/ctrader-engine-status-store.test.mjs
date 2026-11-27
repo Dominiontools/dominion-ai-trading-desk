@@ -47,6 +47,7 @@ test("status save persists only an allowlisted demo snapshot", async () => {
   assert.match(db.calls[0].sql, /ON CONFLICT\(id\) DO UPDATE/);
   const stored = JSON.parse(db.calls[0].values[0]);
   assert.equal(stored.environment, "demo");
+  assert.equal(stored.isLive, false);
   assert.equal(stored.liveTradingEnabled, false);
   assert.equal(stored.permissionScope, 1);
 });
