@@ -50,3 +50,25 @@ test("cTrader token record rejects unknown record formats", async () => {
     /unsupported format/,
   );
 });
+
+
+test("cTrader token encryption rejects non-object payloads", async () => {
+  await assert.rejects(encryptCTraderTokenRecord(null, key), /JSON object/);
+  await assert.rejects(encryptCTraderTokenRecord("token", key), /JSON object/);
+});
+
+test("cTrader token decryption rejects malformed base64 and invalid component lengths", async () => {
+  const record = await encryptCTraderTokenRecord({ token: "secret" }, key);
+  await assert.rejects(
+    decryptCTraderTokenRecord({ ...record, iv: "not base64!" }, key),
+    /Invalid base64/,
+  );
+  await assert.rejects(
+    decryptCTraderTokenRecord({ ...record, iv: Buffer.alloc(8, 1).toString("base64") }, key),
+    /component lengths/,
+  );
+  await assert.rejects(
+    decryptCTraderTokenRecord({ ...record, tag: Buffer.alloc(8, 1).toString("base64") }, key),
+    /component lengths/,
+  );
+});
