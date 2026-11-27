@@ -8,8 +8,16 @@ function toBase64(bytes) {
 }
 
 function fromBase64(value) {
+  if (typeof value !== "string" || value.length === 0 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new Error("Invalid base64 data in cTrader token record.");
+  }
   const binary = atob(value);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  if (toBase64(bytes) !== value) {
+    throw new Error("Non-canonical base64 data in cTrader token record.");
+  }
+  return bytes;
 }
 
 function decodeKey(keyText) {
@@ -25,6 +33,9 @@ function decodeKey(keyText) {
  * This helper deliberately does not read environment variables or persist data.
  */
 export async function encryptCTraderTokenRecord(payload, keyText, now = new Date()) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("cTrader token payload must be a JSON object.");
+  }
   const keyBytes = decodeKey(keyText);
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -54,13 +65,17 @@ export async function decryptCTraderTokenRecord(record, keyText) {
     throw new Error("Stored cTrader token record has an unsupported format.");
   }
   const key = await crypto.subtle.importKey("raw", decodeKey(keyText), "AES-GCM", false, ["decrypt"]);
+  const iv = fromBase64(record.iv);
   const ciphertext = fromBase64(record.ciphertext);
   const tag = fromBase64(record.tag);
+  if (iv.byteLength !== 12 || tag.byteLength !== 16 || ciphertext.byteLength === 0) {
+    throw new Error("Stored cTrader token record has invalid AES-GCM component lengths.");
+  }
   const combined = new Uint8Array(ciphertext.length + tag.length);
   combined.set(ciphertext);
   combined.set(tag, ciphertext.length);
   const clear = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromBase64(record.iv), tagLength: 128 },
+    { name: "AES-GCM", iv, tagLength: 128 },
     key,
     combined,
   );
