@@ -80,6 +80,7 @@ export default {
             location: authorizationUrl,
             "cache-control": "no-store",
             "referrer-policy": "no-referrer",
+            "set-cookie": oauthStateCookie(state, 600),
             "x-content-type-options": "nosniff"
           }
         });
