@@ -98,9 +98,9 @@ test("session rejects live account IDs and malformed account IDs", async () => {
 test("trendbar conversion removes incomplete candles and sorts valid history", () => {
   const now = Date.UTC(2026, 0, 1, 1, 0, 0);
   const bars = [
-    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 0, 30) / 60_000, low: 1_000_000, deltaOpen: 1000, deltaHigh: 3000, deltaClose: 2000, volume: 5 },
-    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 0, 0) / 60_000, low: 990_000, deltaOpen: 1000, deltaHigh: 3000, deltaClose: 2000, volume: 4 },
-    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 1, 0) / 60_000, low: 1_010_000, deltaOpen: 1000, deltaHigh: 3000, deltaClose: 2000, volume: 6 }
+    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 0, 30) / 60_000, low: 100_000, deltaOpen: 100, deltaHigh: 300, deltaClose: 200, volume: 5 },
+    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 0, 0) / 60_000, low: 99_000, deltaOpen: 100, deltaHigh: 300, deltaClose: 200, volume: 4 },
+    { utcTimestampInMinutes: Date.UTC(2026, 0, 1, 1, 0) / 60_000, low: 101_000, deltaOpen: 100, deltaHigh: 300, deltaClose: 200, volume: 6 }
   ];
   const candles = trendbarsToCandles("EURUSD", "FOREX", "30m", bars, 1800, now);
   assert.equal(candles.length, 2);
