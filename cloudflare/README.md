@@ -18,12 +18,11 @@ The package build script runs the TypeScript application check followed by the V
 build. Keep the command exactly as `npm run build` (without punctuation). A push to this
 branch can trigger Cloudflare's connected Git build; do not push merely to test repeatedly.
 
-## Build trigger note (2026-11-27)
+## Deployment isolation
 
-The Cloudflare dashboard's saved build command was verified as `npm run build`. This
-documentation-only commit is intended to create a fresh push event on the configured production
-branch so Cloudflare can pick up the corrected build configuration. It does not change
-application code, Worker routes, secrets, storage bindings, or trading behavior.
+Migration commits and CI runs are restricted to `cloudflare-backend-migration`. They do not
+trigger the production Cloudflare deployment, which remains connected to `cloudflare-deploy`.
+No deployment is authorized until the user approves the final cutover.
 
 ## Service boundaries
 
@@ -104,3 +103,12 @@ Cloudflare Durable Objects can make outbound WebSocket connections, but those co
 not hibernate and only prevent eviction for a maximum of 15 minutes per connection. The
 cTrader session design must therefore include reconnect/re-authentication and state recovery;
 a permanent in-memory broker session must not be assumed. See `cloudflare/CTRADER_PORTING_NOTES.md`.
+
+
+## Execution lease primitives
+
+The D1 store helper now includes atomic execution-lease acquisition and owner-only release.
+A live lease cannot be replaced before expiry; a release must present the exact lock ID.
+Callers must generate lock IDs with a cryptographically secure random source, use bounded
+lease durations, and fail closed if acquisition returns no lease. These primitives are not
+wired to a trading cycle yet and have not been exercised against a provisioned D1 database.
