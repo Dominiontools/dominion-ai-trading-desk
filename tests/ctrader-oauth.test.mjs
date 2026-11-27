@@ -85,3 +85,15 @@ test("cTrader token response validator rejects errors and incomplete or invalid 
     accessToken: "access", refreshToken: "refresh", tokenType: "Bearer", expiresIn: 0,
   }));
 });
+
+test("cTrader authorization URL safely encodes client ID and state query parameters", () => {
+  const url = new URL(buildCTraderAuthorizationUrl({
+    clientId: "client id/with spaces",
+    redirectUri: origin + "/api/ctrader/oauth/callback",
+    requestOrigin: origin,
+    accessKind: "view-only",
+    state,
+  }));
+  assert.equal(url.searchParams.get("client_id"), "client id/with spaces");
+  assert.equal(url.searchParams.get("state"), state);
+});
