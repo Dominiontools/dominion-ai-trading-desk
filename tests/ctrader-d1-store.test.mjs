@@ -6,6 +6,7 @@ import {
   saveEncryptedCTraderToken,
   readEncryptedCTraderToken,
   acquireExecutionLock,
+  renewExecutionLock,
   releaseExecutionLock,
 } from "../src/cloudflare/ctrader-d1-store.js";
 
@@ -145,4 +146,25 @@ test("short execution leases retain their full minimum lifetime across second bo
   assert.equal(db.calls[0].values[2], 1_800_000_000);
   assert.equal(db.calls[0].values[3], 1_800_000_002);
   assert.equal(lease.expiresAt, 1_800_000_002);
+});
+
+
+test("execution lease renewal requires the current owner and a live lease", async () => {
+  const db = mockD1({ firstResult: { lock_id: "r".repeat(48), expires_at: 1_800_000_092 } });
+  const lease = await renewExecutionLock(db, "ctrader-demo-cycle", "r".repeat(48), 1_800_000_001_500, 90_000);
+  assert.deepEqual(lease, {
+    lockName: "ctrader-demo-cycle",
+    lockId: "r".repeat(48),
+    expiresAt: 1_800_000_092,
+  });
+  assert.match(db.calls[0].sql, /WHERE lock_name = \? AND lock_id = \? AND expires_at > \? RETURNING/);
+  assert.equal(db.calls[0].values[1], "ctrader-demo-cycle");
+  assert.equal(db.calls[0].values[2], "r".repeat(48));
+});
+
+test("execution lease renewal fails when the lease is expired or owned by another worker", async () => {
+  const db = mockD1();
+  assert.equal(await renewExecutionLock(db, "ctrader-demo-cycle", "s".repeat(48), 1_800_000_000_000), null);
+  await assert.rejects(renewExecutionLock(db, "ctrader-demo-cycle", "short"));
+  await assert.rejects(renewExecutionLock(db, "ctrader-demo-cycle", "s".repeat(48), Date.now(), 600_000));
 });
