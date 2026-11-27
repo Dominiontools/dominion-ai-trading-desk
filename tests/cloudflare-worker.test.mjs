@@ -65,7 +65,7 @@ test("cTrader status endpoint returns safe disconnected defaults from D1", async
 });
 
 test("unmigrated cTrader routes fail closed without broker actions", async () => {
-  const response = await worker.fetch(new Request("https://desk.example/api/ctrader/status"), env);
+  const response = await worker.fetch(new Request("https://desk.example/api/ctrader/engine-control"), env);
   assert.equal(response.status, 503);
   const body = await response.json();
   assert.equal(body.status, "not_migrated");
