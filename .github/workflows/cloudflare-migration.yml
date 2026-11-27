@@ -1,0 +1,37 @@
+name: Cloudflare migration checks
+
+on:
+  push:
+    branches: ["cloudflare-backend-migration"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/worker.js"
+      - "src/cloudflare/**"
+      - "cloudflare/**"
+      - "tests/cloudflare-worker.test.mjs"
+      - "wrangler.jsonc"
+      - "package.json"
+      - ".github/workflows/cloudflare-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worker-and-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test fail-closed Cloudflare Worker routes
+        run: npm test
+      - name: Build dashboard
+        run: npm run build
