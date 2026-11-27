@@ -155,3 +155,22 @@ The migration branch now contains:
 Required Cloudflare Worker secrets/settings are `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_TOKEN_ENCRYPTION_KEY`; `CTRADER_REDIRECT_URI` is a non-secret URL setting. The D1 binding must be named `CTRADER_DB` and the migration in `cloudflare/migrations/0001_initial_schema.sql` must be applied. The registered Spotware callback must be the exact Worker URL plus `/api/ctrader/oauth/callback`.
 
 This is source implementation only. No D1 database/binding or secrets have been provisioned, no Spotware callback has been changed, and no live cTrader authorization has been attempted. The old Netlify callback and deployments remain untouched. The route does not place orders or enable automation; demo trading control and the broker-session runtime remain separate unfinished work.
+
+
+## Cloudflare outbound WebSocket runtime decision (verified Nov 27, 2026)
+
+Cloudflare Workers officially supports outbound connections with `new WebSocket(url)`, so the short-lived OAuth demo-account verification helper can use the cTrader demo endpoint and close its socket after account authentication. See:
+- https://developers.cloudflare.com/workers/examples/websockets/
+- https://developers.cloudflare.com/workers/runtime-apis/websockets/
+
+This does **not** make a permanently resident cTrader execution process safe by itself. Cloudflare's Durable Objects documentation states that outgoing WebSockets do not use WebSocket hibernation; an open outbound socket can prevent eviction for up to 15 minutes, after which normal eviction may occur. Runtime updates and crashes can also disconnect Worker WebSockets. See:
+- https://developers.cloudflare.com/durable-objects/best-practices/websockets/
+
+Therefore:
+1. Use a short-lived Worker outbound WebSocket for OAuth/demo-account verification only.
+2. Do not report a permanently connected trading engine merely because the OAuth verification succeeded.
+3. Before demo execution is enabled, prototype a Durable Object session with bounded reconnect/backoff, broker re-authentication, heartbeat freshness, D1-backed state reconstruction, and duplicate-order protection.
+4. Test forced disconnect, eviction/restart, stale heartbeat, duplicate scheduled invocation, and partially acknowledged order recovery.
+5. If those tests cannot demonstrate safe recovery within Cloudflare's execution model, keep the broker execution process on a persistent runtime and use Cloudflare for OAuth, API, and secure storage.
+
+No Durable Object namespace, D1 database, secrets, or live broker connection has been provisioned by this documentation change.
