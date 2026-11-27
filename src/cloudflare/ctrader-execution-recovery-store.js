@@ -78,6 +78,14 @@ export async function saveCTraderActivePosition(db, { accountId, positionId, pos
   const account = requireAccountId(accountId);
   const id = String(positionId ?? "");
   if (!/^\d{1,30}$/.test(id)) throw new Error("A valid broker position ID is required.");
+  if (!position || typeof position !== "object" || Array.isArray(position) ||
+      !Number.isFinite(Number(position.symbolId)) || Number(position.symbolId) <= 0 ||
+      !["BUY", "SELL"].includes(String(position.side)) ||
+      !Number.isFinite(Number(position.volume)) || Number(position.volume) <= 0 ||
+      !Number.isFinite(Number(position.stopLoss)) || Number(position.stopLoss) <= 0 ||
+      !Number.isFinite(Number(position.takeProfit)) || Number(position.takeProfit) <= 0) {
+    throw new Error("A broker-confirmed position with durable volume and SL/TP protection is required.");
+  }
   const json = safeJson(position);
   const now = requireTimestamp(nowMs);
   await db.prepare(
