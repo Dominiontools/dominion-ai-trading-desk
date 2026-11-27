@@ -95,7 +95,7 @@ test("refreshes an expiring token and persists only the encrypted replacement", 
     fetchImpl: async (url, options) => {
       requestedUrl = String(url);
       assert.equal(options.method, "POST");
-      assert.match(options.headers["content-type"], /application\\/x-www-form-urlencoded/);
+      assert.ok(options.headers["content-type"].includes("application/x-www-form-urlencoded"));
       assert.match(String(options.body), /grant_type=refresh_token/);
       assert.match(String(options.body), /refresh_token=old-refresh/);
       return new Response(JSON.stringify({
