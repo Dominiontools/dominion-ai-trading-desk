@@ -60,6 +60,7 @@ export function reconcileCTraderPositionState({ brokerPositions, storedPosition 
   if (!brokerSide || brokerSide !== storedSide) mismatches.push("SIDE");
   if (Math.abs(brokerVolume - storedVolume) > 0.000001) mismatches.push("VOLUME");
   if (!(brokerStop > 0) || !(brokerTarget > 0)) mismatches.push("BROKER_PROTECTION_MISSING");
+  if (!(storedStop > 0) || !(storedTarget > 0)) mismatches.push("D1_PROTECTION_MISSING");
   if (storedStop > 0 && Math.abs(brokerStop - storedStop) > 1e-8) mismatches.push("STOP_LOSS");
   if (storedTarget > 0 && Math.abs(brokerTarget - storedTarget) > 1e-8) mismatches.push("TAKE_PROFIT");
 
