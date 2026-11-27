@@ -52,15 +52,19 @@ export async function loadUsableCTraderToken({
     return { ...payload, expiresAt };
   }
 
-  const params = new URLSearchParams({
+  const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: payload.refreshToken,
     client_id: clientId,
     client_secret: clientSecret
   });
-  const response = await fetchImpl(`https://openapi.ctrader.com/apps/token?${params.toString()}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
+  const response = await fetchImpl("https://openapi.ctrader.com/apps/token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body,
     signal: AbortSignal.timeout(20_000)
   });
   if (!response.ok) throw new Error("cTrader demo token refresh failed.");
