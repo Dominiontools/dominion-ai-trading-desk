@@ -1,3 +1,6 @@
+import { readCTraderEngineConfig } from "./cloudflare/ctrader-engine-config-store.js";
+import { readCTraderEngineStatus } from "./cloudflare/ctrader-engine-status-store.js";
+
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -24,6 +27,31 @@ export default {
         trading_enabled: false,
         live_trading_enabled: false
       });
+    }
+
+    if (url.pathname === "/api/ctrader/status") {
+      if (request.method !== "GET") {
+        return json({ ok: false, error: "method_not_allowed" }, 405);
+      }
+      if (!env.CTRADER_DB) {
+        return json({ ok: false, error: "ctrader_storage_unavailable", trading_enabled: false }, 503);
+      }
+      try {
+        const [status, savedConfig] = await Promise.all([
+          readCTraderEngineStatus(env.CTRADER_DB),
+          readCTraderEngineConfig(env.CTRADER_DB)
+        ]);
+        return json({
+          ok: true,
+          service: "ctrader",
+          status,
+          config: savedConfig?.config ?? null,
+          trading_enabled: false,
+          live_trading_enabled: false
+        });
+      } catch {
+        return json({ ok: false, error: "ctrader_status_unavailable", trading_enabled: false }, 503);
+      }
     }
 
     if (url.pathname.startsWith("/api/ctrader/")) {
