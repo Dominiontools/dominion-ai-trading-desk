@@ -1,6 +1,6 @@
 import { consumeOAuthState, saveEncryptedCTraderToken } from "../../../../../src/cloudflare/ctrader-d1-store.js";
 import { verifyCTraderDemoAccount } from "../../../../../src/cloudflare/ctrader-demo-verification.js";
-import { buildCTraderAuthorizationUrl, validateCTraderTokenResponse } from "../../../../../src/cloudflare/ctrader-oauth.js";
+import { validateCTraderTokenResponse } from "../../../../../src/cloudflare/ctrader-oauth.js";
 import { encryptCTraderTokenRecord } from "../../../../../src/cloudflare/ctrader-token-crypto.js";
 import { saveCTraderEngineStatus } from "../../../../../src/cloudflare/ctrader-engine-status-store.js";
 import { getCTraderRuntimeEnv } from "../../../../../src/cloudflare/next-runtime";
