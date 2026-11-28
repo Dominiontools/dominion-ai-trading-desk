@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
     const saved = await readCTraderEngineConfig(env.CTRADER_DB);
     const validated = validateCTraderEngineConfig(body, saved?.config ?? null);
-    if (!validated.ok) {
+    if ("error" in validated) {
       return Response.json({ ok: false, error: validated.error }, { status: 400 });
     }
     const pausedConfig = { ...validated.config, enabled: false };
