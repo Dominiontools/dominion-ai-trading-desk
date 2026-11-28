@@ -12,12 +12,13 @@
 
 1. [x] Add the Next.js App Router shell around the existing dashboard.
 2. [x] Add the OpenNext Cloudflare adapter and Worker build configuration.
-3. [ ] Port Worker health and cTrader OAuth/status routes into Next.js route handlers.
-4. [ ] Port cTrader configuration, control authentication, durable order recovery, and execution services.
-5. [ ] Connect the Android bridge to the authenticated Next.js API contract.
-6. [ ] Validate the cTrader session lifecycle and phone crypto relay end to end.
-7. [ ] Configure Cloudflare D1 and secrets only after source and tests are ready.
-8. [ ] Obtain explicit approval before the one final production deployment.
+3. [x] Add the first Next.js health route; cTrader OAuth/status routes remain to be ported.
+4. [ ] Port cTrader OAuth and status routes into Next.js route handlers.
+5. [ ] Port cTrader configuration, control authentication, durable order recovery, and execution services.
+6. [ ] Connect the Android bridge to the authenticated Next.js API contract.
+7. [ ] Validate the cTrader session lifecycle and phone crypto relay end to end.
+8. [ ] Configure Cloudflare D1 and secrets only after source and tests are ready.
+9. [ ] Obtain explicit approval before the one final production deployment.
 
 ## Android compatibility
 
