@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, CircleDollarSign, Gauge, LockKeyhole, Radar, Settings, ShieldCheck, Wallet, Waves } from "lucide-react";

@@ -10,3 +10,11 @@ __pycache__/
 .netlify/
 .DS_Store
 .ctrader_tokens.json
+
+# Next.js and Cloudflare build output
+.next/
+.open-next/
+.wrangler/
+out/
+cloudflare-env.d.ts
+.dev.vars
