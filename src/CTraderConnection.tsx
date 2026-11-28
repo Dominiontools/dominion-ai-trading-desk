@@ -12,7 +12,7 @@ type ConnectionStatus = {
   verifiedAt?: string | null;
 };
 
-type StatusResponse = { status?: ConnectionStatus };
+type StatusResponse = ConnectionStatus;
 
 const STATUS_URL = "/api/ctrader/status";
 const CONNECT_URL = "/api/ctrader/oauth/start?mode=view-only";
@@ -38,7 +38,7 @@ export default function CTraderConnection() {
         });
         if (!response.ok) throw new Error("cTrader status unavailable");
         const data = await response.json() as StatusResponse;
-        if (active) setStatus(data.status ?? null);
+        if (active) setStatus(data);
       } catch {
         if (active) setStatus(null);
       } finally {
