@@ -18,8 +18,8 @@ type EngineStatus = {
   lastUpdatedAt?: string | null;
 };
 
-const STATUS_URL = "https://dominion-ai-trading-desk-p7cp.netlify.app/.netlify/functions/ctrader-engine-status";
-const CONTROL_URL = "/.netlify/functions/ctrader-control-proxy";
+const STATUS_URL = "/api/ctrader/status";
+const CONTROL_URL = "/api/ctrader/engine/control";
 
 export default function CTraderEngineControls() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
