@@ -73,7 +73,7 @@ export default function CTraderEngineControls() {
       const response = await fetch(CONTROL_URL, {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-dominion-nonce": crypto.randomUUID() },
         body: JSON.stringify({
           enabled,
           confirmDemoAutomation: enabled,
