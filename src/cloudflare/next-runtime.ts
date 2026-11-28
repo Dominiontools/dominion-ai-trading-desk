@@ -6,6 +6,9 @@ export type CTraderRuntimeEnv = {
   CTRADER_CLIENT_SECRET?: string;
   CTRADER_REDIRECT_URI?: string;
   CTRADER_TOKEN_ENCRYPTION_KEY?: string;
+  CF_ACCESS_ISSUER?: string;
+  CF_ACCESS_AUD?: string;
+  CTRADER_CONTROL_EMAIL?: string;
 };
 
 export function getCTraderRuntimeEnv(): CTraderRuntimeEnv {
